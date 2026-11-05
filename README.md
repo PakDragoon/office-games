@@ -1,4 +1,4 @@
-# Wordle Trio
+# Wordle Party
 
 Multiplayer Wordle for up to 5 players. Everyone gets the same word, and you can watch the others' colored tiles fill in live, without seeing their letters.
 
