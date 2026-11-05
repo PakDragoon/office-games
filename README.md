@@ -7,7 +7,7 @@ Multiplayer Wordle for up to 5 players. Everyone gets the same word, and you can
 1. One person types their name and clicks **Host a room**. They get a 4-letter room code.
 2. They click **Copy invite link** and send it to up to 4 friends (or just tell them the code).
 3. Friends open the link, type their name, and click **Join room**.
-4. The host clicks **Start game**. When everyone has solved it or run out of guesses, the results show the word and a ranking: fewest guesses first, then fastest time.
+4. The host clicks **Start game**. The round keeps going until everyone has solved it or run out of guesses. The results then show the word and a ranking. By default the first person to solve it wins; in the lobby the host can switch to **Fewest guesses** instead, where time only breaks ties.
 5. The host clicks **Play another round** for a new word.
 
 Scores carry over for every round played in the same room: wins, rounds solved, average guesses and fastest time, plus a list of past words. On wide screens they show beside your board; on phones and tablets, tap **Scores** in the top bar.
@@ -53,6 +53,6 @@ Trade-offs to know about:
 
 ## Customizing
 
-- **Word list:** `js/words.js` has `ANSWERS` (possible secret words) and `EXTRA_GUESSES` (other words accepted as guesses). Add words by pasting them into those strings, separated by spaces. The host can also untick **Only accept words from the word list** in the lobby to allow any 5 letters.
+- **Word list:** when someone hosts a room, their browser downloads the word lists (other players don't need them, since only the host checks guesses). The secret word comes from the official NYT Wordle answer list, about 2,300 common words. A guess is accepted if any of these knows it: the NYT Wordle guess list ([`wordles`](https://www.npmjs.com/package/wordles)), the community Wordle list ([tabatkins/wordle-list](https://github.com/tabatkins/wordle-list)), or the 5-letter words in a general English dictionary ([`an-array-of-english-words`](https://www.npmjs.com/package/an-array-of-english-words)). The lobby shows how many words loaded. If every download fails, the built-in lists in `js/words.js` are used, which you can extend by pasting in more words separated by spaces. Answers don't repeat within a room until every possible answer has been played. The host can also untick **Only accept words from the word list** in the lobby to allow any 5 letters.
 - **Player limit:** change `MAX_PLAYERS` at the top of `js/app.js`. Above 5, add a `--p5` color in `style.css` and a matching `.rival.c5` rule for each extra player.
 - **Colors and fonts:** all in the `:root` variables at the top of `style.css`, with separate dark-mode values below them.
