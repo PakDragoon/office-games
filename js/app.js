@@ -9,7 +9,7 @@ import { ANSWERS, EXTRA_GUESSES } from './words.js';
    ========================================================= */
 
 const PREFIX = 'wordletrio-v1-';      // namespaces our room ids on the PeerJS server
-const MAX_PLAYERS = 3;
+const MAX_PLAYERS = 5;
 const ROWS = 6;
 const COLS = 5;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I or O, easy to read out loud
@@ -94,6 +94,8 @@ function hostCreate(attempt = 0) {
       lastWord: null,
       startedAt: 0,
       players: [newPlayer(id, S.myName, true, 0)],
+      stats: {},       // lower-case name -> totals across rounds in this room
+      history: [],     // [{ round, word, winner }]
     };
     peer.on('connection', hostOnConnection);
     setBusy(false);
@@ -256,7 +258,31 @@ function hostCheckEnd() {
   const room = H.room;
   if (room.status === 'playing' && room.players.every((p) => p.done || !p.connected)) {
     room.status = 'ended';
+    hostRecordRound();
   }
+}
+
+// Add the finished round to the room's running scores. Scores are keyed by name,
+// so they survive someone refreshing and rejoining.
+function hostRecordRound() {
+  const room = H.room;
+  const players = publicView().players;
+  const order = ranked(players);
+  const winner = order[0] && order[0].solved ? order[0] : null;
+  for (const p of players) {
+    const key = p.name.toLowerCase();
+    const st = (room.stats[key] ||= { name: p.name, color: p.color, played: 0, wins: 0, solved: 0, guessSum: 0, bestMs: null });
+    st.name = p.name;
+    st.color = p.color;
+    st.played += 1;
+    if (p.solved) {
+      st.solved += 1;
+      st.guessSum += p.patterns.length;
+      if (st.bestMs == null || p.finishMs < st.bestMs) st.bestMs = p.finishMs;
+    }
+    if (winner && p.id === winner.id) st.wins += 1;
+  }
+  room.history.push({ round: room.round, word: room.word, winner: winner ? winner.name : null });
 }
 
 function publicView() {
@@ -281,6 +307,8 @@ function publicView() {
       finishMs: p.finishMs,
     })),
     word: room.status === 'ended' ? room.word : null,
+    stats: Object.values(room.stats),
+    history: room.history.slice(-10),
   };
 }
 
@@ -408,6 +436,7 @@ function applyState(v) {
   $('game-code').textContent = v.code;
   $('game-round').textContent = `Round ${v.round}`;
   renderRivals(v);
+  renderScores(v);
   announceRivals(prev, v);
   tickClock();
 
@@ -580,13 +609,11 @@ function updateKeyboard() {
    Rivals (the live colour boards)
    ========================================================= */
 function renderRivals(v) {
-  const rivals = v.players.filter((p) => p.id !== S.myId);
-  const slots = [$('rivals-left'), $('rivals-right')];
-  slots.forEach((slot, i) => {
-    slot.innerHTML = '';
-    const p = rivals[i];
-    if (p) slot.appendChild(rivalCard(p));
-  });
+  const box = $('rivals');
+  box.innerHTML = '';
+  for (const p of v.players) {
+    if (p.id !== S.myId) box.appendChild(rivalCard(p));
+  }
 }
 
 function rivalCard(p) {
@@ -661,10 +688,11 @@ function renderLobby(v) {
     li.append(dot, name, tag);
     list.appendChild(li);
   }
-  for (let i = v.players.length; i < MAX_PLAYERS; i++) {
+  if (v.players.length < MAX_PLAYERS) {
     const li = document.createElement('li');
     li.className = 'empty';
-    li.textContent = 'Waiting for a friend to join…';
+    const free = MAX_PLAYERS - v.players.length;
+    li.textContent = `Waiting for friends to join (${free} more can join)`;
     list.appendChild(li);
   }
 
@@ -678,6 +706,63 @@ function renderLobby(v) {
     const host = v.players.find((p) => p.isHost);
     $('lobby-wait').textContent = `Waiting for ${host ? host.name : 'the host'} to start the game.`;
   }
+}
+
+/* =========================================================
+   Room scores (across rounds)
+   ========================================================= */
+function renderScores(v) {
+  const html = scoresHTML(v);
+  $('scoreboard-body').innerHTML = html;
+  $('scores-sheet-body').innerHTML = html;
+}
+
+function esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+function scoresHTML(v) {
+  const stats = v.stats || [];
+  if (stats.length === 0) {
+    return '<p class="scores-empty">Wins and times show up here once the first round ends. They carry over for every round you play in this room.</p>';
+  }
+  const here = new Map(v.players.map((p) => [p.name.toLowerCase(), p]));
+  const rows = stats.map((st) => ({
+    ...st,
+    avg: st.solved ? st.guessSum / st.solved : null,
+    present: here.has(st.name.toLowerCase()) && here.get(st.name.toLowerCase()).connected,
+    me: here.get(st.name.toLowerCase())?.id === S.myId,
+  }));
+  // Players who joined after the last round ended have no scores yet.
+  for (const p of v.players) {
+    if (!rows.some((r) => r.name.toLowerCase() === p.name.toLowerCase())) {
+      rows.push({ name: p.name, color: p.color, played: 0, wins: 0, solved: 0, avg: null, bestMs: null, present: p.connected, me: p.id === S.myId });
+    }
+  }
+  rows.sort((a, b) =>
+    b.wins - a.wins ||
+    b.solved - a.solved ||
+    (a.avg ?? 99) - (b.avg ?? 99) ||
+    (a.bestMs ?? 1e12) - (b.bestMs ?? 1e12));
+
+  const body = rows.map((r) => `
+    <tr class="${r.present ? '' : 'gone'}">
+      <td><span class="pname"><span class="dot" style="background: var(--p${r.color})"></span><span>${esc(r.name)}${r.me ? ' (you)' : ''}</span></span></td>
+      <td class="wins">${r.wins}</td>
+      <td>${r.solved}/${r.played}</td>
+      <td>${r.avg == null ? '–' : r.avg.toFixed(1)}</td>
+      <td>${r.bestMs == null ? '–' : fmtTime(r.bestMs)}</td>
+    </tr>`).join('');
+
+  const history = (v.history || []).slice().reverse().map((h) =>
+    `<li>Round ${h.round}: <b>${esc(h.word)}</b>, ${h.winner ? `won by ${esc(h.winner)}` : 'nobody got it'}</li>`).join('');
+
+  return `
+    <table class="scores">
+      <thead><tr><th scope="col">Player</th><th scope="col">Wins</th><th scope="col">Solved</th><th scope="col" title="Average guesses when solved">Avg</th><th scope="col" title="Fastest solve">Best</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    ${history ? `<p class="history-title">Past words</p><ul class="history">${history}</ul>` : ''}`;
 }
 
 /* =========================================================
@@ -743,7 +828,10 @@ function showResults(v) {
    ========================================================= */
 function showScreen(name) {
   for (const s of ['home', 'lobby', 'game']) $(`screen-${s}`).hidden = s !== name;
-  if (name !== 'game') $('results').hidden = true;
+  if (name !== 'game') {
+    $('results').hidden = true;
+    $('scores-sheet').hidden = true;
+  }
 }
 
 function fmtTime(ms) {
@@ -895,13 +983,21 @@ $('see-boards-btn').addEventListener('click', () => {
 $('results-btn').addEventListener('click', () => S.view && showResults(S.view));
 $('notice-btn').addEventListener('click', leaveRoom);
 
+$('scores-btn').addEventListener('click', () => ($('scores-sheet').hidden = false));
+$('scores-close-btn').addEventListener('click', () => ($('scores-sheet').hidden = true));
+$('results-scores-btn').addEventListener('click', () => {
+  S.resultsClosedRound = S.view?.round || 0;
+  $('results').hidden = true;
+  $('scores-sheet').hidden = false;
+});
+
 $('keyboard').addEventListener('click', (e) => {
   const b = e.target.closest('.key');
   if (b) pressKey(b.dataset.key);
 });
 
 document.addEventListener('keydown', (e) => {
-  if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden) return;
+  if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden || !$('scores-sheet').hidden) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === 'Enter') { e.preventDefault(); pressKey('enter'); }
