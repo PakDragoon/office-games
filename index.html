@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Wordle Trio</title>
+  <meta name="description" content="Race your friends on the same Wordle word and watch their boards fill in live.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🟩</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+</head>
+<body>
+
+  <!-- HOME -->
+  <main id="screen-home" class="screen home" hidden>
+    <div class="home-inner">
+      <h1 class="logo" aria-label="Wordle Trio">
+        <span class="logo-row" aria-hidden="true">
+          <i class="t hit">W</i><i class="t miss">O</i><i class="t near">R</i><i class="t hit">D</i><i class="t miss">L</i><i class="t hit">E</i>
+        </span>
+        <span class="logo-sub">trio</span>
+      </h1>
+      <p class="lede">Everyone gets the same word. You see your friends’ colors fill in live, never their letters.</p>
+
+      <label class="field">
+        <span>Your name</span>
+        <input id="name-input" maxlength="14" autocomplete="nickname" placeholder="e.g. Ali">
+      </label>
+
+      <div class="choices">
+        <section class="choice">
+          <h2>Start a room</h2>
+          <p>You’ll get a code to send to two friends.</p>
+          <button id="host-btn" class="btn primary">Host a room</button>
+        </section>
+        <section class="choice">
+          <h2>Join a friend</h2>
+          <label class="field compact">
+            <span class="sr-only">Room code</span>
+            <input id="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Room code">
+          </label>
+          <button id="join-btn" class="btn">Join room</button>
+        </section>
+      </div>
+      <p id="home-error" class="error" role="alert"></p>
+    </div>
+  </main>
+
+  <!-- LOBBY -->
+  <main id="screen-lobby" class="screen lobby" hidden>
+    <div class="lobby-inner">
+      <p class="muted">Room code</p>
+      <div id="lobby-code" class="room-code" aria-live="polite"></div>
+      <button id="copy-link-btn" class="btn ghost">Copy invite link</button>
+
+      <ul id="lobby-players" class="lobby-players"></ul>
+
+      <div id="host-controls" hidden>
+        <label class="toggle">
+          <input type="checkbox" id="strict-toggle" checked>
+          <span>Only accept words from the word list</span>
+        </label>
+        <button id="start-btn" class="btn primary wide">Start game</button>
+      </div>
+      <p id="lobby-wait" class="muted" hidden></p>
+      <button id="leave-btn" class="btn link">Leave room</button>
+    </div>
+  </main>
+
+  <!-- GAME -->
+  <main id="screen-game" class="screen game" hidden>
+    <header class="game-bar">
+      <span class="bar-code">Room <b id="game-code"></b></span>
+      <span id="game-round" class="muted"></span>
+      <button id="results-btn" class="btn ghost small" hidden>Results</button>
+      <span id="game-clock" class="clock" aria-label="Round time">0:00</span>
+    </header>
+
+    <div id="arena" class="arena">
+      <div id="rivals-left" class="rivals"></div>
+      <section class="me" aria-label="Your board">
+        <div id="my-board" class="board"></div>
+      </section>
+      <div id="rivals-right" class="rivals"></div>
+    </div>
+
+    <div id="keyboard" class="keyboard" aria-label="Keyboard"></div>
+  </main>
+
+  <!-- RESULTS -->
+  <div id="results" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="results-title">
+      <h2 id="results-title">Round over</h2>
+      <p class="muted">The word was</p>
+      <div id="results-word" class="reveal-word"></div>
+      <ol id="results-list" class="ranking"></ol>
+      <button id="again-btn" class="btn primary wide" hidden>Play another round</button>
+      <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
+      <button id="see-boards-btn" class="btn link">Look at the boards</button>
+    </div>
+  </div>
+
+  <!-- NOTICE (host left, etc.) -->
+  <div id="notice" class="overlay" hidden>
+    <div class="sheet">
+      <h2 id="notice-title"></h2>
+      <p id="notice-text" class="muted"></p>
+      <button id="notice-btn" class="btn primary wide">Back to start</button>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
