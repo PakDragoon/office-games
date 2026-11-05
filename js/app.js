@@ -1,14 +1,14 @@
 import { ANSWERS, EXTRA_GUESSES } from './words.js';
 
 /* =========================================================
-   Wordle Trio
+   Wordle Party
    One player hosts. Their browser is the "server": it picks the
    word, checks every guess and sends everyone the colour patterns.
    Other players connect to the host directly with PeerJS (WebRTC).
    Non-host players never receive the word or anyone's letters.
    ========================================================= */
 
-const PREFIX = 'wordletrio-v1-';      // namespaces our room ids on the PeerJS server
+const PREFIX = 'wordleparty-v1-';      // namespaces our room ids on the PeerJS server
 const MAX_PLAYERS = 5;
 const ROWS = 6;
 const COLS = 5;
@@ -639,13 +639,13 @@ function rivalCard(p) {
 
   const name = document.createElement('div');
   name.className = 'rival-name';
-  name.textContent = p.name;
+  name.textContent = label(p.name);
 
   const status = document.createElement('div');
   status.className = 'rival-status';
   status.textContent = rivalStatus(p);
 
-  card.setAttribute('aria-label', `${p.name}: ${status.textContent}`);
+  card.setAttribute('aria-label', `${label(p.name)}: ${status.textContent}`);
   card.append(mini, name, status);
   return card;
 }
@@ -664,7 +664,7 @@ function announceRivals(prev, v) {
   for (const p of v.players) {
     if (p.id === S.myId) continue;
     const before = prev.players.find((x) => x.id === p.id || x.name === p.name);
-    if (before && !before.solved && p.solved) toast(`${p.name} solved it in ${p.patterns.length}!`);
+    if (before && !before.solved && p.solved) toast(`${label(p.name)} solved it in ${p.patterns.length}!`);
   }
 }
 
@@ -681,7 +681,7 @@ function renderLobby(v) {
     dot.className = 'dot';
     dot.style.background = `var(--p${p.color})`;
     const name = document.createElement('span');
-    name.textContent = p.name;
+    name.textContent = label(p.name);
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = [p.isHost ? 'host' : '', p.id === S.myId ? 'you' : ''].filter(Boolean).join(', ');
@@ -704,7 +704,7 @@ function renderLobby(v) {
     $('start-btn').textContent = n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
   } else {
     const host = v.players.find((p) => p.isHost);
-    $('lobby-wait').textContent = `Waiting for ${host ? host.name : 'the host'} to start the game.`;
+    $('lobby-wait').textContent = `Waiting for ${host ? label(host.name) : 'the host'} to start the game.`;
   }
 }
 
@@ -747,7 +747,7 @@ function scoresHTML(v) {
 
   const body = rows.map((r) => `
     <tr class="${r.present ? '' : 'gone'}">
-      <td><span class="pname"><span class="dot" style="background: var(--p${r.color})"></span><span>${esc(r.name)}${r.me ? ' (you)' : ''}</span></span></td>
+      <td><span class="pname"><span class="dot" style="background: var(--p${r.color})"></span><span>${esc(label(r.name))}${r.me ? ' (you)' : ''}</span></span></td>
       <td class="wins">${r.wins}</td>
       <td>${r.solved}/${r.played}</td>
       <td>${r.avg == null ? '–' : r.avg.toFixed(1)}</td>
@@ -755,7 +755,7 @@ function scoresHTML(v) {
     </tr>`).join('');
 
   const history = (v.history || []).slice().reverse().map((h) =>
-    `<li>Round ${h.round}: <b>${esc(h.word)}</b>, ${h.winner ? `won by ${esc(h.winner)}` : 'nobody got it'}</li>`).join('');
+    `<li>Round ${h.round}: <b>${esc(h.word)}</b>, ${h.winner ? `won by ${esc(label(h.winner))}` : 'nobody got it'}</li>`).join('');
 
   return `
     <table class="scores">
@@ -800,7 +800,7 @@ function showResults(v) {
     dot.style.background = `var(--p${p.color})`;
     const who = document.createElement('span');
     who.className = 'who';
-    who.textContent = p.name + (p.id === S.myId ? ' (you)' : '');
+    who.textContent = label(p.name) + (p.id === S.myId ? ' (you)' : '');
     const how = document.createElement('span');
     how.className = 'how';
     if (p.solved) how.textContent = `${p.patterns.length}/6 in ${fmtTime(p.finishMs)}`;
@@ -816,7 +816,7 @@ function showResults(v) {
     ? 'Nobody got it'
     : winner.id === S.myId
       ? 'You win!'
-      : `${winner.name} wins`;
+      : `${label(winner.name)} wins`;
 
   $('again-btn').hidden = !S.isHost;
   $('again-wait').hidden = S.isHost;
@@ -878,6 +878,11 @@ function setBusy(busy) {
   $('join-btn').textContent = busy && !S.isHostingAttempt ? 'Joining…' : 'Join room';
 }
 
+// Inside joke: JD and Junaid get a banana wherever their name is shown.
+function label(name) {
+  return /^(jd|junaid)( \d+)?$/i.test(String(name).trim()) ? `${name} 🍌` : name;
+}
+
 function cleanName(n) {
   return String(n || '').replace(/\s+/g, ' ').trim().slice(0, 14);
 }
@@ -913,7 +918,7 @@ function readName() {
     $('name-input').focus();
     return null;
   }
-  try { localStorage.setItem('wordletrio-name', name); } catch {}
+  try { localStorage.setItem('wordleparty-name', name); } catch {}
   return name;
 }
 
@@ -1024,7 +1029,7 @@ window.addEventListener('beforeunload', (e) => {
     homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   }
   try {
-    const saved = localStorage.getItem('wordletrio-name');
+    const saved = localStorage.getItem('wordleparty-name');
     if (saved) $('name-input').value = saved;
   } catch {}
 
