@@ -1,16 +1,18 @@
 # Wordle Trio
 
-Multiplayer Wordle for up to 3 friends. Everyone gets the same word, and you can watch the others' colored tiles fill in live, without seeing their letters.
+Multiplayer Wordle for up to 5 players. Everyone gets the same word, and you can watch the others' colored tiles fill in live, without seeing their letters.
 
 ## How to play
 
 1. One person types their name and clicks **Host a room**. They get a 4-letter room code.
-2. They click **Copy invite link** and send it to two friends (or just tell them the code).
+2. They click **Copy invite link** and send it to up to 4 friends (or just tell them the code).
 3. Friends open the link, type their name, and click **Join room**.
 4. The host clicks **Start game**. When everyone has solved it or run out of guesses, the results show the word and a ranking: fewest guesses first, then fastest time.
 5. The host clicks **Play another round** for a new word.
 
-If someone's page refreshes mid-game, they can rejoin with the same code and the same name and get their board back.
+Scores carry over for every round played in the same room: wins, rounds solved, average guesses and fastest time, plus a list of past words. On wide screens they show beside your board; on phones and tablets, tap **Scores** in the top bar.
+
+If someone's page refreshes mid-game, they can rejoin with the same code and the same name and get their board and scores back.
 
 ## Deploy on GitHub Pages
 
@@ -33,7 +35,7 @@ Browsers block JavaScript modules on `file://` pages, so double-clicking `index.
 python3 -m http.server 8000
 ```
 
-Then open `http://localhost:8000`. You can test multiplayer by opening it in two or three browser windows. Use different names in each.
+Then open `http://localhost:8000`. You can test multiplayer by opening it in a few browser windows. Use different names in each.
 
 ## How it works
 
@@ -52,5 +54,5 @@ Trade-offs to know about:
 ## Customizing
 
 - **Word list:** `js/words.js` has `ANSWERS` (possible secret words) and `EXTRA_GUESSES` (other words accepted as guesses). Add words by pasting them into those strings, separated by spaces. The host can also untick **Only accept words from the word list** in the lobby to allow any 5 letters.
-- **Player limit:** change `MAX_PLAYERS` at the top of `js/app.js`. Add a `--p3` color in `style.css` and a matching `.rival.c3` rule if you go above 3.
+- **Player limit:** change `MAX_PLAYERS` at the top of `js/app.js`. Above 5, add a `--p5` color in `style.css` and a matching `.rival.c5` rule for each extra player.
 - **Colors and fonts:** all in the `:root` variables at the top of `style.css`, with separate dark-mode values below them.

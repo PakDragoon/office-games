@@ -33,7 +33,7 @@
       <div class="choices">
         <section class="choice">
           <h2>Start a room</h2>
-          <p>You’ll get a code to send to two friends.</p>
+          <p>You’ll get a code to send to up to 4 friends.</p>
           <button id="host-btn" class="btn primary">Host a room</button>
         </section>
         <section class="choice">
@@ -75,20 +75,32 @@
     <header class="game-bar">
       <span class="bar-code">Room <b id="game-code"></b></span>
       <span id="game-round" class="muted"></span>
+      <button id="scores-btn" class="btn ghost small">Scores</button>
       <button id="results-btn" class="btn ghost small" hidden>Results</button>
       <span id="game-clock" class="clock" aria-label="Round time">0:00</span>
     </header>
 
-    <div id="arena" class="arena">
-      <div id="rivals-left" class="rivals"></div>
+    <div class="arena">
+      <aside class="scoreboard" aria-labelledby="scoreboard-title">
+        <h2 id="scoreboard-title">Scores in this room</h2>
+        <div id="scoreboard-body"></div>
+      </aside>
       <section class="me" aria-label="Your board">
         <div id="my-board" class="board"></div>
+        <div id="keyboard" class="keyboard" aria-label="Keyboard"></div>
       </section>
-      <div id="rivals-right" class="rivals"></div>
+      <div id="rivals" class="rivals" aria-label="Other players"></div>
     </div>
-
-    <div id="keyboard" class="keyboard" aria-label="Keyboard"></div>
   </main>
+
+  <!-- SCORES (phones and tablets) -->
+  <div id="scores-sheet" class="overlay" hidden>
+    <div class="sheet scores-sheet" role="dialog" aria-modal="true" aria-labelledby="scores-title">
+      <h2 id="scores-title">Scores in this room</h2>
+      <div id="scores-sheet-body"></div>
+      <button id="scores-close-btn" class="btn primary wide">Back to the game</button>
+    </div>
+  </div>
 
   <!-- RESULTS -->
   <div id="results" class="overlay" hidden>
@@ -99,6 +111,7 @@
       <ol id="results-list" class="ranking"></ol>
       <button id="again-btn" class="btn primary wide" hidden>Play another round</button>
       <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
+      <button id="results-scores-btn" class="btn ghost wide">Room scores</button>
       <button id="see-boards-btn" class="btn link">Look at the boards</button>
     </div>
   </div>
