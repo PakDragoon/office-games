@@ -13,7 +13,46 @@ const MAX_PLAYERS = 5;
 const ROWS = 6;
 const COLS = 5;
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I or O, easy to read out loud
-const VALID = new Set([...ANSWERS, ...EXTRA_GUESSES]);
+
+/* ---------- Word lists ----------
+   Only the host's browser checks guesses, so only the host downloads these.
+   Possible answers: the official NYT Wordle answer list (about 2,300 common words).
+   Accepted guesses: everything from every dictionary below that loads, so a real
+   word is only rejected if none of them knows it. Each dictionary has a backup
+   address, and if everything fails the built-in lists in words.js are used. */
+const WORD_SOURCES = {
+  answers: [
+    'https://cdn.jsdelivr.net/npm/wordles@1.0.0/wordles.json',
+    'https://raw.githubusercontent.com/stuartpb/wordles/main/wordles.json',
+  ],
+  dictionaries: [
+    // NYT Wordle: words accepted as guesses (about 10,600)
+    [
+      'https://cdn.jsdelivr.net/npm/wordles@1.0.0/nonwordles.json',
+      'https://raw.githubusercontent.com/stuartpb/wordles/main/nonwordles.json',
+    ],
+    // Community Wordle list (about 14,800, includes words NYT added later)
+    [
+      'https://cdn.jsdelivr.net/gh/tabatkins/wordle-list@main/words',
+      'https://raw.githubusercontent.com/tabatkins/wordle-list/main/words',
+    ],
+    // General English dictionary (about 275,000 words; the 5-letter ones are kept)
+    [
+      'https://cdn.jsdelivr.net/npm/an-array-of-english-words@2.0.0/index.json',
+      'https://raw.githubusercontent.com/words/an-array-of-english-words/master/index.json',
+    ],
+  ],
+};
+const WORDS = {
+  answers: ANSWERS.slice(),
+  valid: new Set([...ANSWERS, ...EXTRA_GUESSES]),
+  ready: false,
+  big: false,
+};
+const WIN_RULES = {
+  first: 'First to solve it wins.',
+  fewest: 'Fewest guesses wins, and the faster time breaks ties.',
+};
 const CLASS = { h: 'hit', n: 'near', m: 'miss' };
 const RANK = { miss: 1, near: 2, hit: 3 };
 const PEER_OPTIONS = { debug: 1 };
@@ -94,6 +133,8 @@ function hostCreate(attempt = 0) {
       lastWord: null,
       startedAt: 0,
       players: [newPlayer(id, S.myName, true, 0)],
+      winRule: 'first',
+      used: [],        // answers already played in this room
       stats: {},       // lower-case name -> totals across rounds in this room
       history: [],     // [{ round, word, winner }]
     };
@@ -210,10 +251,15 @@ function hostOnClose(conn) {
 function hostStart() {
   const room = H.room;
   room.players = room.players.filter((p) => p.connected);
-  let word;
-  do {
-    word = ANSWERS[Math.floor(Math.random() * ANSWERS.length)];
-  } while (word === room.lastWord && ANSWERS.length > 1);
+  // No repeats within a room until every possible answer has been played.
+  const used = new Set(room.used);
+  let pool = WORDS.answers.filter((w) => !used.has(w));
+  if (pool.length === 0) {
+    room.used = [];
+    pool = WORDS.answers.filter((w) => w !== room.lastWord);
+  }
+  const word = pool[Math.floor(Math.random() * pool.length)];
+  room.used.push(word);
   room.word = word;
   room.lastWord = word;
   room.round += 1;
@@ -237,7 +283,7 @@ function hostGuess(pid, rawWord) {
   const word = String(rawWord || '').toLowerCase();
   if (room.status !== 'playing' || p.done) return reply({ t: 'invalid', reason: 'This round is over' });
   if (!/^[a-z]{5}$/.test(word)) return reply({ t: 'invalid', reason: 'Not enough letters' });
-  if (room.strict && !VALID.has(word)) return reply({ t: 'invalid', reason: 'Not in word list' });
+  if (room.strict && !WORDS.valid.has(word)) return reply({ t: 'invalid', reason: 'Not in word list' });
 
   const pattern = score(word, room.word);
   p.guesses.push({ word, pattern });
@@ -267,7 +313,7 @@ function hostCheckEnd() {
 function hostRecordRound() {
   const room = H.room;
   const players = publicView().players;
-  const order = ranked(players);
+  const order = ranked(players, room.winRule);
   const winner = order[0] && order[0].solved ? order[0] : null;
   for (const p of players) {
     const key = p.name.toLowerCase();
@@ -293,6 +339,7 @@ function publicView() {
     status: room.status,
     round: room.round,
     strict: room.strict,
+    winRule: room.winRule,
     elapsed: room.startedAt ? Date.now() - room.startedAt : 0,
     // Only colour patterns go out. Letters stay on the host.
     players: room.players.map((p) => ({
@@ -562,10 +609,6 @@ function submit() {
     shakeRow(S.guesses.length);
     return toast('Not enough letters');
   }
-  if (S.view.strict && !VALID.has(S.current)) {
-    shakeRow(S.guesses.length);
-    return toast('Not in word list');
-  }
   S.pending = true;
   if (S.isHost) hostGuess(S.myId, S.current);
   else send(S.hostConn, { t: 'guess', word: S.current });
@@ -698,10 +741,18 @@ function renderLobby(v) {
 
   $('host-controls').hidden = !S.isHost;
   $('lobby-wait').hidden = S.isHost;
+  $('lobby-rules').textContent = WIN_RULES[v.winRule] || '';
+  $('lobby-rules').hidden = S.isHost;
+  $('word-status').textContent = wordStatusText();
+  $('word-status').hidden = !S.isHost;
   if (S.isHost) {
     $('strict-toggle').checked = v.strict;
+    for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
+    $('start-btn').disabled = !WORDS.ready;
     const n = v.players.length;
-    $('start-btn').textContent = n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
+    $('start-btn').textContent = !WORDS.ready
+      ? 'Loading words…'
+      : n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
   } else {
     const host = v.players.find((p) => p.isHost);
     $('lobby-wait').textContent = `Waiting for ${host ? label(host.name) : 'the host'} to start the game.`;
@@ -768,14 +819,15 @@ function scoresHTML(v) {
 /* =========================================================
    Results
    ========================================================= */
-function ranked(players) {
+function ranked(players, rule = 'first') {
   const greens = (p) => {
     const last = p.patterns[p.patterns.length - 1] || '';
     return [...last].filter((c) => c === 'h').length;
   };
   return [...players].sort((a, b) => {
     if (a.solved !== b.solved) return a.solved ? -1 : 1;
-    if (a.solved) return a.patterns.length - b.patterns.length || a.finishMs - b.finishMs;
+    if (a.solved && rule === 'fewest') return a.patterns.length - b.patterns.length || a.finishMs - b.finishMs;
+    if (a.solved) return a.finishMs - b.finishMs || a.patterns.length - b.patterns.length;
     return greens(b) - greens(a);
   });
 }
@@ -791,7 +843,8 @@ function showResults(v) {
 
   const list = $('results-list');
   list.innerHTML = '';
-  const order = ranked(v.players);
+  const order = ranked(v.players, v.winRule);
+  $('results-rule').textContent = WIN_RULES[v.winRule] || '';
   order.forEach((p, idx) => {
     const li = document.createElement('li');
     if (idx === 0 && p.solved) li.className = 'first';
@@ -930,6 +983,7 @@ $('host-btn').addEventListener('click', () => {
   S.leaving = false;
   S.isHostingAttempt = true;
   setBusy(true);
+  loadWords();
   hostCreate();
 });
 
@@ -972,6 +1026,14 @@ $('strict-toggle').addEventListener('change', (e) => {
   H.room.strict = e.target.checked;
   hostBroadcast();
 });
+
+for (const r of document.querySelectorAll('input[name="win-rule"]')) {
+  r.addEventListener('change', (e) => {
+    if (!S.isHost || !e.target.checked) return;
+    H.room.winRule = e.target.value;
+    hostBroadcast();
+  });
+}
 
 $('start-btn').addEventListener('click', () => S.isHost && hostStart());
 $('again-btn').addEventListener('click', () => S.isHost && hostStart());
@@ -1022,6 +1084,67 @@ window.addEventListener('beforeunload', (e) => {
     e.returnValue = '';
   }
 });
+
+/* ---------- word list loading ---------- */
+async function fetchWordList(urls) {
+  for (const url of urls) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      const res = await fetch(url, { signal: ctrl.signal });
+      if (!res.ok) {
+        clearTimeout(timer);
+        continue;
+      }
+      const text = await res.text();
+      clearTimeout(timer);
+      // Lists come either as a JSON array or as plain text with one word per line.
+      let raw;
+      try {
+        raw = JSON.parse(text);
+      } catch {
+        raw = text.split(/\s+/);
+      }
+      const list = (Array.isArray(raw) ? raw : [])
+        .map((w) => String(w).trim().toLowerCase())
+        .filter((w) => /^[a-z]{5}$/.test(w));
+      if (list.length > 500) return list;
+    } catch {
+      // try the next source
+    }
+  }
+  return null;
+}
+
+let wordsLoading = null;
+function loadWords() {
+  wordsLoading ||= (async () => {
+    const [answers, ...dicts] = await Promise.all([
+      fetchWordList(WORD_SOURCES.answers),
+      ...WORD_SOURCES.dictionaries.map(fetchWordList),
+    ]);
+    if (answers) WORDS.answers = [...new Set([...answers, ...ANSWERS])];
+    for (const list of [answers, ...dicts]) {
+      for (const w of list || []) WORDS.valid.add(w);
+    }
+    WORDS.loaded = dicts.filter(Boolean).length;
+    WORDS.big = WORDS.loaded > 0;
+    WORDS.ready = true;
+    if (S.view && S.view.status === 'lobby') renderLobby(S.view);
+  })();
+  return wordsLoading;
+}
+
+function wordStatusText() {
+  if (!WORDS.ready) return 'Loading the word list…';
+  const n = (x) => x.toLocaleString('en-US');
+  if (WORDS.big) {
+    const missing = WORD_SOURCES.dictionaries.length - WORDS.loaded;
+    return `${n(WORDS.valid.size)} words accepted as guesses, ${n(WORDS.answers.length)} can be the answer.` +
+      (missing ? ` (${missing} of the ${WORD_SOURCES.dictionaries.length} dictionaries didn’t load.)` : '');
+  }
+  return `Couldn’t download the full word list, so the built-in ${n(WORDS.valid.size)} words are in use.`;
+}
 
 /* ---------- start-up ---------- */
 (function init() {
