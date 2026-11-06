@@ -1,4 +1,4 @@
-import { ANSWERS, EXTRA_GUESSES } from './words.js';
+import { ANSWERS, EXTRA_GUESSES, BLOCKED_ANSWERS } from './words.js';
 
 /* =========================================================
    Wordle Party
@@ -25,6 +25,11 @@ const WORD_SOURCES = {
     'https://cdn.jsdelivr.net/npm/wordles@1.0.0/wordles.json',
     'https://raw.githubusercontent.com/stuartpb/wordles/main/wordles.json',
   ],
+  // Public list of offensive words, added on top of the built-in BLOCKED_ANSWERS.
+  blocked: [
+    'https://cdn.jsdelivr.net/gh/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words@master/en',
+    'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en',
+  ],
   dictionaries: [
     // NYT Wordle: words accepted as guesses (about 10,600)
     [
@@ -43,8 +48,12 @@ const WORD_SOURCES = {
     ],
   ],
 };
+// Never picked as the secret word, though they can still be typed as guesses.
+const BLOCKED = new Set(BLOCKED_ANSWERS);
+const notBlocked = (w) => !BLOCKED.has(w);
+
 const WORDS = {
-  answers: ANSWERS.slice(),
+  answers: ANSWERS.filter(notBlocked),
   valid: new Set([...ANSWERS, ...EXTRA_GUESSES]),
   ready: false,
   big: false,
@@ -253,10 +262,10 @@ function hostStart() {
   room.players = room.players.filter((p) => p.connected);
   // No repeats within a room until every possible answer has been played.
   const used = new Set(room.used);
-  let pool = WORDS.answers.filter((w) => !used.has(w));
+  let pool = WORDS.answers.filter((w) => !used.has(w) && notBlocked(w));
   if (pool.length === 0) {
     room.used = [];
-    pool = WORDS.answers.filter((w) => w !== room.lastWord);
+    pool = WORDS.answers.filter((w) => w !== room.lastWord && notBlocked(w));
   }
   const word = pool[Math.floor(Math.random() * pool.length)];
   room.used.push(word);
@@ -1086,7 +1095,7 @@ window.addEventListener('beforeunload', (e) => {
 });
 
 /* ---------- word list loading ---------- */
-async function fetchWordList(urls) {
+async function fetchWordList(urls, minWords = 500) {
   for (const url of urls) {
     try {
       const ctrl = new AbortController();
@@ -1108,7 +1117,7 @@ async function fetchWordList(urls) {
       const list = (Array.isArray(raw) ? raw : [])
         .map((w) => String(w).trim().toLowerCase())
         .filter((w) => /^[a-z]{5}$/.test(w));
-      if (list.length > 500) return list;
+      if (list.length >= minWords) return list;
     } catch {
       // try the next source
     }
@@ -1119,11 +1128,13 @@ async function fetchWordList(urls) {
 let wordsLoading = null;
 function loadWords() {
   wordsLoading ||= (async () => {
-    const [answers, ...dicts] = await Promise.all([
+    const [blocked, answers, ...dicts] = await Promise.all([
+      fetchWordList(WORD_SOURCES.blocked, 1),
       fetchWordList(WORD_SOURCES.answers),
-      ...WORD_SOURCES.dictionaries.map(fetchWordList),
+      ...WORD_SOURCES.dictionaries.map((urls) => fetchWordList(urls)),
     ]);
-    if (answers) WORDS.answers = [...new Set([...answers, ...ANSWERS])];
+    for (const w of blocked || []) BLOCKED.add(w);
+    WORDS.answers = [...new Set([...(answers || []), ...ANSWERS])].filter(notBlocked);
     for (const list of [answers, ...dicts]) {
       for (const w of list || []) WORDS.valid.add(w);
     }
