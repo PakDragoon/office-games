@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Thulla</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <div class="home-top">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <h1 class="logo" aria-label="Thulla">
+      <span class="logo-row" aria-hidden="true">
+        <i class="t" data-s="♠">T</i><i class="t red" data-s="♥">H</i><i class="t" data-s="♣">U</i><i class="t red" data-s="♦">L</i><i class="t" data-s="♠">L</i><i class="t red" data-s="♥">A</i>
+      </span>
+    </h1>
+    <p class="lede">Get rid of your cards before your friends do. Can't follow suit? Hit them with a thulla.</p>
+
+    <label class="field">Your name
+      <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+    </label>
+
+    <div class="choices">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Keep this tab open while you play.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+    </div>
+    <p class="error" id="home-error" role="alert"></p>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="home-top">
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <p class="muted">Room code</p>
+    <div class="room-code" id="lobby-code">····</div>
+    <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+    <ul class="lobby-players" id="lobby-players"></ul>
+
+    <div id="host-settings" hidden>
+      <div class="match-settings">
+        <label class="select-field">Rounds
+          <select id="set-rounds">
+            <option value="0">Unlimited</option>
+            <option value="3">3</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+        <label class="select-field">Turn timer
+          <select id="set-timer">
+            <option value="0">Off</option>
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+      </div>
+      <div class="rule-box">
+        <label class="toggle left"><input type="checkbox" id="set-take"> Allow taking the next player's cards</label>
+        <p class="muted">Before you lead, you can ask the next player for their whole hand. If they accept, they're safe and you hold their cards.</p>
+      </div>
+      <div class="crew-field">
+        <label for="set-crew">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+        <div class="crew-row">
+          <input class="text-input" id="set-crew" maxlength="40" placeholder="e.g. office-squad" autocomplete="off">
+          <button class="btn ghost" id="crew-save" type="button">Use</button>
+        </div>
+        <p class="small-note muted" id="crew-note"></p>
+      </div>
+    </div>
+    <ul class="settings-summary" id="guest-settings" hidden></ul>
+
+    <button class="btn primary wide" id="start-btn" type="button" hidden>Start game</button>
+    <p class="muted" id="lobby-wait">Waiting for the host to start…</p>
+    <p class="error" id="lobby-error" role="alert"></p>
+    <button class="btn link" id="lobby-leave" type="button">Leave room</button>
+  </div>
+</main>
+
+<!-- ============ Game ============ -->
+<div id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code">Room <b id="game-code">····</b></span>
+    <span id="game-round" class="muted">Round 1</span>
+    <span class="clock" id="clock" aria-live="off"></span>
+    <button class="btn small ghost" id="end-round-btn" type="button" hidden>End round</button>
+    <button class="btn small ghost" id="scores-btn" type="button">Scores</button>
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+    <button class="btn small ghost" id="game-leave" type="button">Leave</button>
+  </header>
+  <div class="arena">
+    <aside class="scoreboard" id="scoreboard" aria-label="Scores"></aside>
+    <section class="play">
+      <div class="table" id="table">
+        <div class="seats" id="seats"></div>
+        <div class="trick-area">
+          <div class="discard-pile" id="discard-pile" aria-hidden="true"><i></i><i></i><i></i></div>
+          <div class="trick" id="trick" aria-live="polite"></div>
+          <p class="table-note" id="table-note"></p>
+        </div>
+      </div>
+      <div class="hand-wrap">
+        <div class="hand-head">
+          <span class="hand-status" id="hand-status"></span>
+          <button class="btn small" id="take-btn" type="button" hidden>Ask for next player's cards</button>
+          <button class="btn small ghost" id="playfor-btn" type="button" hidden>Play for them</button>
+        </div>
+        <div class="take-bar" id="take-bar" hidden></div>
+        <div class="hand" id="hand" role="group" aria-label="Your cards"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ Overlays ============ -->
+<div class="overlay" id="round-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="round-title">
+    <h2 id="round-title">Round over</h2>
+    <p class="muted" id="round-sub"></p>
+    <ol class="ranking" id="round-ranking"></ol>
+    <div id="round-host" class="sheet-row" hidden>
+      <button class="btn ghost" id="end-game-btn" type="button">End game</button>
+      <button class="btn primary" id="next-round-btn" type="button">Play next round</button>
+    </div>
+    <p class="muted" id="round-wait">Waiting for the host…</p>
+    <div class="sheet-links"><button class="btn link" id="round-scores" type="button">Scores</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="over-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="over-title">
+    <h2 id="over-title">Game over</h2>
+    <p class="muted" id="over-sub"></p>
+    <ol class="ranking" id="over-ranking"></ol>
+    <div id="over-host" class="sheet-row" hidden>
+      <button class="btn ghost" id="change-settings-btn" type="button">Change settings</button>
+      <button class="btn primary" id="rematch-btn" type="button">Rematch</button>
+    </div>
+    <p class="muted" id="over-wait">Waiting for the host…</p>
+    <div class="sheet-links">
+      <button class="btn link" id="over-scores" type="button">Scores</button>
+      <button class="btn link" id="over-leave" type="button">Leave room</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="scores-overlay" hidden>
+  <div class="sheet scores-sheet" role="dialog" aria-modal="true" aria-label="Scores">
+    <div id="scores-sheet-body"></div>
+    <button class="btn wide" type="button" data-close>Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="take-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="take-title">
+    <h2 id="take-title">Give your cards?</h2>
+    <p id="take-text"></p>
+    <p class="muted" id="take-clock"></p>
+    <div class="sheet-row">
+      <button class="btn ghost" id="take-decline" type="button">Decline</button>
+      <button class="btn primary" id="take-accept" type="button">Give my cards</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="settings-overlay" hidden>
+  <div class="sheet settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <h2 id="settings-title">Settings</h2>
+    <section class="set-section">
+      <div class="account-row" id="account-out">
+        <p class="muted" style="flex:1">Sign in to save your stats and crew scores.</p>
+        <button class="btn primary small" id="sign-in-btn" type="button">Sign in with Google</button>
+      </div>
+      <div class="account-row" id="account-in" hidden>
+        <img class="avatar big" id="account-avatar" alt="">
+        <div class="account-who"><b id="account-name"></b><span class="muted" id="account-email"></span></div>
+        <button class="btn small ghost" id="sign-out-btn" type="button">Sign out</button>
+      </div>
+      <p class="small-note error" id="account-error" style="margin:0;min-height:0"></p>
+    </section>
+    <section class="set-section" id="stats-section" hidden>
+      <b>My stats</b>
+      <div class="stat-grid" id="stat-grid"></div>
+      <p class="stats-note" id="stats-note"></p>
+    </section>
+    <section class="set-section">
+      <label class="toggle left"><input type="checkbox" id="pref-sound"> Sounds</label>
+      <label class="toggle left"><input type="checkbox" id="pref-contrast"> High-contrast colors</label>
+    </section>
+    <button class="btn wide" type="button" data-close>Done</button>
+  </div>
+</div>
+
+<div class="overlay" id="closed-overlay" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="closed-title">
+    <h2 id="closed-title">Disconnected</h2>
+    <p id="closed-text"></p>
+    <div class="sheet-row">
+      <button class="btn ghost" id="closed-home" type="button">Home</button>
+      <button class="btn primary" id="closed-retry" type="button">Rejoin</button>
+    </div>
+  </div>
+</div>
+
+<div class="stamp" id="stamp" hidden aria-live="assertive"></div>
+<div class="toast" id="toast" role="status"></div>
+</body>
+</html>
