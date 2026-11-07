@@ -16,6 +16,13 @@
 
   <!-- HOME -->
   <main id="screen-home" class="screen home" hidden>
+    <div class="home-top">
+      <button class="account-chip" data-open-settings aria-label="Account and settings">
+        <img class="avatar" alt="" hidden>
+        <span class="account-label">Sign in</span>
+        <span aria-hidden="true">⚙</span>
+      </button>
+    </div>
     <div class="home-inner">
       <h1 class="logo" aria-label="Wordle Party">
         <span class="logo-row" aria-hidden="true">
@@ -51,6 +58,13 @@
 
   <!-- LOBBY -->
   <main id="screen-lobby" class="screen lobby" hidden>
+    <div class="home-top">
+      <button class="account-chip" data-open-settings aria-label="Account and settings">
+        <img class="avatar" alt="" hidden>
+        <span class="account-label">Sign in</span>
+        <span aria-hidden="true">⚙</span>
+      </button>
+    </div>
     <div class="lobby-inner">
       <p class="muted">Room code</p>
       <div id="lobby-code" class="room-code" aria-live="polite"></div>
@@ -66,6 +80,27 @@
           <label><input type="radio" name="win-rule" value="first" checked> First to solve it</label>
           <label><input type="radio" name="win-rule" value="fewest"> Fewest guesses</label>
         </fieldset>
+        <div class="match-settings">
+          <label class="select-field">
+            <span>Rounds</span>
+            <select id="rounds-select">
+              <option value="0">Unlimited</option>
+              <option value="3">3 rounds</option>
+              <option value="5">5 rounds</option>
+              <option value="10">10 rounds</option>
+            </select>
+          </label>
+          <label class="select-field">
+            <span>Time limit</span>
+            <select id="timer-select">
+              <option value="0">No timer</option>
+              <option value="60">1 minute</option>
+              <option value="120">2 minutes</option>
+              <option value="180">3 minutes</option>
+              <option value="300">5 minutes</option>
+            </select>
+          </label>
+        </div>
         <div class="field crew-field">
           <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
           <div class="crew-row">
@@ -76,6 +111,10 @@
         <label class="toggle">
           <input type="checkbox" id="strict-toggle" checked>
           <span>Only accept words from the word list</span>
+        </label>
+        <label class="toggle">
+          <input type="checkbox" id="hard-toggle">
+          <span>Hard mode: revealed hints must be used</span>
         </label>
         <button id="start-btn" class="btn primary wide">Start game</button>
       </div>
@@ -92,8 +131,10 @@
       <span class="bar-code">Room <b id="game-code"></b></span>
       <span id="game-round" class="muted"></span>
       <button id="scores-btn" class="btn ghost small">Scores</button>
+      <button id="endround-btn" class="btn ghost small" hidden>End round</button>
       <button id="results-btn" class="btn ghost small" hidden>Results</button>
       <span id="game-clock" class="clock" aria-label="Round time">0:00</span>
+      <button class="icon-btn" data-open-settings aria-label="Settings">⚙</button>
     </header>
 
     <div class="arena">
@@ -122,14 +163,65 @@
   <div id="results" class="overlay" hidden>
     <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="results-title">
       <h2 id="results-title">Round over</h2>
-      <p class="muted">The word was</p>
+      <p id="results-round-label" class="muted">The word was</p>
       <div id="results-word" class="reveal-word"></div>
+      <p id="results-meaning" class="meaning" hidden></p>
       <ol id="results-list" class="ranking"></ol>
       <p id="results-rule" class="muted small-note"></p>
-      <button id="again-btn" class="btn primary wide" hidden>Play another round</button>
+      <div id="final-block" class="final-block" hidden>
+        <h3 class="scores-sub">Final standings</h3>
+        <div id="final-standings"></div>
+      </div>
+      <button id="again-btn" class="btn primary wide" hidden>Play next round</button>
+      <button id="end-btn" class="btn wide" hidden>End game</button>
+      <button id="rematch-btn" class="btn primary wide" hidden>Rematch</button>
+      <button id="newgame-btn" class="btn wide" hidden>Change settings</button>
       <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
-      <button id="results-scores-btn" class="btn ghost wide">Scores</button>
-      <button id="see-boards-btn" class="btn link">Look at the boards</button>
+      <div class="sheet-row">
+        <button id="share-btn" class="btn ghost">Share my result</button>
+        <button id="results-scores-btn" class="btn ghost">Scores</button>
+      </div>
+      <div class="sheet-links">
+        <button id="see-boards-btn" class="btn link">Look at the boards</button>
+        <button id="results-leave-btn" class="btn link">Leave room</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div id="settings-sheet" class="overlay" hidden>
+    <div class="sheet settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <h2 id="settings-title">Settings</h2>
+
+      <section class="set-section">
+        <h3 class="scores-sub">Account</h3>
+        <div id="account-out">
+          <p class="muted">Sign in to keep your own stats across devices and to save crew scores. Guests can still play; their rounds just aren’t saved.</p>
+          <button id="signin-btn" class="btn primary wide">Sign in with Google</button>
+        </div>
+        <div id="account-in" class="account-row" hidden>
+          <img id="account-photo" class="avatar big" alt="" hidden>
+          <div class="account-who">
+            <b id="account-name"></b>
+            <span id="account-email" class="muted"></span>
+          </div>
+          <button id="signout-btn" class="btn ghost small">Sign out</button>
+        </div>
+        <p id="account-error" class="error" role="alert"></p>
+      </section>
+
+      <section class="set-section" id="stats-section" hidden>
+        <h3 class="scores-sub">My stats</h3>
+        <div id="my-stats"></div>
+      </section>
+
+      <section class="set-section">
+        <h3 class="scores-sub">Preferences</h3>
+        <label class="toggle left"><input type="checkbox" id="pref-sound"> <span>Sounds</span></label>
+        <label class="toggle left"><input type="checkbox" id="pref-contrast"> <span>High-contrast colors (orange and blue)</span></label>
+      </section>
+
+      <button id="settings-close-btn" class="btn primary wide">Done</button>
     </div>
   </div>
 

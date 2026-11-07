@@ -8,24 +8,42 @@ Multiplayer Wordle for up to 5 players. Everyone gets the same word, and you can
 2. They click **Copy invite link** and send it to up to 4 friends (or just tell them the code).
 3. Friends open the link, type their name, and click **Join room**.
 4. The host clicks **Start game**. The round keeps going until everyone has solved it or run out of guesses. The results then show the word and a ranking. By default the first person to solve it wins; in the lobby the host can switch to **Fewest guesses** instead, where time only breaks ties.
-5. The host clicks **Play another round** for a new word.
+5. Between rounds, the host clicks **Play next round** or **End game**. Ending the game shows the final standings, with **Rematch** (same settings) and **Change settings** (back to the lobby).
+
+After each round, the results show the word's meaning (from the free [Free Dictionary API](https://dictionaryapi.dev/)) and a **Share my result** button that copies an emoji grid.
+
+Before starting, the host picks:
+
+- **Who wins a round:** first to solve it (default), or fewest guesses with time breaking ties.
+- **Rounds:** unlimited, 3, 5 or 10. After the last round, the final standings appear automatically.
+- **Time limit:** none, or 1, 2, 3 or 5 minutes per round. Anyone still guessing when time runs out is marked "Out of time".
+- **Hard mode:** every revealed hint must be used in later guesses.
+- **Crew name** (optional): saves all-time scores, see below.
+
+During a round, the host can also click **End round** to stop it for everyone, for example if someone walked away.
 
 Scores carry over for every round played in the same room: wins, rounds solved, average guesses and fastest time, plus a list of past words. On wide screens they show beside your board; on phones and tablets, tap **Scores** in the top bar.
 
 If someone's page refreshes mid-game, they can rejoin with the same code and the same name and get their board and scores back.
 
-## Saved all-time scores (Firebase)
+## Accounts, stats and saved scores (Firebase)
 
-In the lobby, the host can type a **crew name** (for example `office-squad`). Every round played under that name is saved to Firebase and adds up across rooms: wins, rounds played, average guesses, and win streaks. The host's browser remembers the crew name for next time. Only the host's browser talks to Firebase; other players get the scores through the game. Leave the crew name empty to play without saving.
+- **Sign in with Google** from the gear icon (home, lobby or in-game). Guests can play without signing in; their rounds just aren't saved.
+- **My stats** (Settings): rounds played, rounds won, average guesses, current and best win streak, fastest solve, a guess-count chart, and your favorite opening word. Each signed-in player saves their own results.
+- **Crews:** in the lobby, the host can type a crew name (for example `office-squad`). Every round played under that name is saved and adds up across rooms in the scoreboard's **All time** table. Saving to a crew needs the host to be signed in.
+- **Preferences** (this device only): sounds, and high-contrast colors.
 
-One-time setup in the [Firebase console](https://console.firebase.google.com) for project `wordle-party-81870`:
+Firebase setup for project `wordle-party-81870` (one time, in the [Firebase console](https://console.firebase.google.com)):
 
-1. **Turn on anonymous sign-in:** Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save.
-2. **Allow the site:** Authentication → Settings → Authorized domains → Add domain → `pakdragoon.github.io`.
-3. **Create the database:** Build → Firestore Database → Create database. Pick a location near you, choose **production mode**, and finish.
-4. **Add the security rules:** in Firestore Database → Rules, replace everything with the contents of `firestore.rules`, then click **Publish**.
+1. **Google sign-in:** Build → Authentication → Sign-in method → Google → Enable, pick a support email, Save. (Anonymous sign-in is no longer used and can be turned off.)
+2. **Authorized domains:** Authentication → Settings → Authorized domains → make sure `pakdragoon.github.io` is listed.
+3. **Database:** Build → Firestore Database, Standard edition, database ID `(default)`, production mode.
+4. **Security rules:** Firestore Database → Rules → replace everything with `firestore.rules` → Publish. Do this again whenever `firestore.rules` changes.
+5. **Restrict the API key** in the [Google Cloud console](https://console.cloud.google.com/apis/credentials) → Browser key (auto created by Firebase):
+   - Application restrictions → Websites: `https://pakdragoon.github.io/*` and `https://wordle-party-81870.firebaseapp.com/*` (the second is needed for the Google sign-in window). Add `http://localhost:8000/*` for local testing.
+   - API restrictions → Restrict key → Identity Toolkit API, Token Service API, Cloud Firestore API.
 
-The Firebase config in `js/cloud.js` is meant to be public; the security rules protect the data. Saved rounds can't be edited or deleted from the game. To reset a crew, delete its document under `crews` in the Firebase console.
+The Firebase config in `js/cloud.js` is meant to be public; the security rules and key restrictions protect the project. Saved rounds can't be edited or deleted from the game. To reset a crew or a profile, delete its document in the Firebase console.
 
 ## Deploy on GitHub Pages
 

@@ -179,6 +179,13 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .win-rule label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
 .win-rule input { width: 1.1rem; height: 1.1rem; accent-color: var(--hit); }
 
+.match-settings { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 1rem; text-align: left; }
+.select-field { display: grid; gap: 0.35rem; font-weight: 600; }
+.select-field select {
+  font: 600 1rem var(--font); color: var(--ink); background: var(--surface);
+  border: 2px solid var(--line); border-radius: 10px; padding: 0.65rem 0.75rem; width: 100%;
+}
+.select-field select:focus { border-color: var(--ink); outline: none; }
 .crew-field { text-align: left; margin-bottom: 1rem; }
 .crew-field label { font-weight: 600; }
 .crew-field label .muted { font-weight: 400; font-size: 0.9rem; }
@@ -199,6 +206,10 @@ h1, h2 { line-height: 1.15; margin: 0; }
 #game-round { margin-right: auto; }
 .clock { font-weight: 800; font-variant-numeric: tabular-nums; font-size: 1.1rem; min-width: 3ch; text-align: right; }
 .btn.small { padding: 0.4rem 0.7rem; font-size: 0.9rem; }
+.clock.urgent { color: var(--danger); }
+.final-block { text-align: left; border-top: 2px solid var(--line); padding-top: 0.75rem; }
+.sheet-links { display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; }
+.sheet { max-height: calc(100dvh - 2.5rem); overflow-y: auto; }
 
 /* Wide screens: scores | my board | rivals */
 .arena {
@@ -416,3 +427,48 @@ h1, h2 { line-height: 1.15; margin: 0; }
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
 
+
+/* ---------- Accounts, settings, extras ---------- */
+.home, .lobby { position: relative; padding-top: 4rem !important; }
+.home-top { position: absolute; top: 0.75rem; right: 1rem; }
+.account-chip {
+  display: flex; align-items: center; gap: 0.5rem;
+  font: 600 0.95rem var(--font); color: var(--ink);
+  background: var(--surface); border: 2px solid var(--line); border-radius: 999px;
+  padding: 0.35rem 0.8rem 0.35rem 0.4rem; cursor: pointer;
+}
+.account-chip:not(:has(img:not([hidden]))) { padding-left: 0.8rem; }
+.avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; flex: none; }
+.avatar.big { width: 44px; height: 44px; }
+.avatar.tiny { width: 20px; height: 20px; }
+.icon-btn {
+  font-size: 1.15rem; line-height: 1; padding: 0.35rem 0.45rem;
+  background: transparent; color: var(--ink); border: 2px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.sheet.settings-sheet { text-align: left; gap: 0; max-width: 440px; }
+.settings-sheet h2 { margin-bottom: 0.5rem; }
+.set-section { border-top: 2px solid var(--line); padding: 0.9rem 0; display: grid; gap: 0.6rem; }
+.set-section .muted { font-size: 0.95rem; }
+.account-row { display: flex; align-items: center; gap: 0.75rem; }
+.account-who { display: grid; min-width: 0; flex: 1; }
+.account-who span { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toggle.left { justify-content: flex-start; margin: 0; }
+.stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; }
+.stat { background: var(--bg); border-radius: 10px; padding: 0.55rem 0.5rem; text-align: center; }
+.stat b { display: block; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.78rem; color: var(--muted); }
+.dist { display: grid; gap: 4px; margin-top: 0.4rem; }
+.dist-row { display: grid; grid-template-columns: 1rem 1fr; gap: 0.5rem; align-items: center; font-size: 0.85rem; font-weight: 700; }
+.dist-bar {
+  background: var(--miss); color: var(--on-tile); border-radius: 4px;
+  padding: 0.1rem 0.45rem; text-align: right; min-width: 1.6rem; font-variant-numeric: tabular-nums;
+}
+.dist-bar.top { background: var(--hit); }
+.stats-note { font-size: 0.85rem; color: var(--muted); margin: 0.4rem 0 0; }
+.meaning { font-size: 0.95rem; text-align: left; background: var(--bg); border-radius: 10px; padding: 0.6rem 0.8rem; }
+.meaning i { color: var(--muted); }
+.sheet-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; }
+.lobby-players .avatar { width: 22px; height: 22px; }
+
+/* High-contrast colors */
+body.contrast { --hit: #f5793a; --near: #3b8eea; }
