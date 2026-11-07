@@ -40,7 +40,7 @@ export function sortHand(hand) {
  * Cards are dealt one at a time starting with the player after the dealer,
  * so when 52 doesn't divide evenly the players right after the dealer get one more.
  */
-export function createRound({ seats, dealer = 0, allowTake = false, rnd = Math.random, deck }) {
+export function createRound({ seats, dealer = 0, allowTake = false, earlyPlay = false, rnd = Math.random, deck }) {
   if (seats.length < 2) throw new Error('Need at least 2 players');
   const cards = deck ? deck.slice() : shuffle(makeDeck(), rnd);
   const hands = Object.fromEntries(seats.map((id) => [id, []]));
@@ -53,12 +53,13 @@ export function createRound({ seats, dealer = 0, allowTake = false, rnd = Math.r
     seats: seats.slice(),
     dealer,
     allowTake,
+    earlyPlay,
     hands,
     out: [],              // finishing order (safe players)
     loser: null,
     over: false,
     first: true,          // first trick: must lead the Ace of Spades, no thullas
-    trick: [],            // [{ id, card }] in play order
+    trick: [],            // [{ id, card, early? }] in the order they hit the table
     trickSeats: [],       // who plays in the current trick, in order
     ledSuit: null,
     turn: leader,
@@ -104,6 +105,15 @@ function setTurn(st, id) {
   st.turnNo++;
 }
 
+const hasPlayed = (st, id) => st.trick.some((p) => p.id === id);
+
+/** Cards you may play before your turn (play-early rule): only the led suit, never a thulla. */
+export function earlyCards(st, id) {
+  if (!st.earlyPlay || st.over || st.turn === id || !st.trick.length) return [];
+  if (!st.trickSeats.includes(id) || hasPlayed(st, id)) return [];
+  return st.hands[id].filter((c) => suitOf(c) === st.ledSuit);
+}
+
 export function legalCards(st, id) {
   if (st.over || st.turn !== id) return [];
   const hand = st.hands[id];
@@ -131,14 +141,24 @@ function highestOfLed(st) {
  */
 export function play(st, id, card) {
   if (st.over) return { ok: false, error: 'The round is over.' };
-  if (st.turn !== id) return { ok: false, error: "It's not your turn." };
-  if (!st.hands[id].includes(card)) return { ok: false, error: "You don't have that card." };
+  if (!st.hands[id] || !st.hands[id].includes(card)) return { ok: false, error: "You don't have that card." };
+  const events = [];
+
+  // Playing early (someone else's turn)
+  if (st.turn !== id) {
+    if (!earlyCards(st, id).length) return { ok: false, error: "It's not your turn." };
+    if (!earlyCards(st, id).includes(card)) return { ok: false, error: `Early cards must follow ${SUIT_NAME[st.ledSuit]}.` };
+    st.hands[id] = st.hands[id].filter((c) => c !== card);
+    st.trick.push({ id, card, early: true });
+    events.push({ type: 'play', id, card, early: true });
+    return { ok: true, events };
+  }
+
   if (!legalCards(st, id).includes(card)) {
     return { ok: false, error: st.trick.length === 0
       ? 'You must lead the Ace of Spades.'
       : `You must follow ${SUIT_NAME[st.ledSuit]}.` };
   }
-  const events = [];
   st.hands[id] = st.hands[id].filter((c) => c !== card);
   if (st.trick.length === 0) st.ledSuit = suitOf(card);
   const offSuit = suitOf(card) !== st.ledSuit;
@@ -146,19 +166,25 @@ export function play(st, id, card) {
   events.push({ type: 'play', id, card });
 
   if (offSuit && !st.first) {
-    // Thulla: the trick stops now. Highest card of the led suit picks everything up.
-    const winner = highestOfLed(st).id;
+    // Thulla: the trick stops now. Normally the highest card of the led suit picks
+    // everything up. But if someone seated after the giver played early (jumped
+    // ahead of them), the first such player picks it up instead.
+    const order = st.trickSeats;
+    const giverAt = order.indexOf(id);
+    const jumper = st.trick.find((p) => p.early && order.indexOf(p.id) > giverAt);
+    const winner = jumper ? jumper.id : highestOfLed(st).id;
     const cards = st.trick.slice();
     st.hands[winner] = sortHand(st.hands[winner].concat(cards.map((p) => p.card)));
     st.stats[id].given++;
     st.stats[winner].received++;
-    st.lastTrick = { kind: 'pickup', cards, winner, giver: id };
-    events.push({ type: 'thulla', giver: id, receiver: winner, count: cards.length });
+    st.lastTrick = { kind: 'pickup', cards, winner, giver: id, jumped: Boolean(jumper) };
+    events.push({ type: 'thulla', giver: id, receiver: winner, count: cards.length, jumped: Boolean(jumper) });
     resolveFinishes(st, cards, winner, events);
     return { ok: true, events };
   }
 
-  if (st.trick.length === st.trickSeats.length) {
+  const next = st.trickSeats.find((x, i) => i > st.trickSeats.indexOf(id) && !hasPlayed(st, x));
+  if (!next) {
     const winner = highestOfLed(st).id;
     const cards = st.trick.slice();
     st.lastTrick = { kind: 'discard', cards, winner, giver: null };
@@ -167,7 +193,7 @@ export function play(st, id, card) {
     return { ok: true, events };
   }
 
-  setTurn(st, st.trickSeats[st.trick.length]);
+  setTurn(st, next);
   return { ok: true, events };
 }
 
@@ -218,11 +244,11 @@ export function positions(st) {
 export function takeTarget(st, id) {
   if (!st.allowTake) return { target: null, reason: 'Taking cards is turned off.' };
   if (st.over || st.turn !== id) return { target: null, reason: "It's not your turn." };
-  if (st.trick.length) return { target: null, reason: 'You can only ask before you lead.' };
-  if (st.first) return { target: null, reason: 'Not on the first trick.' };
   if (activeIds(st).length <= 2) return { target: null, reason: 'Not with only two players left.' };
   if (st.takeAskedTurn === st.turnNo) return { target: null, reason: 'You already asked this turn.' };
-  return { target: nextActiveFrom(st, id), reason: null };
+  const target = nextActiveFrom(st, id);
+  if (hasPlayed(st, target)) return { target: null, reason: 'They already played in this trick.' };
+  return { target, reason: null };
 }
 
 export function markTakeAsked(st) { st.takeAskedTurn = st.turnNo; }
@@ -238,9 +264,9 @@ export function applyTake(st, from, to) {
   st.out.push(to);
   events.push({ type: 'take', from, to, count: cards.length });
   events.push({ type: 'finish', id: to, pos: st.out.length });
-  // The asker still leads, but the trick's player list must drop the safe player.
-  startTrick(st, from);
-  st.takeAskedTurn = st.turnNo; // can't ask again on this same lead
+  if (st.trick.length === 0) startTrick(st, from);              // asker still leads
+  else st.trickSeats = st.trickSeats.filter((x) => x !== to);   // asker still has to play this trick
+  st.takeAskedTurn = st.turnNo; // can't ask again on this same turn
   return events;
 }
 

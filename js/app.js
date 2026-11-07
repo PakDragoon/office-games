@@ -27,8 +27,8 @@ const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 16
 // Preferences (this device only)
 // ---------------------------------------------------------------------------
 const prefs = (() => {
-  try { return { sound: true, contrast: false, ...JSON.parse(localStorage.getItem('thulla-prefs') || '{}') }; }
-  catch { return { sound: true, contrast: false }; }
+  try { return { sound: true, contrast: false, tapOnce: false, ...JSON.parse(localStorage.getItem('thulla-prefs') || '{}') }; }
+  catch { return { sound: true, contrast: false, tapOnce: false }; }
 })();
 function savePrefs() { try { localStorage.setItem('thulla-prefs', JSON.stringify(prefs)); } catch {} }
 function applyPrefs() { document.body.classList.toggle('contrast', !!prefs.contrast); }
@@ -105,7 +105,7 @@ function newHost(code) {
     peer: null,
     players: [],          // { id, name, cid, conn, online, left, isHost, color, uid, photo }
     nextId: 1,
-    settings: { rounds: 0, timer: 0, allowTake: false, crew: '' },
+    settings: { rounds: 0, timer: 0, allowTake: false, earlyPlay: false, crew: '' },
     phase: 'lobby',       // lobby | playing | between | over
     roundNo: 0,
     dealer: -1,
@@ -282,7 +282,7 @@ function hostStartRound() {
   if (seats.length < 2) { toast('You need at least 2 players to start.'); return; }
   clearAllTimers();
   H.dealer = (H.dealer + 1) % seats.length;
-  H.round = E.createRound({ seats, dealer: H.dealer, allowTake: H.settings.allowTake });
+  H.round = E.createRound({ seats, dealer: H.dealer, allowTake: H.settings.allowTake, earlyPlay: H.settings.earlyPlay });
   for (const id of seats) H.scores[id] ||= { rounds: 0, losses: 0, posSum: 0, given: 0, received: 0 };
   H.roundNo++;
   H.phase = 'playing';
@@ -336,18 +336,24 @@ function canAct(pid) {
   return H.phase === 'playing' && r && !r.over && !H.resolving && !H.take && r.turn === pid;
 }
 
+function canEarly(pid) {
+  const r = H.round;
+  return H.phase === 'playing' && r && !r.over && !H.resolving && !H.take && E.earlyCards(r, pid).length > 0;
+}
+
 function hostPlay(p, card) {
   const r = H.round;
-  if (!canAct(p.id)) { sendTo(p, { t: 'error', msg: H.take ? 'Wait for the answer to the card request.' : 'Wait for your turn.' }); broadcast(); return; }
+  if (!canAct(p.id) && !canEarly(p.id)) { sendTo(p, { t: 'error', msg: H.take ? 'Wait for the answer to the card request.' : 'Wait for your turn.' }); broadcast(); return; }
   const res = E.play(r, p.id, card);
   if (!res.ok) { sendTo(p, { t: 'error', msg: res.error }); broadcast(); return; }
+  if (res.events.length === 1 && res.events[0].early) { broadcast(); return; } // turn and timer carry on
   afterEvents(res.events);
 }
 
 function afterEvents(events) {
   const r = H.round;
   for (const e of events) {
-    if (e.type === 'thulla') fxAll({ kind: 'thulla', giver: nameOf(e.giver), receiver: nameOf(e.receiver), receiverId: e.receiver, count: e.count });
+    if (e.type === 'thulla') fxAll({ kind: 'thulla', giver: nameOf(e.giver), receiver: nameOf(e.receiver), receiverId: e.receiver, count: e.count, jumped: e.jumped });
     if (e.type === 'finish' && !e.cancelled) fxAll({ kind: 'finish', id: e.id, name: nameOf(e.id), pos: e.pos });
     if (e.type === 'take') fxAll({ kind: 'take', from: nameOf(e.from), to: nameOf(e.to), count: e.count });
   }
@@ -553,7 +559,9 @@ function buildView(pid) {
       discarded: r.tricks > 0,
       hand: r.hands[pid] ? r.hands[pid].slice() : null,
       legal: canAct(pid) ? E.legalCards(r, pid) : [],
+      early: canEarly(pid) ? E.earlyCards(r, pid) : [],
       myTurn: canAct(pid),
+      timer: H.settings.timer,
       turnMs: H.turnDeadline ? Math.max(0, H.turnDeadline - now) : 0,
       take: H.take ? { from: H.take.from, to: H.take.to, ms: Math.max(0, H.take.until - now) } : null,
       canTake: canAct(pid) && Boolean(take.target),
@@ -725,10 +733,16 @@ async function savePersonalRound(msg) {
 function onFx(fx) {
   const v = me.view;
   switch (fx.kind) {
-    case 'thulla':
+    case 'thulla': {
       sfx.thulla();
-      stamp('Thulla!', `${disp(fx.giver)} → ${fx.receiverId === me.id ? 'you pick' : disp(fx.receiver) + ' picks'} up ${fx.count} card${fx.count === 1 ? '' : 's'}`);
+      const who = fx.receiverId === me.id ? 'you pick' : disp(fx.receiver) + ' picks';
+      stamp('Thulla!', fx.jumped
+        ? `${disp(fx.giver)} hit back: ${who} up ${fx.count} for playing early`
+        : `${disp(fx.giver)} → ${who} up ${fx.count} card${fx.count === 1 ? '' : 's'}`);
+      const t = $('#table'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
+      setTimeout(() => t.classList.remove('shake'), 500);
       break;
+    }
     case 'finish':
       sfx.finish();
       if (fx.id === me.id) stamp('You’re safe!', `${ordinal(fx.pos)} out`, 'finish');
@@ -809,6 +823,7 @@ function renderLobby(v) {
     $('#set-rounds').value = String(s.rounds);
     $('#set-timer').value = String(s.timer);
     $('#set-take').checked = !!s.allowTake;
+    $('#set-early').checked = !!s.earlyPlay;
     if (document.activeElement !== $('#set-crew')) $('#set-crew').value = s.crew || '';
     $('#crew-note').textContent = v.crewNote || (cloud.getUser() ? 'Signed-in hosts can save rounds to a crew.' : 'Sign in (gear icon) to save crew scores.');
     const online = list.filter((p) => p.online).length;
@@ -818,7 +833,8 @@ function renderLobby(v) {
     $('#guest-settings').innerHTML = `
       <li>Rounds: <b>${s.rounds ? s.rounds : 'Unlimited'}</b></li>
       <li>Turn timer: <b>${s.timer ? s.timer + ' seconds' : 'Off'}</b></li>
-      <li>Taking the next player’s cards: <b>${s.allowTake ? 'Allowed' : 'Off'}</b></li>
+      <li>Play early: <b>${s.earlyPlay ? 'On' : 'Off'}</b></li>
+      <li>Take the next player’s cards: <b>${s.allowTake ? 'Allowed' : 'Off'}</b></li>
       ${s.crew ? `<li>Crew: <b>${esc(s.crew)}</b></li>` : ''}`;
   }
 }
@@ -843,104 +859,140 @@ function renderGame(v) {
   }
 }
 
-function renderSeats(v) {
+// Seat angles: me at the bottom, then clockwise (left, top, right), evenly spaced.
+function seatLayout(v) {
   const r = v.round;
   const order = r ? r.seats : v.players.filter((p) => !p.left).map((p) => p.id);
   const myIdx = order.indexOf(v.you);
-  const others = myIdx >= 0 ? order.slice(myIdx + 1).concat(order.slice(0, myIdx)) : order.slice();
-  const k = others.length;
-  const lo = Math.PI * (k > 4 ? 0.9 : 1), hi = Math.PI * (k > 4 ? 2.1 : 2);
-  $('#seats').innerHTML = others.map((id, i) => {
+  const rot = myIdx >= 0 ? order.slice(myIdx).concat(order.slice(0, myIdx)) : order.slice();
+  const n = rot.length;
+  const pos = {};
+  rot.forEach((id, i) => {
+    const a = Math.PI / 2 + (i * 2 * Math.PI) / Math.max(n, 1);
+    pos[id] = { cx: Math.cos(a), cy: Math.sin(a) };
+  });
+  return { order: rot, pos };
+}
+
+function avatarHTML(p) {
+  const letter = esc((p.name || '?').trim().charAt(0).toUpperCase());
+  return `<span class="av">${p.photo ? `<img src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer">` : letter}</span>`;
+}
+
+function renderSeats(v) {
+  const r = v.round;
+  const { order, pos } = seatLayout(v);
+  $('#seats').innerHTML = order.map((id) => {
     const p = player(v, id); if (!p) return '';
-    const a = lo + ((i + 1) * (hi - lo)) / (k + 1);
-    const x = 50 + 50 * Math.cos(a), y = 50 + 50 * Math.sin(a);
+    const { cx, cy } = pos[id];
     const isTurn = r && r.turn === id && !r.resolving;
-    const loser = v.result && !v.result.ended && v.result.loser === id && v.phase !== 'playing';
-    let info = '';
-    if (!r) info = loser ? 'Lost' : '';
-    else if (!p.inRound) info = 'Next round';
-    else if (p.safe) info = `Safe, ${ordinal(p.safe)}`;
-    else if (!p.online) info = 'Offline';
-    else if (r.take && r.take.to === id) info = 'Deciding…';
-    else if (isTurn) info = 'Playing';
-    const hasCount = Boolean(r && p.inRound);
-    return `<div class="seat c${p.color}${isTurn ? ' turn' : ''}${p.safe ? ' safe' : ''}${!p.online ? ' offline' : ''}${loser ? ' loser' : ''}"
-      data-seat="${id}" style="--x:${x.toFixed(1)}%;--y:${y.toFixed(1)}%">
-      <span class="seat-name">${esc(disp(p.name))}</span>
-      ${hasCount ? `<span class="seat-count" title="Cards left" aria-label="${p.count} cards">${p.count}</span>` : ''}
-      <span class="seat-info${hasCount ? '' : ' wide'}">${esc(info)}</span>
-    </div>`;
+    const lost = v.result && !v.result.ended && v.result.loser === id && v.phase !== 'playing';
+    let flag = '';
+    if (r && !p.inRound) flag = '<span class="seat-flag wait">Next round</span>';
+    else if (r && p.safe) flag = `<span class="seat-flag safe">Safe · ${ordinal(p.safe)}</span>`;
+    else if (!p.online) flag = '<span class="seat-flag">Offline</span>';
+    else if (r?.take && r.take.to === id) flag = '<span class="seat-flag wait">Deciding…</span>';
+    else if (lost) flag = '<span class="seat-flag lost">Lost</span>';
+    const count = r && p.inRound ? `<span class="cnt" aria-label="${p.count} cards">${p.count}</span>` : '';
+    const cls = ['seat', 'c' + p.color, isTurn && 'turn', p.safe && 'safe', !p.online && 'offline', id === v.you && 'me', cy > 0.6 && 'low'].filter(Boolean).join(' ');
+    const tag = `<span class="seat-tag"><span class="nm">${esc(id === v.you ? 'You' : disp(p.name))}</span>${count}</span>`;
+    return `<div class="${cls}" data-seat="${id}" style="--cx:${cx.toFixed(3)};--cy:${cy.toFixed(3)}" title="${esc(disp(p.name))}">
+      <span class="ring">${avatarHTML(p)}</span>${tag}${flag}</div>`;
   }).join('');
+}
+
+function cardTilt(c) {
+  let h = 0; for (const ch of c) h = (h * 31 + ch.charCodeAt(0)) % 997;
+  return (h % 15) - 7;
 }
 
 function renderTrick(v) {
   const r = v.round;
   const trickEl = $('#trick');
-  $('#discard-pile').style.visibility = r?.discarded ? 'visible' : 'hidden';
+  const pile = $('#discard-pile');
+  pile.classList.toggle('empty', !r?.discarded);
+  pile.hidden = !r;
   if (!r) { trickEl.innerHTML = ''; $('#table-note').textContent = ''; shownTrick = new Set(); return; }
+  const { pos } = seatLayout(v);
   const led = r.trick.length ? E.suitOf(r.trick[0].card) : null;
   let topIdx = -1;
   r.trick.forEach((t, i) => {
     if (E.suitOf(t.card) === led && (topIdx < 0 || E.rankOf(t.card) > E.rankOf(r.trick[topIdx].card))) topIdx = i;
   });
   trickEl.innerHTML = r.trick.map((t, i) => {
-    const p = player(v, t.id);
-    const off = E.suitOf(t.card) !== led;
-    return `<div class="trick-slot c${p?.color ?? 0}${off && !r.first && r.resolving?.kind !== 'discard' ? ' offsuit' : ''}${i === topIdx && r.trick.length > 1 ? ' top' : ''}${!shownTrick.has(t.card) ? ' new' : ''}">
-      ${cardHTML(t.card)}
-      <span class="trick-who">${esc(pname(v, t.id))}</span>
-    </div>`;
+    const { cx, cy } = pos[t.id] || { cx: 0, cy: 0 };
+    const off = E.suitOf(t.card) !== led && !r.first;
+    const cls = ['tcard', !shownTrick.has(t.card) && 'new', off && 'offsuit', i === topIdx && r.trick.length > 1 && !off && 'top'].filter(Boolean).join(' ');
+    return `<div class="${cls}" style="--cx:${cx.toFixed(3)};--cy:${cy.toFixed(3)};--r:${(0.56 - 0.08 * Math.abs(cy)).toFixed(2)};--tilt:${cardTilt(t.card)}deg;--fx:${(cx * 70).toFixed(0)}px;--fy:${(cy * 70).toFixed(0)}px;z-index:${i + 1}" title="${esc(pname(v, t.id))}">
+      ${cardHTML(t.card)}${t.early ? '<span class="early">early</span>' : ''}</div>`;
   }).join('');
   shownTrick = new Set(r.trick.map((t) => t.card));
 
   let note = '';
+  const ledChip = (s) => `<span class="led ${s}">${E.SUIT_SYMBOL[s]} led</span>`;
   if (r.resolving) {
     note = r.resolving.kind === 'pickup'
-      ? `<b>${esc(pname(v, r.resolving.winner))}</b> ${r.resolving.winner === v.you ? 'pick' : 'picks'} up the trick`
-      : `Trick discarded. <b>${esc(pname(v, r.resolving.winner))}</b> had the highest card`;
+      ? `${esc(pname(v, r.resolving.winner))} ${r.resolving.winner === v.you ? 'pick' : 'picks'} up`
+      : `Discarded. ${esc(pname(v, r.resolving.winner))} ${r.resolving.winner === v.you ? 'lead' : 'leads'}`;
   } else if (r.take) {
-    note = `<b>${esc(pname(v, r.take.from))}</b> asked <b>${esc(pname(v, r.take.to))}</b> for their cards`;
+    note = `${esc(pname(v, r.take.from))} asked ${esc(pname(v, r.take.to))} for their cards`;
   } else if (r.turn) {
-    const who = r.turn === v.you ? 'Your turn' : `<b>${esc(disp(player(v, r.turn)?.name))}</b>’s turn`;
-    const what = r.trick.length ? `, ${E.SUIT_NAME[led]} led` : r.first ? ', opening with the Ace of Spades' : ' to lead';
-    note = who + what + (r.stuck && r.turn !== v.you ? ' (offline)' : '');
+    const who = r.turn === v.you ? 'Your turn' : `${esc(disp(player(v, r.turn)?.name))}’s turn`;
+    note = (led ? ledChip(led) + '<br>' : '') + who + (r.first && !led ? '<br>A♠ leads' : '') + (r.stuck && r.turn !== v.you ? ' (offline)' : '');
   }
   $('#table-note').innerHTML = note;
 }
 
 function cardHTML(c, extra = '', tag = 'div', attrs = '') {
-  const s = E.suitOf(c), sym = E.SUIT_SYMBOL[s], rank = E.rankLabel(E.rankOf(c));
+  const s = E.suitOf(c), sym = E.SUIT_SYMBOL[s], r = E.rankOf(c), rank = E.rankLabel(r);
   const long = { A: 'Ace', K: 'King', Q: 'Queen', J: 'Jack' }[rank] || rank;
-  return `<${tag} class="card ${s} ${extra}" data-card="${c}" aria-label="${long} of ${E.SUIT_NAME[s]}" ${attrs}><span class="r" aria-hidden="true">${rank}<small>${sym}</small></span><span class="big" aria-hidden="true">${sym}</span></${tag}>`;
+  const face = r >= 11 && r <= 13;
+  const pip = face ? `<span class="pip">${rank}<small>${sym}</small></span>` : `<span class="pip">${sym}</span>`;
+  const ix = `<span class="ix" aria-hidden="true">${rank}<i>${sym}</i></span>`;
+  return `<${tag} class="card ${s}${face ? ' face' : ''}${r === 14 ? ' ace' : ''} ${extra}" data-card="${c}" aria-label="${long} of ${E.SUIT_NAME[s]}" ${attrs}>${ix}<span aria-hidden="true">${pip}</span>${ix.replace('class="ix"', 'class="ix b"')}</${tag}>`;
 }
+
+let selectedCard = null;
 
 function renderHand(v) {
   const r = v.round;
   const handEl = $('#hand');
   const status = $('#hand-status');
   const me_ = player(v, v.you);
-  $('#take-btn').hidden = true; $('#playfor-btn').hidden = true; $('#take-bar').hidden = true;
-  handEl.classList.toggle('my-turn', Boolean(r?.myTurn));
-  status.classList.toggle('mine', Boolean(r?.myTurn));
+  $('#take-btn').hidden = true; $('#playfor-btn').hidden = true; $('#take-bar').hidden = true; $('#play-sel-btn').hidden = true;
+  const early = new Set(r?.early || []);
+  const legal = new Set(r?.legal || []);
+  const active = Boolean(r?.myTurn || early.size);
+  handEl.classList.toggle('active', active);
+  status.className = 'pill';
+  status.hidden = !r;
 
-  if (!r) { handEl.innerHTML = ''; status.textContent = ''; return; }
+  if (!r) { handEl.innerHTML = ''; status.textContent = ''; selectedCard = null; return; }
   if (!r.hand) {
     handEl.innerHTML = '<p class="hand-empty">You’ll be dealt in next round.</p>';
     status.textContent = 'Watching this round';
     return;
   }
+  const ledSuit = r.trick.length ? E.suitOf(r.trick[0].card) : null;
   if (me_?.safe) {
+    status.classList.add('safe');
     status.textContent = `You’re safe, ${ordinal(me_.safe)} out`;
   } else if (r.myTurn) {
-    status.textContent = r.trick.length
-      ? (r.legal.some((c) => E.suitOf(c) === E.suitOf(r.trick[0].card)) ? `Your turn: follow ${E.SUIT_NAME[E.suitOf(r.trick[0].card)]}` : 'Your turn: no ' + E.SUIT_NAME[E.suitOf(r.trick[0].card)] + ', give a thulla!')
-      : r.first ? 'Your turn: lead the Ace of Spades' : 'Your turn: lead any card';
+    status.classList.add('go');
+    status.textContent = !ledSuit
+      ? (r.first ? 'Your turn · lead the A♠' : 'Your turn · lead any card')
+      : r.legal.some((c) => E.suitOf(c) === ledSuit)
+        ? `Your turn · follow ${E.SUIT_SYMBOL[ledSuit]}`
+        : `No ${E.SUIT_SYMBOL[ledSuit]} · give a thulla!`;
+  } else if (early.size) {
+    status.classList.add('early');
+    status.textContent = `You can play a ${E.SUIT_SYMBOL[ledSuit]} early`;
   } else if (r.take && r.take.from === v.you) {
     status.textContent = 'Waiting for an answer…';
   } else if (r.resolving) {
-    status.textContent = '';
-  } else {
     status.textContent = `You have ${r.hand.length} card${r.hand.length === 1 ? '' : 's'}`;
+  } else {
+    status.textContent = `${disp(player(v, r.turn)?.name || '')}’s turn · you have ${r.hand.length}`;
   }
 
   if (r.canTake && r.takeTarget) {
@@ -958,18 +1010,23 @@ function renderHand(v) {
   }
 
   const hand = E.sortHand(r.hand);
+  if (selectedCard && !legal.has(selectedCard) && !early.has(selectedCard)) selectedCard = null;
+  if (selectedCard) {
+    $('#play-sel-btn').hidden = false;
+    $('#play-sel-btn').textContent = `Play ${E.cardLabel(selectedCard)}`;
+  }
   if (!hand.length) { handEl.innerHTML = `<p class="hand-empty">${me_?.safe ? 'No cards left. Enjoy the show.' : 'No cards left.'}</p>`; return; }
-  const legal = new Set(r.legal);
   const card = (c) => {
-    const ok = r.myTurn && legal.has(c);
-    return cardHTML(c, r.myTurn ? (ok ? 'legal' : 'dim') : '', 'button', `type="button" ${ok ? '' : 'tabindex="-1" aria-disabled="true"'}`);
+    const kind = legal.has(c) ? 'legal' : early.has(c) ? 'early' : active ? 'dim' : '';
+    const playable = kind === 'legal' || kind === 'early';
+    return cardHTML(c, kind + (c === selectedCard ? ' selected' : ''), 'button',
+      `type="button" ${playable ? '' : 'tabindex="-1" aria-disabled="true"'}`);
   };
   // Lay out: one fanned row, or two if the cards would overlap too much.
-  // The fan tilts at most ±7°, so leave room for the tilted end cards.
-  const cw = parseFloat(getComputedStyle(handEl).getPropertyValue('--hand-cw')) || 76;
+  const cw = parseFloat(getComputedStyle(handEl).getPropertyValue('--cw')) || 84;
   const tiltPad = cw * 1.4 * Math.sin((7 * Math.PI) / 180) + 4;
   const avail = Math.max(200, handEl.clientWidth - 16 - 2 * tiltPad);
-  const tooTight = (n) => (avail - cw) / Math.max(1, n - 1) < cw * 0.32;
+  const tooTight = (n) => (avail - cw) / Math.max(1, n - 1) < cw * 0.34;
   const half = Math.ceil(hand.length / 2);
   const rows = hand.length > 8 && tooTight(hand.length) ? [hand.slice(0, half), hand.slice(half)] : [hand];
   handEl.innerHTML = rows.map((row) => `<div class="hand-row">${row.map(card).join('')}</div>`).join('');
@@ -980,13 +1037,13 @@ function renderHand(v) {
     const overlap = step - cw;
     const maxTilt = Math.min(7, n * 0.8);
     cards.forEach((el, i) => {
-      const t = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;   // -1 .. 1
+      const t = n > 1 ? (i - (n - 1) / 2) / ((n - 1) / 2) : 0;
       el.style.setProperty('--overlap', `${overlap}px`);
       el.style.setProperty('--rot', `${(t * maxTilt).toFixed(2)}deg`);
       el.style.setProperty('--arc', `${(-(1 - t * t) * Math.min(12, n * 1.2)).toFixed(1)}px`);
       el.style.zIndex = String(i + 1);
     });
-    if (ri > 0) rowEl.style.marginTop = `-${cw * 0.55}px`;
+    if (ri > 0) rowEl.style.marginTop = `-${cw * 0.62}px`;
   });
 }
 
@@ -1083,9 +1140,12 @@ function tickClock() {
   const clock = $('#clock');
   if (!v?.round) { clock.textContent = ''; clock.classList.remove('urgent'); }
   else if (turnEndsAt) {
-    const s = Math.max(0, Math.ceil((turnEndsAt - Date.now()) / 1000));
+    const left = Math.max(0, turnEndsAt - Date.now());
+    const s = Math.ceil(left / 1000);
     clock.textContent = `${s}s`;
     clock.classList.toggle('urgent', s <= 5 && v.round.myTurn);
+    const ring = document.querySelector('.seat.turn .ring');
+    if (ring && v.round.timer) ring.style.setProperty('--pct', (left / (v.round.timer * 1000)).toFixed(3));
   } else { clock.textContent = ''; clock.classList.remove('urgent'); }
   if (takeEndsAt) {
     const s = Math.max(0, Math.ceil((takeEndsAt - Date.now()) / 1000));
@@ -1098,14 +1158,13 @@ setInterval(tickClock, 250);
 // Trick leaving the table: flipped onto the discard pile, or flying to whoever picks it up.
 function animateTrickAway(res) {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-  const cards = [...document.querySelectorAll('#trick .card')];
+  const cards = [...document.querySelectorAll('#trick .tcard')];
   if (!cards.length) return;
   let target;
   if (res.kind === 'pickup') {
-    target = res.winner === me.id ? $('#hand') : document.querySelector(`[data-seat="${res.winner}"]`);
+    target = res.winner === me.id ? $('#hand') : document.querySelector(`[data-seat="${res.winner}"] .ring`);
   } else {
-    const pile = $('#discard-pile');
-    target = pile && getComputedStyle(pile).display !== 'none' ? pile : $('#trick');
+    target = $('#discard-pile');
   }
   if (!target) return;
   const tr = target.getBoundingClientRect();
@@ -1122,7 +1181,8 @@ function animateTrickAway(res) {
       ? [{ transform: 'none' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5 - 30}px) scale(0.85) rotate(${(i - cards.length / 2) * 8}deg)` }, { transform: `translate(${dx}px, ${dy}px) scale(0.4)`, opacity: 0.2 }]
       : [{ transform: 'none' }, { transform: `translate(${dx * 0.5}px, ${dy * 0.5}px) rotateY(90deg) scale(0.9)` }, { transform: `translate(${dx}px, ${dy}px) rotateY(0deg) scale(0.7)`, opacity: 0.6 }];
     const anim = clone.animate(frames, { duration: 650, delay: i * 45, easing: 'cubic-bezier(.4,.1,.3,1)', fill: 'forwards' });
-    if (res.kind === 'discard') setTimeout(() => { clone.classList.add('back'); clone.innerHTML = ''; }, 325 + i * 45);
+    if (res.kind === 'discard') setTimeout(() => { const c = clone.querySelector('.card'); if (c) { c.classList.add('back'); } }, 325 + i * 45);
+    if (res.kind === 'discard') setTimeout(() => $('#discard-pile').classList.remove('empty'), 650);
     anim.onfinish = () => clone.remove();
     setTimeout(() => clone.remove(), 1500);
   });
@@ -1169,6 +1229,7 @@ $('#copy-link').addEventListener('click', async () => {
 $('#set-rounds').addEventListener('change', (e) => hostSetSettings({ rounds: Number(e.target.value) }));
 $('#set-timer').addEventListener('change', (e) => hostSetSettings({ timer: Number(e.target.value) }));
 $('#set-take').addEventListener('change', (e) => hostSetSettings({ allowTake: e.target.checked }));
+$('#set-early').addEventListener('change', (e) => hostSetSettings({ earlyPlay: e.target.checked }));
 $('#crew-save').addEventListener('click', () => hostUseCrew($('#set-crew').value));
 $('#set-crew').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostUseCrew(e.target.value); });
 $('#start-btn').addEventListener('click', () => { $('#lobby-error').textContent = ''; hostStartRound(); });
@@ -1183,12 +1244,22 @@ $('#lobby-leave').addEventListener('click', confirmLeave);
 $('#game-leave').addEventListener('click', confirmLeave);
 $('#over-leave').addEventListener('click', confirmLeave);
 
+function playCard(c) {
+  selectedCard = null;
+  const el = document.querySelector(`#hand .card[data-card="${c}"]`);
+  if (el) el.classList.add('playing');
+  $('#play-sel-btn').hidden = true;
+  send({ t: 'play', card: c });
+}
 $('#hand').addEventListener('click', (e) => {
-  const el = e.target.closest('.card.legal');
-  if (!el || !me.view?.round?.myTurn) return;
-  el.classList.add('playing');
-  send({ t: 'play', card: el.dataset.card });
+  const el = e.target.closest('.card.legal, .card.early');
+  if (!el) { if (selectedCard) { selectedCard = null; renderHand(me.view); } return; }
+  const c = el.dataset.card;
+  const touch = e.pointerType ? e.pointerType !== 'mouse' : window.matchMedia('(pointer: coarse)').matches;
+  if (!touch || prefs.tapOnce || selectedCard === c) playCard(c);
+  else { selectedCard = c; renderHand(me.view); }
 });
+$('#play-sel-btn').addEventListener('click', () => { if (selectedCard) playCard(selectedCard); });
 $('#take-btn').addEventListener('click', () => send({ t: 'take' }));
 $('#take-accept').addEventListener('click', () => { send({ t: 'takeReply', accept: true }); $('#take-overlay').hidden = true; });
 $('#take-decline').addEventListener('click', () => { send({ t: 'takeReply', accept: false }); $('#take-overlay').hidden = true; });
@@ -1209,12 +1280,45 @@ $('#scores-btn').addEventListener('click', openScores);
 $('#round-scores').addEventListener('click', openScores);
 $('#over-scores').addEventListener('click', openScores);
 
+function rulesHTML() {
+  const s = me.view?.settings;
+  const opt = (on) => (s ? (on ? '<span class="on">On in this room</span>' : '') : '');
+  const li = (t) => `<li>${t}</li>`;
+  let h = '<p class="muted">Get rid of all your cards. The last player holding cards loses the round.</p>';
+  h += '<h3>Each trick</h3><ul>' + [
+    'Whoever has the A♠ leads it to start every round.',
+    'Play goes clockwise. Follow the suit that was led if you can.',
+    'Everyone followed? The trick is discarded and the highest card leads next.',
+    'Can’t follow? Play any card: that’s a <b>thulla</b>. The trick stops, and the highest card of the led suit picks up the whole trick and leads.',
+    'No thullas on the first trick: if you have no spades, play anything.',
+  ].map(li).join('') + '</ul>';
+  h += '<h3>Getting out</h3><ul>' + [
+    'You’re safe once a trick ends and your hand is empty.',
+    'If your last card was the highest and someone gives a thulla, you pick it up and you’re back in.',
+    'Fewest losses across the game wins.',
+  ].map(li).join('') + '</ul>';
+  if (!s || s.earlyPlay) h += `<h3>Play early ${opt(s?.earlyPlay)}</h3><ul>` + [
+    'After a trick is led, you can throw in a card of that suit before your turn.',
+    'Careful: if anyone you skipped gives a thulla, you pick up the trick instead of the highest card.',
+  ].map(li).join('') + '</ul>';
+  if (!s || s.allowTake) h += `<h3>Taking cards ${opt(s?.allowTake)}</h3><ul>` + [
+    'On your turn, before you play, you can ask the next player for their whole hand.',
+    'If they agree, they’re safe and you hold their cards. Not allowed with two players left.',
+  ].map(li).join('') + '</ul>';
+  if (!s) h += '<p class="muted">Play early and taking cards are optional; the host turns them on in the lobby.</p>';
+  return h;
+}
+$$('[data-open-rules]').forEach((b) => b.addEventListener('click', () => {
+  $('#rules-body').innerHTML = rulesHTML();
+  $('#rules-overlay').hidden = false;
+}));
+
 $$('[data-close]').forEach((b) => b.addEventListener('click', () => { b.closest('.overlay').hidden = true; }));
 $$('.overlay').forEach((o) => o.addEventListener('click', (e) => {
-  if (e.target === o && ['scores-overlay', 'settings-overlay'].includes(o.id)) o.hidden = true;
+  if (e.target === o && ['scores-overlay', 'settings-overlay', 'rules-overlay'].includes(o.id)) o.hidden = true;
 }));
 document.addEventListener('keydown', (e) => {
-  if (e.key === 'Escape') ['#scores-overlay', '#settings-overlay'].forEach((s) => { $(s).hidden = true; });
+  if (e.key === 'Escape') ['#scores-overlay', '#settings-overlay', '#rules-overlay'].forEach((s) => { $(s).hidden = true; });
 });
 
 $('#closed-home').addEventListener('click', () => { $('#closed-overlay').hidden = true; leaveRoom(); });
@@ -1236,6 +1340,7 @@ window.addEventListener('beforeunload', (e) => {
 function openSettings() {
   $('#pref-sound').checked = !!prefs.sound;
   $('#pref-contrast').checked = !!prefs.contrast;
+  $('#pref-tap').checked = !!prefs.tapOnce;
   renderAccount();
   $('#settings-overlay').hidden = false;
   loadStats();
@@ -1244,6 +1349,7 @@ $$('[data-open-settings]').forEach((b) => b.addEventListener('click', openSettin
 $('#home-account').addEventListener('click', openSettings);
 $('#pref-sound').addEventListener('change', (e) => { prefs.sound = e.target.checked; savePrefs(); if (prefs.sound) sfx.card(); });
 $('#pref-contrast').addEventListener('change', (e) => { prefs.contrast = e.target.checked; savePrefs(); applyPrefs(); });
+$('#pref-tap').addEventListener('change', (e) => { prefs.tapOnce = e.target.checked; savePrefs(); });
 
 $('#sign-in-btn').addEventListener('click', async () => {
   $('#account-error').textContent = '';

@@ -6,6 +6,8 @@ Play at `https://pakdragoon.github.io/thulla/`.
 
 ## How to play
 
+Everyone sits around the table with their own colour, and you're always at the bottom. Cards land in front of whoever played them; a glowing ring shows whose turn it is (and counts down if the timer is on). Your playable cards are outlined green, cards you can play early are outlined amber, and the rest are dimmed.
+
 1. One person types their name and clicks **Host a room**. They get a 4-letter room code.
 2. They click **Copy invite link** and send it to up to 7 friends (or just tell them the code).
 3. Friends open the link, type their name, and click **Join room**.
@@ -30,20 +32,26 @@ If someone's page refreshes mid-game, they rejoin automatically, or can rejoin w
   - If the player who should lead next is already safe, the next player clockwise who still has cards leads.
 - **Losing:** the last player still holding cards loses the round. If the final clean trick empties everyone's hands at once, whoever played the highest card loses, since they would have had to lead.
 
+### Optional: play early
+
+If the host turns this on in the lobby: once a trick has been led, anyone can throw in a card of the led suit before their turn comes (you can't give a thulla early). Your card shows on the table with an "early" tag, and the turn carries on in order, skipping you.
+
+The risk: if a player you jumped ahead of (someone seated before you who hadn't played yet) then gives a thulla, **you** pick up the trick instead of whoever played the highest card. If several people jumped that player, the first one to jump picks it up. Players seated after you aren't affected by your early card.
+
 ### Optional: taking the next player's cards
 
-If the host turns this on in the lobby: on your turn, before you lead (not on the first trick), you can ask the next player for their whole hand. They have 15 seconds to answer.
+If the host turns this on in the lobby: on any of your turns, before you play your card, you can ask the next player for their whole hand. They have 15 seconds to answer.
 
-- **Give my cards:** all their cards go into your hand, they're safe in the next finishing position, and you lead.
-- **Decline** (or no answer in time): nothing changes and you play normally. You can ask once per lead.
+- **Give my cards:** all their cards go into your hand, they're safe in the next finishing position, and you still play your turn (following suit with your new hand if a trick is under way).
+- **Decline** (or no answer in time): nothing changes and you play normally. You can ask once per turn.
 
-You can't ask when only two players are left.
+You can't ask when only two players are left, or if the next player already played early in this trick.
 
 ### Settings (host, in the lobby)
 
 - **Rounds:** unlimited, 3, 5 or 10. After the last round the final standings appear automatically.
 - **Turn timer:** off, 15, 30 or 60 seconds. When time runs out, a card is played for you: the lowest card of the led suit if you can follow, your lowest card if you're leading, or your highest card if you can't follow (a thulla).
-- **Allow taking the next player's cards:** see above.
+- **Play early** and **Take the next player's cards:** see above.
 - **Crew name** (optional): saves all-time scores, see below.
 
 If the timer is off and it's an offline player's turn, the host gets a **Play for them** button after 30 seconds.
@@ -59,7 +67,9 @@ Players named JD or Junaid get a 🍌 after their name everywhere.
 - **Sign in with Google** from the gear icon. Guests can play without signing in; their rounds just aren't saved.
 - **My stats** (Settings): rounds played, times lost, loss rate, average finishing position, thullas given and received. Each signed-in player saves their own results after every round.
 - **Crews:** in the lobby, the host can type a crew name (for example `office-squad`) and click **Use**. Every round played under that name is saved and adds up across rooms in the scoreboard's **All time** table. Saving to a crew needs the host to be signed in.
-- **Preferences** (this device only): sounds, and high-contrast colors (which also switches to a four-color deck: blue diamonds, green clubs).
+- **Preferences** (this device only): sounds, high-contrast colors (which also switches to a four-color deck: blue diamonds, green clubs), and single-tap play on phones. By default, on a touch screen the first tap raises a card and a second tap (or the **Play** button) plays it, so a stray tap doesn't throw a card. With a mouse, one click plays.
+
+Tap **?** in the game bar (or **How to play** on the home screen) for a rules summary that matches the room's settings.
 
 Thulla uses the same Firebase project as Wordle Party (`wordle-party-81870`), in separate collections: `thullaCrews` and `thullaUsers`. It never reads or writes Wordle Party's `crews` or `users`.
 

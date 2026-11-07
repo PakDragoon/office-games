@@ -9,11 +9,11 @@ function totalCards(st) {
 }
 
 // 1. Random full rounds for every table size
-let thullas = 0, discards = 0, takes = 0, allEmpty = 0, rounds = 0;
+let thullas = 0, discards = 0, takes = 0, allEmpty = 0, rounds = 0, earlyPlays = 0, jumpedPickups = 0, midTakes = 0;
 for (let n = 2; n <= 8; n++) {
   for (let g = 0; g < 600; g++) {
     const seats = Array.from({ length: n }, (_, i) => 'p' + i);
-    const st = E.createRound({ seats, dealer: g % n, rnd, allowTake: g % 3 === 0 });
+    const st = E.createRound({ seats, dealer: g % n, rnd, allowTake: g % 3 === 0, earlyPlay: g % 2 === 0 });
     const sizes = seats.map((s) => st.hands[s].length);
     assert.equal(sizes.reduce((a, b) => a + b), 52);
     assert.ok(Math.max(...sizes) - Math.min(...sizes) <= 1);
@@ -22,11 +22,24 @@ for (let n = 2; n <= 8; n++) {
     let discardedCards = 0, steps = 0;
     while (!st.over) {
       assert.ok(++steps < 20000, 'round never ended');
+      // sometimes someone plays early
+      if (st.earlyPlay && rnd() < 0.25) {
+        const others = seats.filter((x) => E.earlyCards(st, x).length);
+        if (others.length) {
+          const x = others[Math.floor(rnd() * others.length)];
+          const ec = E.earlyCards(st, x);
+          const off = st.hands[x].find((c) => !ec.includes(c));
+          if (off) assert.equal(E.play(st, x, off).ok, false, 'early thulla must be rejected');
+          const r = E.play(st, x, ec[0]);
+          assert.ok(r.ok, r.error); earlyPlays++;
+          continue;
+        }
+      }
       const id = st.turn;
       const t = E.takeTarget(st, id);
       if (t.target && rnd() < 0.05) {
         E.markTakeAsked(st);
-        if (rnd() < 0.5) { E.applyTake(st, id, t.target); takes++; }
+        if (rnd() < 0.5) { if (st.trick.length) midTakes++; E.applyTake(st, id, t.target); takes++; }
         continue;
       }
       const legal = E.legalCards(st, id);
@@ -39,7 +52,7 @@ for (let n = 2; n <= 8; n++) {
       const r = E.play(st, id, card);
       assert.ok(r.ok, r.error);
       for (const e of r.events) {
-        if (e.type === 'thulla') thullas++;
+        if (e.type === 'thulla') { thullas++; if (e.jumped) jumpedPickups++; }
         if (e.type === 'discard') { discards++; discardedCards += e.count; }
       }
       const disc = r.events.find((e) => e.type === 'discard');
@@ -56,7 +69,8 @@ for (let n = 2; n <= 8; n++) {
     if (st.hands[st.loser].length === 0) allEmpty++;
   }
 }
-console.log({ rounds, thullas, discards, takes, allEmpty });
+console.log({ rounds, thullas, discards, takes, midTakes, earlyPlays, jumpedPickups, allEmpty });
+assert.ok(earlyPlays > 0 && jumpedPickups > 0 && midTakes > 0);
 
 // 2. Scripted scenarios with a fixed deck (3 players, dealer = p2 so p0 gets cards first)
 function rig(handsBySeat) {
@@ -180,5 +194,65 @@ const seats3 = ['a', 'b', 'c'];
   E.play(st, 'b', 'H5');
   assert.equal(E.autoCard(st, 'c'), 'C4');            // can't follow → highest (C4 > D3)
   console.log('ok auto-play');
+}
+// 3. Play early: a jumper picks up when someone they jumped gives a thulla
+{
+  const four = ['a', 'b', 'c', 'd'];
+  const deck = [];
+  const hands = [['S14', 'H14', 'D9'], ['S2', 'C5', 'D2'], ['S3', 'H3', 'D3'], ['S4', 'H4', 'D4']];
+  for (let i = 0; i < 3; i++) for (let s2 = 0; s2 < 4; s2++) deck.push(hands[s2][i]);
+  const st = E.createRound({ seats: four, dealer: 3, deck, earlyPlay: true });
+  // first trick: c jumps ahead of b (spades)
+  E.play(st, 'a', 'S14');
+  assert.deepEqual(E.earlyCards(st, 'c'), ['S3']);
+  assert.ok(E.play(st, 'c', 'S3').ok);
+  assert.equal(st.turn, 'b');
+  E.play(st, 'b', 'S2');
+  assert.equal(st.turn, 'd', 'c already played, so d is next');
+  E.play(st, 'd', 'S4');
+  assert.equal(st.turn, 'a');
+  // a leads hearts, d jumps ahead of b and c; b has no hearts → thulla → d picks up, not a
+  E.play(st, 'a', 'H14');
+  assert.equal(E.play(st, 'd', 'C5').ok, false, 'no thulla early (d has no clubs anyway)');
+  assert.ok(E.play(st, 'd', 'H4').ok);
+  const r = E.play(st, 'b', 'C5');
+  const t = r.events.find((e) => e.type === 'thulla');
+  assert.deepEqual([t.giver, t.receiver, t.jumped], ['b', 'd', true]);
+  assert.equal(st.turn, 'd');
+  console.log('ok play-early jumper picks up');
+}
+// 3b. An early player seated BEFORE the giver isn't punished
+{
+  const four = ['a', 'b', 'c', 'd'];
+  const hands = [['S14', 'H14', 'D9'], ['S2', 'H2', 'D2'], ['S3', 'H3', 'D3'], ['S4', 'C4', 'D4']];
+  const deck = []; for (let i = 0; i < 3; i++) for (let s2 = 0; s2 < 4; s2++) deck.push(hands[s2][i]);
+  const st = E.createRound({ seats: four, dealer: 3, deck, earlyPlay: true });
+  E.play(st, 'a', 'S14'); E.play(st, 'b', 'S2'); E.play(st, 'c', 'S3'); E.play(st, 'd', 'S4');
+  E.play(st, 'a', 'H14');
+  E.play(st, 'c', 'H3');        // c jumps b
+  E.play(st, 'b', 'H2');        // b follows, then turn skips c → d
+  assert.equal(st.turn, 'd');
+  const r = E.play(st, 'd', 'C4');
+  const t = r.events.find((e) => e.type === 'thulla');
+  assert.deepEqual([t.receiver, t.jumped], ['a', false]);
+  console.log('ok early player before the giver is not punished');
+}
+// 3c. Take on a non-leading turn
+{
+  const st = E.createRound({ seats: ['a', 'b', 'c', 'd'], dealer: 3, deck: E.makeDeck(), allowTake: true });
+  while (st.first) E.play(st, st.turn, E.autoCard(st, st.turn));
+  E.play(st, st.turn, E.legalCards(st, st.turn)[0]);   // lead
+  const asker = st.turn;
+  const { target } = E.takeTarget(st, asker);
+  assert.ok(target);
+  const total = st.hands[asker].length + st.hands[target].length;
+  E.markTakeAsked(st);
+  E.applyTake(st, asker, target);
+  assert.equal(st.turn, asker);
+  assert.equal(st.hands[asker].length, total);
+  assert.ok(!st.trickSeats.includes(target));
+  const r = E.play(st, asker, E.legalCards(st, asker)[0]);
+  assert.ok(r.ok);
+  console.log('ok take mid-trick');
 }
 console.log('ALL ENGINE TESTS PASSED');
