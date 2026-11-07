@@ -59,6 +59,36 @@ const WORDS = {
   ready: false,
   big: false,
 };
+/* ---------- Preferences (this device only) ---------- */
+const PREFS = { sound: true, contrast: false };
+try { Object.assign(PREFS, JSON.parse(localStorage.getItem('wordleparty-prefs') || '{}')); } catch {}
+function savePrefs() {
+  try { localStorage.setItem('wordleparty-prefs', JSON.stringify(PREFS)); } catch {}
+  document.body.classList.toggle('contrast', PREFS.contrast);
+}
+
+let audio = null;
+function sfx(kind) {
+  if (!PREFS.sound) return;
+  try {
+    audio ||= new (window.AudioContext || window.webkitAudioContext)();
+    const notes = { rival: [660], win: [523, 659, 784], tick: [880], over: [440, 330] }[kind] || [];
+    notes.forEach((f, i) => {
+      const o = audio.createOscillator();
+      const g = audio.createGain();
+      const t = audio.currentTime + i * 0.12;
+      o.frequency.value = f;
+      o.type = 'sine';
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.15, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+      o.connect(g).connect(audio.destination);
+      o.start(t);
+      o.stop(t + 0.2);
+    });
+  } catch {}
+}
+
 const WIN_RULES = {
   first: 'First to solve it wins.',
   fewest: 'Fewest guesses wins, and the faster time breaks ties.',
@@ -142,8 +172,12 @@ function hostCreate(attempt = 0) {
       word: null,
       lastWord: null,
       startedAt: 0,
-      players: [newPlayer(id, S.myName, true, 0)],
+      players: [newPlayer(id, S.myName, true, 0, cloud.currentUser()?.uid || null, cloud.currentUser()?.photo || '')],
       winRule: 'first',
+      maxRounds: 0,    // rounds in a game; 0 = unlimited
+      timer: 0,        // seconds per round; 0 = no timer
+      hard: false,     // hard mode: revealed hints must be used
+      matchRound: 0,   // round number within the current game
       crew: null,      // { id, name } when all-time scores are saved to Firebase
       crewStatus: '',
       allTime: null,   // the crew's saved totals
@@ -179,8 +213,13 @@ function hostCreate(attempt = 0) {
   });
 }
 
-function newPlayer(id, name, isHost, color) {
-  return { id, name, isHost, color, connected: true, guesses: [], solved: false, done: false, finishMs: null };
+function newPlayer(id, name, isHost, color, uid = null, photo = '') {
+  return { id, name, isHost, color, uid, photo, connected: true, guesses: [], solved: false, done: false, finishMs: null };
+}
+
+function cleanPhoto(url) {
+  const s = String(url || '');
+  return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(s) ? s.slice(0, 500) : '';
 }
 
 function freeColor() {
@@ -197,11 +236,11 @@ function hostOnConnection(conn) {
 
 function hostOnMessage(conn, msg) {
   if (!msg || typeof msg !== 'object') return;
-  if (msg.t === 'join') hostJoin(conn, msg.name);
+  if (msg.t === 'join') hostJoin(conn, msg.name, msg.uid, msg.photo);
   if (msg.t === 'guess') hostGuess(conn.peer, msg.word);
 }
 
-function hostJoin(conn, rawName) {
+function hostJoin(conn, rawName, uid, photo) {
   const room = H.room;
   const name = cleanName(rawName) || 'Player';
 
@@ -215,6 +254,8 @@ function hostJoin(conn, rawName) {
     if (oldConn && oldConn !== conn) oldConn.close();
     old.id = conn.peer;
     old.connected = true;
+    old.uid = typeof uid === 'string' ? uid.slice(0, 128) : old.uid;
+    old.photo = cleanPhoto(photo) || old.photo;
     H.conns.set(conn.peer, conn);
     send(conn, { t: 'welcome', id: conn.peer, code: room.code });
     if (room.status !== 'lobby') send(conn, { t: 'board', round: room.round, guesses: old.guesses });
@@ -238,7 +279,7 @@ function hostJoin(conn, rawName) {
     finalName = `${name} ${n++}`;
   }
 
-  room.players.push(newPlayer(conn.peer, finalName, false, freeColor()));
+  room.players.push(newPlayer(conn.peer, finalName, false, freeColor(), typeof uid === 'string' ? uid.slice(0, 128) : null, cleanPhoto(photo)));
   H.conns.set(conn.peer, conn);
   send(conn, { t: 'welcome', id: conn.peer, code: room.code });
   hostBroadcast();
@@ -263,8 +304,54 @@ function hostOnClose(conn) {
   hostBroadcast();
 }
 
+// A new game from the lobby: fresh standings, round 1.
+function hostStartGame() {
+  const room = H.room;
+  const typedCrew = $('crew-input').value.replace(/\s+/g, ' ').trim();
+  if (typedCrew !== (room.crew ? room.crew.name : '')) hostSetCrew(typedCrew);
+  room.stats = {};
+  room.history = [];
+  room.matchRound = 0;
+  hostStart();
+}
+
+// Back to the lobby after a game, so the host can change settings.
+function hostBackToLobby() {
+  const room = H.room;
+  clearTimeout(H.timer);
+  room.status = 'lobby';
+  room.players = room.players.filter((p) => p.connected);
+  hostBroadcast();
+}
+
+// End the game early, between rounds: show the final standings.
+function hostEndGame() {
+  const room = H.room;
+  if (room.status !== 'ended') return;
+  room.status = 'over';
+  hostBroadcast();
+}
+
+// End the current round now (host's button, or the timer running out).
+function hostEndRound(reason) {
+  const room = H.room;
+  if (!room || room.status !== 'playing') return;
+  clearTimeout(H.timer);
+  for (const p of room.players) {
+    if (!p.done) {
+      p.done = true;
+      p.finishMs = null;
+      p.timedOut = reason === 'time';
+      p.stopped = reason !== 'time';
+    }
+  }
+  hostCheckEnd();
+  hostBroadcast();
+}
+
 function hostStart() {
   const room = H.room;
+  clearTimeout(H.timer);
   room.players = room.players.filter((p) => p.connected);
   // No repeats within a room until every possible answer has been played.
   const used = new Set(room.used);
@@ -278,6 +365,7 @@ function hostStart() {
   room.word = word;
   room.lastWord = word;
   room.round += 1;
+  room.matchRound += 1;
   room.status = 'playing';
   room.startedAt = Date.now();
   for (const p of room.players) {
@@ -285,6 +373,14 @@ function hostStart() {
     p.solved = false;
     p.done = false;
     p.finishMs = null;
+    p.timedOut = false;
+    p.stopped = false;
+  }
+  if (room.timer > 0) {
+    const round = room.round;
+    H.timer = setTimeout(() => {
+      if (H.room === room && room.round === round) hostEndRound('time');
+    }, room.timer * 1000);
   }
   hostBroadcast();
 }
@@ -299,6 +395,10 @@ function hostGuess(pid, rawWord) {
   if (room.status !== 'playing' || p.done) return reply({ t: 'invalid', reason: 'This round is over' });
   if (!/^[a-z]{5}$/.test(word)) return reply({ t: 'invalid', reason: 'Not enough letters' });
   if (room.strict && !WORDS.valid.has(word)) return reply({ t: 'invalid', reason: 'Not in word list' });
+  if (room.hard) {
+    const problem = hardModeProblem(p.guesses, word);
+    if (problem) return reply({ t: 'invalid', reason: problem });
+  }
 
   const pattern = score(word, room.word);
   p.guesses.push({ word, pattern });
@@ -315,11 +415,28 @@ function hostGuess(pid, rawWord) {
   hostBroadcast();
 }
 
+// Hard mode: every green stays in place, every revealed letter is used again.
+function hardModeProblem(previous, word) {
+  const nth = ['1st', '2nd', '3rd', '4th', '5th'];
+  for (const g of previous) {
+    for (let i = 0; i < COLS; i++) {
+      if (g.pattern[i] === 'h' && word[i] !== g.word[i]) return `${nth.at(i)} letter must be ${g.word[i].toUpperCase()}`;
+    }
+    const need = {};
+    for (let i = 0; i < COLS; i++) if (g.pattern[i] !== 'm') need[g.word[i]] = (need[g.word[i]] || 0) + 1;
+    for (const [ch, n] of Object.entries(need)) {
+      if ([...word].filter((c) => c === ch).length < n) return `Guess must contain ${ch.toUpperCase()}`;
+    }
+  }
+  return null;
+}
+
 function hostCheckEnd() {
   const room = H.room;
   if (room.status === 'playing' && room.players.every((p) => p.done || !p.connected)) {
-    room.status = 'ended';
+    clearTimeout(H.timer);
     hostRecordRound();
+    room.status = room.maxRounds && room.matchRound >= room.maxRounds ? 'over' : 'ended';
   }
 }
 
@@ -345,15 +462,20 @@ function hostRecordRound() {
   }
   room.history.push({ round: room.round, word: room.word, winner: winner ? winner.name : null });
 
-  if (room.crew) {
+  if (room.crew && !cloud.currentUser()) {
+    room.crewStatus = 'This round wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
+  } else if (room.crew) {
     const crew = room.crew;
+    const uids = new Map(room.players.map((p) => [p.id, p.uid || null]));
     const record = {
       word: room.word,
       winRule: room.winRule,
+      hard: room.hard,
       winner: winner ? winner.name : null,
       room: room.code,
       players: players.map((p) => ({
         name: p.name,
+        uid: uids.get(p.id) || null,
         solved: p.solved,
         guesses: p.patterns.length,
         ms: p.solved ? p.finishMs : null,
@@ -400,6 +522,11 @@ async function hostSetCrew(rawName) {
   }
   room.crew = { id, name };
   room.allTime = null;
+  if (!cloud.currentUser()) {
+    room.crewStatus = 'Sign in with Google (gear icon) to save crew scores.';
+    hostBroadcast();
+    return;
+  }
   room.crewStatus = 'Connecting to saved scores…';
   hostBroadcast();
   try {
@@ -426,6 +553,10 @@ function publicView() {
     round: room.round,
     strict: room.strict,
     winRule: room.winRule,
+    maxRounds: room.maxRounds,
+    timer: room.timer,
+    hard: room.hard,
+    matchRound: room.matchRound,
     elapsed: room.startedAt ? Date.now() - room.startedAt : 0,
     // Only colour patterns go out. Letters stay on the host.
     players: room.players.map((p) => ({
@@ -438,8 +569,11 @@ function publicView() {
       solved: p.solved,
       done: p.done,
       finishMs: p.finishMs,
+      photo: p.photo || '',
+      timedOut: Boolean(p.timedOut),
+      stopped: Boolean(p.stopped),
     })),
-    word: room.status === 'ended' ? room.word : null,
+    word: room.status === 'ended' || room.status === 'over' ? room.word : null,
     stats: Object.values(room.stats),
     crew: room.crew ? room.crew.name : null,
     crewStatus: room.crewStatus,
@@ -481,7 +615,8 @@ function joinRoom(code) {
       connected = true;
       clearTimeout(timer);
       S.hostConn = conn;
-      send(conn, { t: 'join', name: S.myName });
+      const u = cloud.currentUser();
+      send(conn, { t: 'join', name: S.myName, uid: u?.uid || null, photo: u?.photo || '' });
     });
     conn.on('data', onMessage);
     conn.on('close', () => {
@@ -570,18 +705,49 @@ function applyState(v) {
 
   showScreen('game');
   $('game-code').textContent = v.code;
-  $('game-round').textContent = `Round ${v.round}`;
+  $('game-round').textContent = v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
   renderRivals(v);
   renderScores(v);
   announceRivals(prev, v);
   tickClock();
 
-  $('results-btn').hidden = v.status !== 'ended';
-  if (v.status === 'ended') {
-    if (S.resultsClosedRound !== v.round) showResults(v);
+  const roundOver = v.status === 'ended' || v.status === 'over';
+  $('results-btn').hidden = !roundOver;
+  $('endround-btn').hidden = !(S.isHost && v.status === 'playing');
+  if (prev && prev.status === 'playing' && roundOver && prev.round === v.round) {
+    const m = me();
+    if (m && m.timedOut) toast('Time’s up!');
+    else if (m && m.stopped) toast('The host ended the round.');
+  }
+  if (roundOver && prev && prev.status === 'playing') sfx('over');
+  if (roundOver) saveMyGame(v);
+  if (roundOver) {
+    if (S.resultsClosedRound !== v.round || (v.status === 'over' && prev && prev.status !== 'over')) showResults(v);
   } else {
     $('results').hidden = true;
   }
+}
+
+// Signed-in players save their own result to their profile, once per round.
+function saveMyGame(v) {
+  const u = cloud.currentUser();
+  const m = me();
+  if (!u || !m || S.savedRound === v.round || !v.word) return;
+  if (!m.done && m.patterns.length === 0) return; // joined after the round started
+  S.savedRound = v.round;
+  const top = ranked(v.players, v.winRule)[0];
+  cloud.saveGame({
+    word: v.word,
+    room: v.code,
+    solved: m.solved,
+    guesses: m.patterns.length,
+    ms: m.solved ? m.finishMs : null,
+    won: Boolean(top && top.id === m.id && top.solved),
+    opener: S.guesses[0]?.word || null,
+  }).catch((err) => {
+    console.warn('Saving to profile failed', err);
+    toast(`Your stats weren’t saved. ${cloud.errorText(err)}`);
+  });
 }
 
 function startLocalRound(v) {
@@ -664,7 +830,10 @@ function onResult(msg) {
   const wait = reduceMotion ? 0 : COLS * 250 + 250;
   setTimeout(() => {
     updateKeyboard();
-    if (msg.pattern === 'hhhhh') toast(winLine(S.guesses.length));
+    if (msg.pattern === 'hhhhh') {
+      toast(winLine(S.guesses.length));
+      sfx('win');
+    }
     else if (S.guesses.length >= ROWS) toast('Out of guesses. Waiting for the others.');
   }, wait);
 }
@@ -786,8 +955,10 @@ function rivalStatus(p) {
   const n = p.patterns.length;
   if (!p.connected) return 'Disconnected';
   if (p.solved) return `Solved in ${n} (${fmtTime(p.finishMs)})`;
+  if (p.timedOut) return 'Out of time';
+  if (p.stopped) return 'Round ended';
   if (p.done) return 'Out of guesses';
-  if (S.view.status === 'ended') return `${n} of 6 used`;
+  if (S.view.status !== 'playing') return `${n} of 6 used`;
   return n === 0 ? 'Thinking…' : `${n} of 6 guesses`;
 }
 
@@ -796,7 +967,10 @@ function announceRivals(prev, v) {
   for (const p of v.players) {
     if (p.id === S.myId) continue;
     const before = prev.players.find((x) => x.id === p.id || x.name === p.name);
-    if (before && !before.solved && p.solved) toast(`${label(p.name)} solved it in ${p.patterns.length}!`);
+    if (before && !before.solved && p.solved) {
+      toast(`${label(p.name)} solved it in ${p.patterns.length}!`);
+      sfx('rival');
+    }
   }
 }
 
@@ -814,10 +988,19 @@ function renderLobby(v) {
     dot.style.background = `var(--p${p.color})`;
     const name = document.createElement('span');
     name.textContent = label(p.name);
+    let avatar = null;
+    if (p.photo) {
+      avatar = document.createElement('img');
+      avatar.className = 'avatar';
+      avatar.alt = '';
+      avatar.referrerPolicy = 'no-referrer';
+      avatar.onerror = () => avatar.remove();
+      avatar.src = p.photo;
+    }
     const tag = document.createElement('span');
     tag.className = 'tag';
     tag.textContent = [p.isHost ? 'host' : '', p.id === S.myId ? 'you' : ''].filter(Boolean).join(', ');
-    li.append(dot, name, tag);
+    li.append(dot, ...(avatar ? [avatar] : []), name, tag);
     list.appendChild(li);
   }
   if (v.players.length < MAX_PLAYERS) {
@@ -830,7 +1013,7 @@ function renderLobby(v) {
 
   $('host-controls').hidden = !S.isHost;
   $('lobby-wait').hidden = S.isHost;
-  $('lobby-rules').textContent = WIN_RULES[v.winRule] || '';
+  $('lobby-rules').textContent = settingsSummary(v);
   $('lobby-rules').hidden = S.isHost;
   $('word-status').textContent = wordStatusText();
   $('word-status').hidden = !S.isHost;
@@ -843,6 +1026,9 @@ function renderLobby(v) {
   if (S.isHost) {
     $('strict-toggle').checked = v.strict;
     for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
+    $('rounds-select').value = String(v.maxRounds);
+    $('hard-toggle').checked = v.hard;
+    $('timer-select').value = String(v.timer);
     $('start-btn').disabled = !WORDS.ready;
     const n = v.players.length;
     $('start-btn').textContent = !WORDS.ready
@@ -852,6 +1038,12 @@ function renderLobby(v) {
     const host = v.players.find((p) => p.isHost);
     $('lobby-wait').textContent = `Waiting for ${host ? label(host.name) : 'the host'} to start the game.`;
   }
+}
+
+function settingsSummary(v) {
+  const rounds = v.maxRounds ? `${v.maxRounds} rounds` : 'Unlimited rounds';
+  const timer = v.timer ? `${v.timer / 60} minute${v.timer === 60 ? '' : 's'} per round` : 'no timer';
+  return `${WIN_RULES[v.winRule] || ''} ${rounds}, ${timer}.${v.hard ? ' Hard mode.' : ''}`;
 }
 
 /* =========================================================
@@ -868,7 +1060,7 @@ function esc(t) {
 }
 
 function scoresHTML(v) {
-  return `<h3 class="scores-sub">This room</h3>${roomScoresHTML(v)}${crewScoresHTML(v)}`;
+  return `<h3 class="scores-sub">This game</h3>${roomScoresHTML(v)}${crewScoresHTML(v)}`;
 }
 
 function crewScoresHTML(v) {
@@ -900,10 +1092,10 @@ function crewScoresHTML(v) {
     <p class="scores-note">${esc(v.crewStatus || '')}</p>`;
 }
 
-function roomScoresHTML(v) {
+function roomScoresHTML(v, withHistory = true) {
   const stats = v.stats || [];
   if (stats.length === 0) {
-    return '<p class="scores-empty">Wins and times show up here once the first round ends. They carry over for every round you play in this room.</p>';
+    return '<p class="scores-empty">Wins and times show up here once the first round ends. They add up over every round of this game.</p>';
   }
   const here = new Map(v.players.map((p) => [p.name.toLowerCase(), p]));
   const rows = stats.map((st) => ({
@@ -941,7 +1133,7 @@ function roomScoresHTML(v) {
       <thead><tr><th scope="col">Player</th><th scope="col">Wins</th><th scope="col">Solved</th><th scope="col" title="Average guesses when solved">Avg</th><th scope="col" title="Fastest solve">Best</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
-    ${history ? `<p class="history-title">Past words</p><ul class="history">${history}</ul>` : ''}`;
+    ${history && withHistory ? `<p class="history-title">Past words</p><ul class="history">${history}</ul>` : ''}`;
 }
 
 /* =========================================================
@@ -986,6 +1178,8 @@ function showResults(v) {
     how.className = 'how';
     if (p.solved) how.textContent = `${p.patterns.length}/6 in ${fmtTime(p.finishMs)}`;
     else if (!p.connected) how.textContent = 'Left';
+    else if (p.timedOut) how.textContent = 'Out of time';
+    else if (p.stopped) how.textContent = 'Round ended';
     else if (p.patterns.length === 0 && !p.done) how.textContent = 'Joined late';
     else how.textContent = 'X/6';
     li.append(dot, who, how);
@@ -993,15 +1187,102 @@ function showResults(v) {
   });
 
   const winner = order[0];
-  $('results-title').textContent = !winner?.solved
+  const over = v.status === 'over';
+  const roundTitle = !winner?.solved
     ? 'Nobody got it'
     : winner.id === S.myId
-      ? 'You win!'
-      : `${label(winner.name)} wins`;
+      ? 'You win the round!'
+      : `${label(winner.name)} wins the round`;
 
-  $('again-btn').hidden = !S.isHost;
+  // Final standings when the game is over.
+  $('final-block').hidden = !over;
+  if (over) {
+    $('final-standings').innerHTML = roomScoresHTML(v, false);
+    const champ = gameWinner(v);
+    $('results-title').textContent = !champ
+      ? 'Game over: it’s a tie!'
+      : champ.me ? 'You win the game!' : `${label(champ.name)} wins the game!`;
+    const lastRound = !winner?.solved ? 'nobody got it' : winner.id === S.myId ? 'you won it' : `${label(winner.name)} won it`;
+    $('results-round-label').textContent = `Last round: ${lastRound}. The word was`;
+  } else {
+    $('results-title').textContent = roundTitle;
+    $('results-round-label').textContent = (v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`) + '. The word was';
+  }
+
+  $('again-btn').hidden = !S.isHost || over;
+  $('end-btn').hidden = !S.isHost || over;
+  $('rematch-btn').hidden = !S.isHost || !over;
+  $('newgame-btn').hidden = !S.isHost || !over;
+  $('share-btn').hidden = !me() || me().patterns.length === 0;
+  showMeaning(v.word);
   $('again-wait').hidden = S.isHost;
+  $('again-wait').textContent = over
+    ? 'Waiting for the host to set up a new game.'
+    : 'Waiting for the host to start the next round.';
   $('results').hidden = false;
+}
+
+/* ---------- word meaning (free dictionary API, no key) ---------- */
+const meanings = new Map();
+async function showMeaning(word) {
+  const el = $('results-meaning');
+  if (!word) { el.hidden = true; return; }
+  const look = `https://www.google.com/search?q=define+${encodeURIComponent(word)}`;
+  const render = (m) => {
+    if ($('results-word').textContent.toLowerCase() !== word) return;
+    el.innerHTML = m
+      ? `<i>${esc(m.part)}</i> ${esc(m.text)}`
+      : `<a href="${look}" target="_blank" rel="noopener">Look up “${esc(word.toUpperCase())}”</a>`;
+    el.hidden = false;
+  };
+  if (meanings.has(word)) return render(meanings.get(word));
+  el.hidden = true;
+  try {
+    const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`);
+    const data = res.ok ? await res.json() : null;
+    const first = data?.[0]?.meanings?.[0];
+    const def = first?.definitions?.[0]?.definition;
+    const m = def ? { part: first.partOfSpeech || '', text: def.length > 160 ? `${def.slice(0, 157)}…` : def } : null;
+    meanings.set(word, m);
+    render(m);
+  } catch {
+    render(null);
+  }
+}
+
+/* ---------- share my result ---------- */
+async function shareResult() {
+  const v = S.view;
+  const m = me();
+  if (!v || !m) return;
+  const squares = PREFS.contrast ? { h: '🟧', n: '🟦', m: '⬛' } : { h: '🟩', n: '🟨', m: '⬛' };
+  const score = m.solved ? `${m.patterns.length}/6` : 'X/6';
+  const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
+  const roundLabel = v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
+  const grid = m.patterns.map((p) => [...p].map((c) => squares[c]).join('')).join('\n');
+  const text = `Wordle Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
+  try {
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) {
+      await navigator.share({ text });
+    } else {
+      await navigator.clipboard.writeText(text);
+      toast('Result copied. Paste it anywhere.');
+    }
+  } catch (err) {
+    if (err?.name !== 'AbortError') prompt('Copy your result:', text);
+  }
+}
+
+// The game winner: most round wins, then rounds solved, then fewest average guesses.
+function gameWinner(v) {
+  const rows = (v.stats || []).map((st) => ({ ...st, avg: st.solved ? st.guessSum / st.solved : 99 }));
+  if (!rows.length) return null;
+  rows.sort((a, b) => b.wins - a.wins || b.solved - a.solved || a.avg - b.avg);
+  const [a, b] = rows;
+  if (b && a.wins === b.wins && a.solved === b.solved && a.avg === b.avg) return null;
+  if (a.wins === 0 && a.solved === 0) return null;
+  const p = v.players.find((x) => x.name.toLowerCase() === a.name.toLowerCase());
+  return { name: a.name, me: p?.id === S.myId };
 }
 
 /* =========================================================
@@ -1025,11 +1306,25 @@ function tickClock() {
   const v = S.view;
   if (!v || v.status === 'lobby') return;
   const m = me();
+  const clock = $('game-clock');
+  if (v.timer && v.status === 'playing') {
+    const left = Math.max(0, v.timer * 1000 - (Date.now() - S.localStart));
+    clock.textContent = fmtTime(left + 999);
+    clock.classList.toggle('urgent', left < 10000);
+    if (left < 10000 && left > 0 && S.tickedRound !== v.round) {
+      S.tickedRound = v.round;
+      sfx('tick');
+    }
+    clock.setAttribute('aria-label', 'Time left in this round');
+    return;
+  }
+  clock.classList.remove('urgent');
+  clock.setAttribute('aria-label', 'Round time');
   let ms;
   if (m && m.done) ms = m.finishMs;
-  else if (v.status === 'ended') ms = null;
+  else if (v.status !== 'playing') ms = null;
   else ms = Date.now() - S.localStart;
-  $('game-clock').textContent = ms == null ? '–' : fmtTime(ms);
+  clock.textContent = ms == null ? '–' : fmtTime(ms);
 }
 setInterval(tickClock, 500);
 
@@ -1082,11 +1377,81 @@ function resetLocal() {
 
 function leaveRoom() {
   S.leaving = true;
+  clearTimeout(H.timer);
   try { S.peer?.destroy(); } catch {}
   resetLocal();
   $('notice').hidden = true;
   homeError('');
   showScreen('home');
+}
+
+/* =========================================================
+   Settings: account, my stats, preferences
+   ========================================================= */
+function renderAccount(u) {
+  for (const chip of document.querySelectorAll('.account-chip')) {
+    const img = chip.querySelector('img');
+    chip.querySelector('.account-label').textContent = u ? u.name.split(' ')[0] : 'Sign in';
+    img.hidden = !(u && u.photo);
+    if (u && u.photo) {
+      img.referrerPolicy = 'no-referrer';
+      img.onerror = () => { img.hidden = true; };
+      img.src = u.photo;
+    }
+  }
+  $('account-out').hidden = Boolean(u);
+  $('account-in').hidden = !u;
+  $('stats-section').hidden = !u;
+  if (u) {
+    $('account-name').textContent = u.name;
+    $('account-email').textContent = u.email;
+    $('account-photo').hidden = !u.photo;
+    if (u.photo) {
+      $('account-photo').referrerPolicy = 'no-referrer';
+      $('account-photo').onerror = () => { $('account-photo').hidden = true; };
+      $('account-photo').src = u.photo;
+    }
+    if (!$('name-input').value.trim()) $('name-input').value = u.name.split(' ')[0].slice(0, 14);
+  }
+}
+
+async function openSettings() {
+  $('settings-sheet').hidden = false;
+  $('account-error').textContent = '';
+  $('pref-sound').checked = PREFS.sound;
+  $('pref-contrast').checked = PREFS.contrast;
+  renderAccount(cloud.currentUser());
+  if (cloud.currentUser()) loadMyStats();
+}
+
+async function loadMyStats() {
+  const box = $('my-stats');
+  box.innerHTML = '<p class="stats-note">Loading your stats…</p>';
+  try {
+    const st = await cloud.loadProfile();
+    box.innerHTML = myStatsHTML(st);
+  } catch (err) {
+    box.innerHTML = `<p class="stats-note">${esc(cloud.errorText(err))}</p>`;
+  }
+}
+
+function myStatsHTML(st) {
+  if (!st.games) return '<p class="stats-note">Play a round while signed in and your stats will show up here.</p>';
+  const winPct = Math.round((st.wins / st.games) * 100);
+  const avg = st.solved ? (st.guessSum / st.solved).toFixed(1) : '–';
+  const max = Math.max(1, ...st.dist);
+  const opener = Object.entries(st.openers).sort((a, b) => b[1] - a[1])[0];
+  const stat = (n, t) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`;
+  const bars = st.dist.map((n, i) =>
+    `<div class="dist-row"><span>${i + 1}</span><span class="dist-bar ${n === max && n > 0 ? 'top' : ''}" style="width: ${Math.max(8, (n / max) * 100)}%">${n}</span></div>`).join('');
+  return `
+    <div class="stat-grid">
+      ${stat(st.games, 'Played')}${stat(`${winPct}%`, 'Rounds won')}${stat(avg, 'Avg guesses')}
+      ${stat(st.streak, 'Win streak')}${stat(st.bestStreak, 'Best streak')}${stat(st.bestMs == null ? '–' : fmtTime(st.bestMs), 'Fastest')}
+    </div>
+    <p class="stats-note">Guesses needed when solved</p>
+    <div class="dist">${bars}</div>
+    ${opener ? `<p class="stats-note">Favorite opener: <b>${esc(opener[0].toUpperCase())}</b>, used ${opener[1]} time${opener[1] === 1 ? '' : 's'}</p>` : ''}`;
 }
 
 /* =========================================================
@@ -1167,9 +1532,59 @@ $('crew-btn').addEventListener('click', () => S.isHost && hostSetCrew($('crew-in
 $('crew-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') $('crew-btn').click();
 });
+// Apply the crew as soon as the host leaves the field, so a typed name is never forgotten.
+$('crew-input').addEventListener('change', () => {
+  if (!S.isHost) return;
+  const typed = $('crew-input').value.replace(/\s+/g, ' ').trim();
+  if (typed !== (H.room.crew ? H.room.crew.name : '')) hostSetCrew(typed);
+});
 
-$('start-btn').addEventListener('click', () => S.isHost && hostStart());
+$('start-btn').addEventListener('click', () => S.isHost && hostStartGame());
+$('rematch-btn').addEventListener('click', () => S.isHost && hostStartGame());
+$('share-btn').addEventListener('click', shareResult);
+$('hard-toggle').addEventListener('change', (e) => {
+  if (!S.isHost) return;
+  H.room.hard = e.target.checked;
+  hostBroadcast();
+});
+for (const b of document.querySelectorAll('[data-open-settings]')) b.addEventListener('click', openSettings);
+$('settings-close-btn').addEventListener('click', () => ($('settings-sheet').hidden = true));
+$('signin-btn').addEventListener('click', async () => {
+  $('account-error').textContent = '';
+  $('signin-btn').disabled = true;
+  try {
+    await cloud.signIn();
+    loadMyStats();
+  } catch (err) {
+    console.warn('Sign-in failed', err);
+    $('account-error').textContent = cloud.errorText(err);
+  } finally {
+    $('signin-btn').disabled = false;
+  }
+});
+$('signout-btn').addEventListener('click', async () => {
+  try { await cloud.signOut(); } catch (err) { $('account-error').textContent = cloud.errorText(err); }
+});
+$('pref-sound').addEventListener('change', (e) => { PREFS.sound = e.target.checked; savePrefs(); if (PREFS.sound) sfx('rival'); });
+$('pref-contrast').addEventListener('change', (e) => { PREFS.contrast = e.target.checked; savePrefs(); });
 $('again-btn').addEventListener('click', () => S.isHost && hostStart());
+$('end-btn').addEventListener('click', () => S.isHost && hostEndGame());
+$('newgame-btn').addEventListener('click', () => S.isHost && hostBackToLobby());
+$('endround-btn').addEventListener('click', () => {
+  if (S.isHost && confirm('End this round now for everyone? Anyone still guessing won’t get the word.')) hostEndRound('host');
+});
+$('results-leave-btn').addEventListener('click', () => {
+  if (S.isHost && H.conns.size > 0 && !confirm('Leaving closes the room for everyone. Leave anyway?')) return;
+  leaveRoom();
+});
+for (const id of ['rounds-select', 'timer-select']) {
+  $(id).addEventListener('change', () => {
+    if (!S.isHost) return;
+    H.room.maxRounds = Number($('rounds-select').value);
+    H.room.timer = Number($('timer-select').value);
+    hostBroadcast();
+  });
+}
 
 $('leave-btn').addEventListener('click', () => {
   if (S.isHost && H.conns.size > 0 && !confirm('Leaving closes the room for everyone. Leave anyway?')) return;
@@ -1197,7 +1612,7 @@ $('keyboard').addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden || !$('scores-sheet').hidden) return;
+  if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden || !$('scores-sheet').hidden || !$('settings-sheet').hidden) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
   if (e.key === 'Enter') { e.preventDefault(); pressKey('enter'); }
@@ -1298,4 +1713,11 @@ function wordStatusText() {
   }
   buildKeyboard();
   showScreen('home');
+  savePrefs();
+  cloud.onUser((u) => {
+    renderAccount(u);
+    // A host who signs in mid-room starts saving to their crew straight away.
+    if (S.isHost && H.room && H.room.crew && !H.room.allTime) hostSetCrew(H.room.crew.name);
+  });
+  cloud.restore();
 })();
