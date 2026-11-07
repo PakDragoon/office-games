@@ -6,7 +6,7 @@ Play at `https://pakdragoon.github.io/thulla/`.
 
 ## How to play
 
-Everyone sits around the table with their own colour, and you're always at the bottom. Cards land in front of whoever played them; a glowing ring shows whose turn it is (and counts down if the timer is on). Your playable cards are outlined green, cards you can play early are outlined amber, and the rest are dimmed.
+Everyone sits around the table with their own colour, and you're always at the bottom. Each player is a little face that reacts to how many cards they hold: grinning when nearly out, worried and sweating with 13 or more, shocked for a moment after a thulla, and wearing sunglasses once safe. A bar under each player shows the danger at a glance (green, amber, red). Tap 💬 for quick chat (Shabash!, Uff yaar, Jaldi khelo, Ye lo thulla! and more), shown as a bubble over your seat. Cards land in front of whoever played them; a glowing ring shows whose turn it is (and counts down if the timer is on). Your playable cards are outlined green, cards you can play early are outlined amber, and the rest are dimmed.
 
 1. One person types their name and clicks **Host a room**. They get a 4-letter room code.
 2. They click **Copy invite link** and send it to up to 7 friends (or just tell them the code).

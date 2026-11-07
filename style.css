@@ -305,10 +305,12 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .seat { --av: 54px; }
 .seat.turn .ring {
   background: conic-gradient(var(--pc) calc(var(--pct) * 360deg), color-mix(in srgb, var(--pc) 25%, transparent) 0);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc) 35%, transparent), 0 0 22px 2px color-mix(in srgb, var(--pc) 70%, transparent);
-  animation: glow 1.4s ease-in-out infinite;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pc) 40%, transparent), 0 0 24px 8px var(--pc), 0 0 52px 14px color-mix(in srgb, var(--pc) 50%, transparent);
+  animation: glow 1.5s ease-in-out infinite;
 }
-@keyframes glow { 50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pc) 20%, transparent), 0 0 30px 6px color-mix(in srgb, var(--pc) 55%, transparent); } }
+@keyframes glow {
+  50% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--pc) 25%, transparent), 0 0 32px 12px var(--pc), 0 0 70px 20px color-mix(in srgb, var(--pc) 40%, transparent); }
+}
 .av {
   display: grid; place-items: center;
   width: 100%; height: 100%; border-radius: 50%;
@@ -484,8 +486,8 @@ h1, h2 { line-height: 1.15; margin: 0; }
 }
 .hand .card:first-child { margin-left: 0; }
 .hand.active .card.dim { filter: saturate(0.4) brightness(0.8); opacity: 0.5; }
-.hand .card.legal { cursor: pointer; box-shadow: 0 0 0 2px var(--hit), 0 4px 10px rgba(15,18,40,0.25); }
-.hand .card.early { cursor: pointer; box-shadow: 0 0 0 2px var(--near), 0 4px 10px rgba(15,18,40,0.25); }
+.hand .card.legal { cursor: pointer; box-shadow: 0 0 0 2px var(--hit), 0 0 16px 3px color-mix(in srgb, var(--hit) 65%, transparent), 0 4px 10px rgba(15,18,40,0.25); }
+.hand .card.early { cursor: pointer; box-shadow: 0 0 0 2px var(--near), 0 0 16px 3px color-mix(in srgb, var(--near) 65%, transparent), 0 4px 10px rgba(15,18,40,0.25); }
 @media (hover: hover) {
   .hand .card.legal:hover, .hand .card.early:hover { --lift: -16px; }
 }
@@ -811,3 +813,41 @@ body.slapped .game { animation: screen-jolt 0.45s cubic-bezier(.3,.7,.4,1); }
 .slap-pref .select-field { flex: 1; }
 .slap-pref .btn { padding: 0.65rem 0.9rem; }
 @media (max-width: 760px) { .slap .critter { height: min(44vh, 360px); right: -2vw; } }
+
+/* ---------- Faces ---------- */
+.av svg { width: 100%; height: 100%; display: block; }
+.av svg * { fill: var(--ink); stroke: none; }
+.av svg path:not(.fill):not(.sweat), .av svg .hollow { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+.av svg .hollow { stroke-width: 2.5; }
+.av svg .sweat { fill: #4aa8ff; }
+.av.face-shocked { animation: shocked 0.5s ease; background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
+@keyframes shocked { 30% { transform: scale(1.18); } 60% { transform: scale(0.95); } }
+.av.face-cool { background: color-mix(in srgb, var(--hit) 16%, var(--surface)); }
+
+/* Danger bar under each seat */
+.danger { width: calc(var(--av) * 1.05); height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 15%, transparent); overflow: hidden; }
+.danger i { display: block; height: 100%; border-radius: 3px; transition: width 0.3s ease; }
+.danger.ok i { background: var(--hit); }
+.danger.warn i { background: var(--near); }
+.danger.bad i { background: var(--danger); animation: blink 1.2s ease-in-out infinite; }
+.seat.low .danger { order: -1; }
+
+/* Quick chat */
+.chat-btn { padding: 0.3rem 0.45rem; }
+.chat-bar { display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: center; max-width: 520px; padding: 0 0.5rem; }
+.chip {
+  font: 700 0.9rem var(--font); color: var(--ink); background: var(--surface);
+  border: 2px solid var(--line); border-radius: 999px; padding: 0.45rem 0.85rem; min-height: 40px; cursor: pointer;
+}
+.chip:hover { border-color: var(--ink); }
+.bubble {
+  position: absolute; bottom: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); font-weight: 700; font-size: 0.85rem; white-space: nowrap;
+  padding: 0.3rem 0.7rem; border-radius: 12px; z-index: 6;
+  animation: bubble 2.6s ease both; pointer-events: none;
+}
+.bubble::after { content: ""; position: absolute; left: 50%; top: 100%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: var(--ink); }
+.seat.low .bubble { bottom: auto; top: calc(100% + 4px); }
+.seat.low .bubble::after { top: auto; bottom: 100%; border-top-color: transparent; border-bottom-color: var(--ink); }
+@keyframes bubble { 0% { opacity: 0; transform: translate(-50%, 6px) scale(0.8); } 10% { opacity: 1; transform: translate(-50%, 0) scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (max-width: 760px) { .danger { height: 4px; } .bubble { font-size: 0.75rem; } .chip { font-size: 0.82rem; padding: 0.35rem 0.7rem; } }

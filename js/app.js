@@ -15,6 +15,7 @@ const RESOLVE_MS = FAST ? 150 : 1700;   // how long a finished trick stays on th
 const TAKE_MS = 15000;                  // time to answer a take-cards request
 const STUCK_MS = FAST ? 3000 : 30000;   // offline player's turn (no timer): host can play for them after this
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+const CHAT_PHRASES = ['Shabash!', 'Uff yaar', 'Jaldi khelo', 'Ye lo thulla!', 'Bach gaya!', 'Wah wah', 'Sorry 😅', 'GG'];
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -199,6 +200,7 @@ function hostReceive(conn, msg) {
   switch (msg.t) {
     case 'play': return hostPlay(p, String(msg.card || ''));
     case 'take': return hostTakeAsk(p);
+    case 'chat': return hostChat(p, msg.i);
     case 'takeReply': return hostTakeReply(p, !!msg.accept);
     case 'leave': return hostLeave(p);
     default: return undefined;
@@ -434,6 +436,16 @@ function hostPlayFor() {
   const r = H?.round;
   if (!r || !H.stuck || r.turnNo !== H.stuck.turnNo) return;
   hostAutoPlay(r.turnNo);
+}
+
+// ---------- Quick chat (fixed phrases only) ----------
+
+function hostChat(p, i) {
+  if (!Number.isInteger(i) || i < 0 || i >= CHAT_PHRASES.length) return;
+  const now = Date.now();
+  if (now - (p.lastChat || 0) < 1500) return;   // no spamming
+  p.lastChat = now;
+  fxAll({ kind: 'chat', id: p.id, i });
 }
 
 // ---------- Taking the next player's cards ----------
@@ -750,6 +762,8 @@ function onFx(fx) {
   const v = me.view;
   switch (fx.kind) {
     case 'thulla': {
+      shockedUntil[fx.receiverId] = Date.now() + 1800;
+      setTimeout(() => { if (me.view?.round) renderSeats(me.view); }, 1850);
       const mine = fx.receiverId === me.id;
       const who = mine ? 'you pick' : disp(fx.receiver) + ' picks';
       const sub = fx.jumped
@@ -782,6 +796,16 @@ function onFx(fx) {
     case 'takeAsk': sfx.ask(); if (fx.toId !== me.id) toast(`${disp(fx.from)} asked ${disp(fx.to)} for their cards`); break;
     case 'takeNo': toast(fx.why === 'timeout' ? `${disp(fx.to)} didn’t answer in time` : fx.why === 'offline' ? `Card request cancelled: ${disp(fx.to)} went offline` : `${disp(fx.to)} kept their cards`); break;
     case 'auto': toast(fx.id === me.id ? `Time’s up. Played ${E.cardLabel(fx.card)} for you.` : `${disp(fx.name)} ran out of time: ${E.cardLabel(fx.card)}`); break;
+    case 'chat': {
+      const text = CHAT_PHRASES[fx.i];
+      if (!text) break;
+      chatBubbles[fx.id] = { text, until: Date.now() + 2600 };
+      tone(880, 0.06, 'sine', 0.05);
+      if (me.view?.round) renderSeats(me.view);
+      else toast(`${disp(player(me.view, fx.id)?.name || '')}: ${text}`);
+      setTimeout(() => { if (me.view?.round) renderSeats(me.view); }, 2650);
+      break;
+    }
     case 'joined': if (v && v.phase !== 'lobby') toast(fx.back ? `${disp(fx.name)} is back` : `${disp(fx.name)} joined`); break;
     case 'offline': toast(`${disp(fx.name)} went offline`); break;
     case 'left': toast(`${disp(fx.name)} left the room`); break;
@@ -902,10 +926,32 @@ function seatLayout(v) {
   return { order: rot, pos };
 }
 
-function avatarHTML(p) {
-  const letter = esc((p.name || '?').trim().charAt(0).toUpperCase());
-  return `<span class="av">${p.photo ? `<img src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer">` : letter}</span>`;
+// Faces: the expression follows how many cards a player holds.
+const FACE_EYES = '<circle cx="20" cy="24" r="3.6"/><circle cx="36" cy="24" r="3.6"/>';
+const FACES = {
+  cool: { label: 'safe', svg: '<path class="fill" d="M11 20h14v6.5a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3zM31 20h14v6.5a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z"/><path d="M25 22h6"/><path d="M19 37q9 6 18 0"/>' },
+  thrilled: { label: 'thrilled', svg: FACE_EYES + '<path class="fill" d="M16 32q12 15 24 0z"/>' },
+  happy: { label: 'happy', svg: FACE_EYES + '<path d="M18 34q10 9 20 0"/>' },
+  unsure: { label: 'unsure', svg: FACE_EYES + '<path d="M19 37h18"/>' },
+  nervous: { label: 'nervous', svg: FACE_EYES + '<path d="M18 40q10-9 20 0"/><path class="sweat" d="M45 10q4.5 6.5 0 9.5q-4.5-3 0-9.5z"/>' },
+  shocked: { label: 'shocked', svg: '<circle cx="20" cy="23" r="5.5" class="hollow"/><circle cx="36" cy="23" r="5.5" class="hollow"/><circle cx="20" cy="23" r="2"/><circle cx="36" cy="23" r="2"/><ellipse class="hollow" cx="28" cy="38" rx="5" ry="6"/>' },
+};
+function moodFor(p, r) {
+  if ((shockedUntil[p.id] || 0) > Date.now()) return 'shocked';
+  if (r && p.safe) return 'cool';
+  const n = r && p.inRound ? p.count : null;
+  if (n === null) return 'happy';
+  if (n <= 3) return 'thrilled';
+  if (n <= 7) return 'happy';
+  if (n <= 12) return 'unsure';
+  return 'nervous';
 }
+const dangerOf = (n) => (n <= 7 ? 'ok' : n <= 12 ? 'warn' : 'bad');
+function faceHTML(mood) {
+  return `<span class="av face-${mood}"><svg viewBox="0 0 56 56" aria-hidden="true">${FACES[mood].svg}</svg></span>`;
+}
+const shockedUntil = {};
+const chatBubbles = {}; // player id -> { text, until }
 
 function renderSeats(v) {
   const r = v.round;
@@ -922,10 +968,14 @@ function renderSeats(v) {
     else if (r?.take && r.take.to === id) flag = '<span class="seat-flag wait">Deciding…</span>';
     else if (lost) flag = '<span class="seat-flag lost">Lost</span>';
     const count = r && p.inRound ? `<span class="cnt" aria-label="${p.count} cards">${p.count}</span>` : '';
+    const mood = moodFor(p, r);
+    const danger = r && p.inRound && !p.safe
+      ? `<span class="danger ${dangerOf(p.count)}" aria-hidden="true"><i style="width:${Math.min(100, Math.round((p.count / 16) * 100))}%"></i></span>` : '';
+    const chat = chatBubbles[id] && chatBubbles[id].until > Date.now() ? `<span class="bubble">${esc(chatBubbles[id].text)}</span>` : '';
     const cls = ['seat', 'c' + p.color, isTurn && 'turn', p.safe && 'safe', !p.online && 'offline', id === v.you && 'me', cy > 0.6 && 'low'].filter(Boolean).join(' ');
     const tag = `<span class="seat-tag"><span class="nm">${esc(id === v.you ? 'You' : disp(p.name))}</span>${count}</span>`;
-    return `<div class="${cls}" data-seat="${id}" style="--cx:${cx.toFixed(3)};--cy:${cy.toFixed(3)}" title="${esc(disp(p.name))}">
-      <span class="ring">${avatarHTML(p)}</span>${tag}${flag}</div>`;
+    return `<div class="${cls}" data-seat="${id}" style="--cx:${cx.toFixed(3)};--cy:${cy.toFixed(3)}" title="${esc(disp(p.name))}, ${FACES[mood].label}">
+      ${chat}<span class="ring">${faceHTML(mood)}</span>${tag}${danger}${flag}</div>`;
   }).join('');
 }
 
@@ -1289,6 +1339,19 @@ $('#hand').addEventListener('click', (e) => {
 });
 $('#play-sel-btn').addEventListener('click', () => { if (selectedCard) playCard(selectedCard); });
 $('#take-btn').addEventListener('click', () => send({ t: 'take' }));
+$('#chat-bar').innerHTML = CHAT_PHRASES.map((t, i) => `<button class="chip" type="button" data-chat="${i}">${esc(t)}</button>`).join('');
+$('#chat-btn').addEventListener('click', () => {
+  const bar = $('#chat-bar');
+  bar.hidden = !bar.hidden;
+  $('#chat-btn').setAttribute('aria-expanded', String(!bar.hidden));
+});
+$('#chat-bar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-chat]');
+  if (!b) return;
+  send({ t: 'chat', i: Number(b.dataset.chat) });
+  $('#chat-bar').hidden = true;
+  $('#chat-btn').setAttribute('aria-expanded', 'false');
+});
 $('#take-accept').addEventListener('click', () => { send({ t: 'takeReply', accept: true }); $('#take-overlay').hidden = true; });
 $('#take-decline').addEventListener('click', () => { send({ t: 'takeReply', accept: false }); $('#take-overlay').hidden = true; });
 $('#playfor-btn').addEventListener('click', () => hostPlayFor());
