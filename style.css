@@ -168,6 +168,24 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .toggle { display: flex; gap: 0.6rem; align-items: center; justify-content: center; margin-bottom: 1rem; cursor: pointer; }
 .toggle input { width: 1.15rem; height: 1.15rem; accent-color: var(--hit); }
 
+.rules { margin: 0; font-weight: 600; }
+.small-note { font-size: 0.85rem; margin: 0; }
+.win-rule {
+  border: 2px solid var(--line); border-radius: 12px;
+  padding: 0.6rem 0.9rem 0.75rem; margin: 0 0 1rem;
+  display: flex; flex-wrap: wrap; gap: 0.4rem 1.25rem; justify-content: center;
+}
+.win-rule legend { font-weight: 700; padding: 0 0.35rem; }
+.win-rule label { display: flex; align-items: center; gap: 0.4rem; cursor: pointer; }
+.win-rule input { width: 1.1rem; height: 1.1rem; accent-color: var(--hit); }
+
+.crew-field { text-align: left; margin-bottom: 1rem; }
+.crew-field label { font-weight: 600; }
+.crew-field label .muted { font-weight: 400; font-size: 0.9rem; }
+.crew-row { display: flex; gap: 0.5rem; }
+.crew-row input { flex: 1; min-width: 0; }
+.crew-row .btn { padding: 0.6rem 1rem; }
+
 /* ---------- Game ---------- */
 .game { display: flex; flex-direction: column; height: 100%; max-width: 1280px; margin: 0 auto; }
 
@@ -190,7 +208,7 @@ h1, h2 { line-height: 1.15; margin: 0; }
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(250px, 290px) auto minmax(0, 1fr);
+  grid-template-columns: minmax(270px, 320px) auto minmax(0, 1fr);
   grid-template-areas: "scores me rivals";
   align-items: start;
   gap: 2rem;
@@ -268,6 +286,9 @@ h1, h2 { line-height: 1.15; margin: 0; }
 }
 .scoreboard h2, .scores-sheet h2 { font-size: 1.15rem; margin-bottom: 0.6rem; }
 .scores-empty { color: var(--muted); margin: 0; font-size: 0.95rem; }
+.scores-sub, .sheet .scores-sub { font-size: 0.95rem; font-weight: 700; margin: 0 0 0.4rem; color: var(--ink); }
+.scores-sub:not(:first-child) { margin-top: 1.25rem; }
+.scores-note, .sheet .scores-note { color: var(--muted); font-size: 0.8rem; margin: 0.5rem 0 0; }
 .scores { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
 .scores th {
   font-weight: 600; color: var(--muted); font-size: 0.8rem;

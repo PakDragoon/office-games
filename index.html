@@ -58,7 +58,21 @@
 
       <ul id="lobby-players" class="lobby-players"></ul>
 
+      <p id="lobby-rules" class="rules"></p>
+
       <div id="host-controls" hidden>
+        <fieldset class="win-rule">
+          <legend>Who wins a round?</legend>
+          <label><input type="radio" name="win-rule" value="first" checked> First to solve it</label>
+          <label><input type="radio" name="win-rule" value="fewest"> Fewest guesses</label>
+        </fieldset>
+        <div class="field crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input id="crew-input" maxlength="40" autocomplete="off" spellcheck="false" placeholder="e.g. office-squad">
+            <button id="crew-btn" class="btn">Use</button>
+          </div>
+        </div>
         <label class="toggle">
           <input type="checkbox" id="strict-toggle" checked>
           <span>Only accept words from the word list</span>
@@ -66,6 +80,8 @@
         <button id="start-btn" class="btn primary wide">Start game</button>
       </div>
       <p id="lobby-wait" class="muted" hidden></p>
+      <p id="crew-status" class="muted small-note" hidden></p>
+      <p id="word-status" class="muted small-note"></p>
       <button id="leave-btn" class="btn link">Leave room</button>
     </div>
   </main>
@@ -82,7 +98,7 @@
 
     <div class="arena">
       <aside class="scoreboard" aria-labelledby="scoreboard-title">
-        <h2 id="scoreboard-title">Scores in this room</h2>
+        <h2 id="scoreboard-title">Scores</h2>
         <div id="scoreboard-body"></div>
       </aside>
       <section class="me" aria-label="Your board">
@@ -96,7 +112,7 @@
   <!-- SCORES (phones and tablets) -->
   <div id="scores-sheet" class="overlay" hidden>
     <div class="sheet scores-sheet" role="dialog" aria-modal="true" aria-labelledby="scores-title">
-      <h2 id="scores-title">Scores in this room</h2>
+      <h2 id="scores-title">Scores</h2>
       <div id="scores-sheet-body"></div>
       <button id="scores-close-btn" class="btn primary wide">Back to the game</button>
     </div>
@@ -109,9 +125,10 @@
       <p class="muted">The word was</p>
       <div id="results-word" class="reveal-word"></div>
       <ol id="results-list" class="ranking"></ol>
+      <p id="results-rule" class="muted small-note"></p>
       <button id="again-btn" class="btn primary wide" hidden>Play another round</button>
       <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
-      <button id="results-scores-btn" class="btn ghost wide">Room scores</button>
+      <button id="results-scores-btn" class="btn ghost wide">Scores</button>
       <button id="see-boards-btn" class="btn link">Look at the boards</button>
     </div>
   </div>

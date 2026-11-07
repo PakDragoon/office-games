@@ -14,13 +14,28 @@ Scores carry over for every round played in the same room: wins, rounds solved, 
 
 If someone's page refreshes mid-game, they can rejoin with the same code and the same name and get their board and scores back.
 
+## Saved all-time scores (Firebase)
+
+In the lobby, the host can type a **crew name** (for example `office-squad`). Every round played under that name is saved to Firebase and adds up across rooms: wins, rounds played, average guesses, and win streaks. The host's browser remembers the crew name for next time. Only the host's browser talks to Firebase; other players get the scores through the game. Leave the crew name empty to play without saving.
+
+One-time setup in the [Firebase console](https://console.firebase.google.com) for project `wordle-party-81870`:
+
+1. **Turn on anonymous sign-in:** Build → Authentication → Get started → Sign-in method → Anonymous → Enable → Save.
+2. **Allow the site:** Authentication → Settings → Authorized domains → Add domain → `pakdragoon.github.io`.
+3. **Create the database:** Build → Firestore Database → Create database. Pick a location near you, choose **production mode**, and finish.
+4. **Add the security rules:** in Firestore Database → Rules, replace everything with the contents of `firestore.rules`, then click **Publish**.
+
+The Firebase config in `js/cloud.js` is meant to be public; the security rules protect the data. Saved rounds can't be edited or deleted from the game. To reset a crew, delete its document under `crews` in the Firebase console.
+
 ## Deploy on GitHub Pages
 
 1. Put these files in the root of the repo and push:
    ```
    index.html
    style.css
+   firestore.rules
    js/app.js
+   js/cloud.js
    js/words.js
    ```
 2. On GitHub, go to **Settings → Pages**.
