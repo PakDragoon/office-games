@@ -69,6 +69,8 @@ Players named JD or Junaid get a 🍌 after their name everywhere.
 - **Crews:** in the lobby, the host can type a crew name (for example `office-squad`) and click **Use**. Every round played under that name is saved and adds up across rooms in the scoreboard's **All time** table. Saving to a crew needs the host to be signed in.
 - **Preferences** (this device only): sounds, high-contrast colors (which also switches to a four-color deck: blue diamonds, green clubs), and single-tap play on phones. By default, on a touch screen the first tap raises a card and a second tap (or the **Play** button) plays it, so a stray tap doesn't throw a card. With a mouse, one click plays.
 
+- **Thulla slap:** when you get a thulla, a cartoon cat or hippo pops up and slaps your screen; everyone else sees a mini one slap that player's avatar. Choose Random, Cat, Hippo or Off, and tap **Try it** to preview. It's skipped if the device asks for reduced motion.
+
 Tap **?** in the game bar (or **How to play** on the home screen) for a rules summary that matches the room's settings.
 
 Thulla uses the same Firebase project as Wordle Party (`wordle-party-81870`), in separate collections: `thullaCrews` and `thullaUsers`. It never reads or writes Wordle Party's `crews` or `users`.
@@ -100,6 +102,7 @@ Nothing else needs changing in Firebase: Google sign-in is already on, `pakdrago
    js/app.js
    js/cloud.js
    js/engine.js
+   js/slap.js
    test/engine.test.mjs
    ```
 2. On GitHub, go to **Settings → Pages**.

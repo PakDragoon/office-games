@@ -5,6 +5,7 @@
 
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
+import { pickCritter, slapMe, slapSeat } from './slap.js';
 
 const MAX_PLAYERS = 8;
 const PEER_PREFIX = 'thulla-pk-';
@@ -27,8 +28,9 @@ const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 16
 // Preferences (this device only)
 // ---------------------------------------------------------------------------
 const prefs = (() => {
-  try { return { sound: true, contrast: false, tapOnce: false, ...JSON.parse(localStorage.getItem('thulla-prefs') || '{}') }; }
-  catch { return { sound: true, contrast: false, tapOnce: false }; }
+  const base = { sound: true, contrast: false, tapOnce: false, slapper: 'random' };
+  try { return { ...base, ...JSON.parse(localStorage.getItem('thulla-prefs') || '{}') }; }
+  catch { return base; }
 })();
 function savePrefs() { try { localStorage.setItem('thulla-prefs', JSON.stringify(prefs)); } catch {} }
 function applyPrefs() { document.body.classList.toggle('contrast', !!prefs.contrast); }
@@ -71,7 +73,21 @@ const sfx = {
   finish: () => [523, 659, 784, 1046].forEach((f, i) => tone(f, 0.16, 'triangle', 0.1, i * 0.08)),
   lose: () => [392, 330, 262].forEach((f, i) => tone(f, 0.22, 'triangle', 0.1, i * 0.14)),
   ask: () => { tone(520, 0.1, 'square', 0.06); tone(520, 0.1, 'square', 0.06, 0.16); },
+  slap: (big = true) => noise(big ? 0.22 : 0.12, big ? 0.5 : 0.25),
+  meow: () => { tone(620, 0.16, 'sawtooth', 0.05, 0, 980); tone(980, 0.28, 'sawtooth', 0.05, 0.15, 520); },
+  grunt: () => { tone(110, 0.32, 'sawtooth', 0.12, 0, 70); tone(82, 0.36, 'square', 0.06, 0.03, 55); },
 };
+function noise(dur, vol) {
+  const a = audio(); if (!a) return;
+  const len = Math.floor(a.sampleRate * dur);
+  const buf = a.createBuffer(1, len, a.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+  const src = a.createBufferSource(); src.buffer = buf;
+  const f = a.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1400; f.Q.value = 0.7;
+  const g = a.createGain(); g.gain.value = vol;
+  src.connect(f).connect(g).connect(a.destination); src.start();
+}
 document.addEventListener('pointerdown', () => audio(), { once: true });
 
 // ---------------------------------------------------------------------------
@@ -734,13 +750,25 @@ function onFx(fx) {
   const v = me.view;
   switch (fx.kind) {
     case 'thulla': {
-      sfx.thulla();
-      const who = fx.receiverId === me.id ? 'you pick' : disp(fx.receiver) + ' picks';
-      stamp('Thulla!', fx.jumped
+      const mine = fx.receiverId === me.id;
+      const who = mine ? 'you pick' : disp(fx.receiver) + ' picks';
+      const sub = fx.jumped
         ? `${disp(fx.giver)} hit back: ${who} up ${fx.count} for playing early`
-        : `${disp(fx.giver)} → ${who} up ${fx.count} card${fx.count === 1 ? '' : 's'}`);
-      const t = $('#table'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
-      setTimeout(() => t.classList.remove('shake'), 500);
+        : `${disp(fx.giver)} → ${who} up ${fx.count} card${fx.count === 1 ? '' : 's'}`;
+      const critter = pickCritter(prefs.slapper);
+      const shakeTable = () => {
+        const t = $('#table'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake');
+        setTimeout(() => t.classList.remove('shake'), 500);
+      };
+      if (critter) (critter === 'cat' ? sfx.meow : sfx.grunt)();
+      else sfx.thulla();
+      if (mine && critter) {
+        slapMe(critter, 'Thulla!', esc(sub), () => { sfx.slap(true); sfx.thulla(); });
+      } else {
+        stamp('Thulla!', sub);
+        if (critter) slapSeat(critter, document.querySelector(`[data-seat="${fx.receiverId}"]`), () => { sfx.slap(false); shakeTable(); });
+        else shakeTable();
+      }
       break;
     }
     case 'finish':
@@ -1341,6 +1369,7 @@ function openSettings() {
   $('#pref-sound').checked = !!prefs.sound;
   $('#pref-contrast').checked = !!prefs.contrast;
   $('#pref-tap').checked = !!prefs.tapOnce;
+  $('#pref-slapper').value = prefs.slapper || 'random';
   renderAccount();
   $('#settings-overlay').hidden = false;
   loadStats();
@@ -1350,6 +1379,13 @@ $('#home-account').addEventListener('click', openSettings);
 $('#pref-sound').addEventListener('change', (e) => { prefs.sound = e.target.checked; savePrefs(); if (prefs.sound) sfx.card(); });
 $('#pref-contrast').addEventListener('change', (e) => { prefs.contrast = e.target.checked; savePrefs(); applyPrefs(); });
 $('#pref-tap').addEventListener('change', (e) => { prefs.tapOnce = e.target.checked; savePrefs(); });
+$('#pref-slapper').addEventListener('change', (e) => { prefs.slapper = e.target.value; savePrefs(); });
+$('#slap-test').addEventListener('click', () => {
+  const kind = pickCritter(prefs.slapper === 'off' ? 'random' : prefs.slapper);
+  $('#settings-overlay').hidden = true;
+  (kind === 'cat' ? sfx.meow : sfx.grunt)();
+  slapMe(kind, 'Thulla!', 'This is what a thulla feels like', () => sfx.slap(true));
+});
 
 $('#sign-in-btn').addEventListener('click', async () => {
   $('#account-error').textContent = '';
@@ -1431,4 +1467,4 @@ try { $('#name-input').value = localStorage.getItem('thulla-name') || $('#name-i
   }
 }
 
-if (DEBUG) window.thullaDebug = { me, get host() { return H; }, E };
+if (DEBUG) window.thullaDebug = { me, get host() { return H; }, E, onFx };
