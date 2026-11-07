@@ -13,7 +13,7 @@ export const firebaseConfig = {
   storageBucket: '',
   messagingSenderId: '',
   appId: '',
-  measurementId: '', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
+  measurementId: 'G-AB12CD34EF', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
 };
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
