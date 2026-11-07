@@ -255,4 +255,18 @@ const seats3 = ['a', 'b', 'c'];
   assert.ok(r.ok);
   console.log('ok take mid-trick');
 }
+// 4. Give up with two players left
+{
+  const st = E.createRound({ seats: ['a', 'b', 'c'], dealer: 2, deck: E.makeDeck() });
+  assert.equal(E.canGiveUp(st, 'a'), false, 'not with three players');
+  st.out.push('c'); st.hands.c = [];
+  // make sure the trick list matches the two players still in
+  assert.equal(E.canGiveUp(st, 'a'), true);
+  const r = E.giveUp(st, 'a');
+  assert.ok(r.ok);
+  assert.ok(st.over); assert.equal(st.loser, 'a'); assert.deepEqual(st.out, ['c', 'b']);
+  assert.deepEqual(E.positions(st), { c: 1, b: 2, a: 3 });
+  assert.equal(E.giveUp(st, 'b').ok, false);
+  console.log('ok give up');
+}
 console.log('ALL ENGINE TESTS PASSED');

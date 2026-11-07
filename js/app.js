@@ -201,6 +201,7 @@ function hostReceive(conn, msg) {
     case 'play': return hostPlay(p, String(msg.card || ''));
     case 'take': return hostTakeAsk(p);
     case 'chat': return hostChat(p, msg.i);
+    case 'giveup': return hostGiveUp(p);
     case 'takeReply': return hostTakeReply(p, !!msg.accept);
     case 'leave': return hostLeave(p);
     default: return undefined;
@@ -438,6 +439,22 @@ function hostPlayFor() {
   hostAutoPlay(r.turnNo);
 }
 
+// ---------- Giving up (two players left) ----------
+
+function hostGiveUp(p) {
+  const r = H.round;
+  if (H.phase !== 'playing' || !r || r.over || H.resolving || !E.canGiveUp(r, p.id)) {
+    sendTo(p, { t: 'error', msg: 'You can only give up when two players are left.' });
+    return;
+  }
+  if (H.take) { clearTimer('take'); H.take = null; }
+  clearAllTimers();
+  const res = E.giveUp(r, p.id);
+  if (!res.ok) { sendTo(p, { t: 'error', msg: res.error }); return; }
+  fxAll({ kind: 'gaveUp', id: p.id, name: p.name });
+  hostFinishRound();
+}
+
 // ---------- Quick chat (fixed phrases only) ----------
 
 function hostChat(p, i) {
@@ -501,8 +518,8 @@ function hostFinishRound() {
     const s = H.scores[x.id];
     s.rounds++; s.losses += x.lost ? 1 : 0; s.posSum += x.pos; s.given += x.given; s.received += x.received;
   }
-  H.history.unshift({ no: H.roundNo, loser: nameOf(r.loser), players: r.seats.length });
-  H.lastResult = { no: H.roundNo, ended: false, loser: r.loser, results };
+  H.history.unshift({ no: H.roundNo, loser: nameOf(r.loser), players: r.seats.length, gaveUp: Boolean(r.gaveUp) });
+  H.lastResult = { no: H.roundNo, ended: false, loser: r.loser, results, gaveUp: Boolean(r.gaveUp) };
   const gameOver = Boolean(H.settings.rounds && H.roundNo >= H.settings.rounds);
   H.phase = gameOver ? 'over' : 'between';
   H.round = null;
@@ -593,6 +610,7 @@ function buildView(pid) {
       turnMs: H.turnDeadline ? Math.max(0, H.turnDeadline - now) : 0,
       take: H.take ? { from: H.take.from, to: H.take.to, ms: Math.max(0, H.take.until - now) } : null,
       canTake: canAct(pid) && Boolean(take.target),
+      canGiveUp: !H.resolving && E.canGiveUp(r, pid),
       takeTarget: take.target,
       playFor: pid === hostId() && stuckReady ? r.turn : null,
       stuck: H.stuck ? r.turn : null,
@@ -796,6 +814,7 @@ function onFx(fx) {
     case 'takeAsk': sfx.ask(); if (fx.toId !== me.id) toast(`${disp(fx.from)} asked ${disp(fx.to)} for their cards`); break;
     case 'takeNo': toast(fx.why === 'timeout' ? `${disp(fx.to)} didn’t answer in time` : fx.why === 'offline' ? `Card request cancelled: ${disp(fx.to)} went offline` : `${disp(fx.to)} kept their cards`); break;
     case 'auto': toast(fx.id === me.id ? `Time’s up. Played ${E.cardLabel(fx.card)} for you.` : `${disp(fx.name)} ran out of time: ${E.cardLabel(fx.card)}`); break;
+    case 'gaveUp': if (fx.id !== me.id) toast(`${disp(fx.name)} gave up 🏳️`, 3000); break;
     case 'chat': {
       const text = CHAT_PHRASES[fx.i];
       if (!text) break;
@@ -926,15 +945,15 @@ function seatLayout(v) {
   return { order: rot, pos };
 }
 
-// Faces: the expression follows how many cards a player holds.
-const FACE_EYES = '<circle cx="20" cy="24" r="3.6"/><circle cx="36" cy="24" r="3.6"/>';
+// Faces: the expression follows how many cards a player holds. Artwork lives in
+// index.html (#face-defs); each face is tinted in its player's colour.
 const FACES = {
-  cool: { label: 'safe', svg: '<path class="fill" d="M11 20h14v6.5a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3zM31 20h14v6.5a3 3 0 0 1-3 3h-8a3 3 0 0 1-3-3z"/><path d="M25 22h6"/><path d="M19 37q9 6 18 0"/>' },
-  thrilled: { label: 'thrilled', svg: FACE_EYES + '<path class="fill" d="M16 32q12 15 24 0z"/>' },
-  happy: { label: 'happy', svg: FACE_EYES + '<path d="M18 34q10 9 20 0"/>' },
-  unsure: { label: 'unsure', svg: FACE_EYES + '<path d="M19 37h18"/>' },
-  nervous: { label: 'nervous', svg: FACE_EYES + '<path d="M18 40q10-9 20 0"/><path class="sweat" d="M45 10q4.5 6.5 0 9.5q-4.5-3 0-9.5z"/>' },
-  shocked: { label: 'shocked', svg: '<circle cx="20" cy="23" r="5.5" class="hollow"/><circle cx="36" cy="23" r="5.5" class="hollow"/><circle cx="20" cy="23" r="2"/><circle cx="36" cy="23" r="2"/><ellipse class="hollow" cx="28" cy="38" rx="5" ry="6"/>' },
+  cool: { label: 'safe', sym: 'fCool' },
+  thrilled: { label: 'thrilled', sym: 'fThrilled' },
+  happy: { label: 'happy', sym: 'fHappy' },
+  unsure: { label: 'unsure', sym: 'fUnsure' },
+  nervous: { label: 'nervous', sym: 'fNervous' },
+  shocked: { label: 'shocked', sym: 'fShocked' },
 };
 function moodFor(p, r) {
   if ((shockedUntil[p.id] || 0) > Date.now()) return 'shocked';
@@ -948,7 +967,7 @@ function moodFor(p, r) {
 }
 const dangerOf = (n) => (n <= 7 ? 'ok' : n <= 12 ? 'warn' : 'bad');
 function faceHTML(mood) {
-  return `<span class="av face-${mood}"><svg viewBox="0 0 56 56" aria-hidden="true">${FACES[mood].svg}</svg></span>`;
+  return `<span class="av face-${mood}"><svg viewBox="0 0 100 100" aria-hidden="true"><circle class="skin" cx="50" cy="50" r="47"></circle><use href="#${FACES[mood].sym}" width="100" height="100"></use><use href="#fShine" width="100" height="100"></use></svg></span>`;
 }
 const shockedUntil = {};
 const chatBubbles = {}; // player id -> { text, until }
@@ -1037,7 +1056,7 @@ function renderHand(v) {
   const handEl = $('#hand');
   const status = $('#hand-status');
   const me_ = player(v, v.you);
-  $('#take-btn').hidden = true; $('#playfor-btn').hidden = true; $('#take-bar').hidden = true; $('#play-sel-btn').hidden = true;
+  $('#take-btn').hidden = true; $('#playfor-btn').hidden = true; $('#giveup-btn').hidden = !(r && r.canGiveUp); $('#take-bar').hidden = true; $('#play-sel-btn').hidden = true;
   const early = new Set(r?.early || []);
   const legal = new Set(r?.legal || []);
   const active = Boolean(r?.myTurn || early.size);
@@ -1138,7 +1157,7 @@ function scoresHTML(v) {
   }
   if (v.history.length) {
     html += `<p class="history-title">Rounds</p><ul class="history">${v.history.map((h) =>
-      `<li>Round ${h.no}: ${h.ended ? 'ended early' : `<b>${esc(disp(h.loser))}</b> lost`}</li>`).join('')}</ul>`;
+      `<li>Round ${h.no}: ${h.ended ? 'ended early' : `<b>${esc(disp(h.loser))}</b> ${h.gaveUp ? 'gave up' : 'lost'}`}</li>`).join('')}</ul>`;
   }
   if (v.allTime) {
     html += `<p class="scores-sub">All time: ${esc(v.allTime.name)}</p>`;
@@ -1169,11 +1188,13 @@ function renderOverlays(v) {
       $('#round-ranking').innerHTML = '';
     } else {
       const loser = res.results.find((x) => x.lost);
-      $('#round-title').textContent = loser.id === v.you ? 'You lost this round' : `${disp(loser.name)} lost round ${res.no}`;
+      $('#round-title').textContent = res.gaveUp
+        ? (loser.id === v.you ? 'You gave up this round' : `${disp(loser.name)} gave up round ${res.no}`)
+        : (loser.id === v.you ? 'You lost this round' : `${disp(loser.name)} lost round ${res.no}`);
       const thullas = res.results.filter((x) => x.given).sort((a, b) => b.given - a.given);
       $('#round-sub').textContent = thullas.length ? `Most thullas: ${disp(thullas[0].name)} (${thullas[0].given})` : 'No thullas this round.';
       $('#round-ranking').innerHTML = rankingHTML(v, res.results.map((x) => ({
-        id: x.id, name: x.name, how: x.lost ? 'Lost' : `Safe, ${ordinal(x.pos)}`, last: x.lost,
+        id: x.id, name: x.name, how: x.lost ? (res.gaveUp ? 'Gave up' : 'Lost') : `Safe, ${ordinal(x.pos)}`, last: x.lost,
       })));
     }
   }
@@ -1339,6 +1360,9 @@ $('#hand').addEventListener('click', (e) => {
 });
 $('#play-sel-btn').addEventListener('click', () => { if (selectedCard) playCard(selectedCard); });
 $('#take-btn').addEventListener('click', () => send({ t: 'take' }));
+$('#giveup-btn').addEventListener('click', () => {
+  if (confirm('Give up this round? You will be the loser and the round ends now.')) send({ t: 'giveup' });
+});
 $('#chat-bar').innerHTML = CHAT_PHRASES.map((t, i) => `<button class="chip" type="button" data-chat="${i}">${esc(t)}</button>`).join('');
 $('#chat-btn').addEventListener('click', () => {
   const bar = $('#chat-bar');
@@ -1386,6 +1410,7 @@ function rulesHTML() {
   h += '<h3>Getting out</h3><ul>' + [
     'You’re safe once a trick ends and your hand is empty.',
     'If your last card was the highest and someone gives a thulla, you pick it up and you’re back in.',
+    'With two players left, either one can give up: they take the loss and the round ends.',
     'Fewest losses across the game wins.',
   ].map(li).join('') + '</ul>';
   if (!s || s.earlyPlay) h += `<h3>Play early ${opt(s?.earlyPlay)}</h3><ul>` + [

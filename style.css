@@ -688,118 +688,36 @@ body.in-game .toast { top: 36%; }
   .table-note { text-align: left; }
 }
 
-/* ---------- Thulla slap (cat / hippo) ---------- */
+/* ---------- Thulla slap (Kaalu the cat / Moti the hippo) ---------- */
 .slap { position: fixed; inset: 0; z-index: 28; pointer-events: none; overflow: hidden; }
-.slap .critter {
-  position: absolute; right: 3vw; bottom: 0;
-  height: min(52vh, 440px); aspect-ratio: 240 / 270;
-  transform-origin: 50% 100%;
-  animation: critter-pop 2.4s cubic-bezier(.3,.8,.3,1) both;
+.slap-char { position: absolute; right: 2vw; bottom: 0; width: min(54vh, 420px); aspect-ratio: 300 / 340; }
+.slap-char svg, .slap-mini svg { width: 100%; height: 100%; display: block; }
+.slap-big {
+  position: absolute; left: 50%; top: 46%; width: min(86vw, 460px); opacity: 0;
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.45)); will-change: transform, opacity;
 }
-.slap .critter svg, .slap-mini svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.critter .arm { transform-box: view-box; transform-origin: 170px 212px; }
-.slap .critter .arm { animation: arm-swing 2.4s ease both; }
-@keyframes critter-pop {
-  0% { transform: translateY(105%); }
-  12% { transform: translateY(-4%); }
-  17% { transform: translateY(0); }
-  27% { transform: translateY(0) rotate(5deg); }
-  31% { transform: translate(-7%, 0) rotate(-9deg); }
-  38% { transform: translate(-3%, 0) rotate(-3deg); }
-  74% { transform: translateY(0); }
-  100% { transform: translateY(112%); }
-}
-/* Full screen: wind back, then lunge forward at the glass (the paw grows) */
-@keyframes arm-swing {
-  0%, 15% { transform: rotate(0deg); }
-  27% { transform: rotate(30deg) scale(0.95); }
-  29% { transform: rotate(33deg) scale(0.95); }
-  31% { transform: rotate(-14deg) scale(1.45); }
-  40% { transform: rotate(-10deg) scale(1.35); }
-  70% { transform: rotate(-4deg) scale(1.05); }
-  100% { transform: rotate(0deg); }
-}
-/* Mini: a sideways swipe at the player's avatar */
-@keyframes arm-swing-mini {
-  0%, 15% { transform: rotate(0deg); }
-  27% { transform: rotate(26deg); }
-  29% { transform: rotate(28deg); }
-  31% { transform: rotate(-108deg); }
-  40% { transform: rotate(-96deg); }
-  70% { transform: rotate(-30deg); }
-  100% { transform: rotate(0deg); }
-}
-.slap-flash {
-  position: absolute; inset: 0; background: #fff; opacity: 0;
-  animation: slap-flash 2.4s linear both;
-}
-@keyframes slap-flash { 0%, 30% { opacity: 0; } 31% { opacity: 0.75; } 40%, 100% { opacity: 0; } }
-.slap-print {
-  position: absolute; left: 50%; top: 44%;
-  width: min(62vw, 360px);
-  transform: translate(-60%, -50%) rotate(-16deg);
-  opacity: 0;
-  animation: slap-print 2.4s ease both;
-  filter: drop-shadow(0 6px 0 rgba(0,0,0,0.12));
-}
-@keyframes slap-print {
-  0%, 30% { opacity: 0; transform: translate(-60%, -50%) rotate(-16deg) scale(1.9); }
-  31% { opacity: 1; transform: translate(-60%, -50%) rotate(-16deg) scale(0.88); }
-  35% { transform: translate(-60%, -50%) rotate(-16deg) scale(1); }
-  78% { opacity: 0.95; }
-  100% { opacity: 0; transform: translate(-60%, -50%) rotate(-16deg) scale(1); }
-}
+.slap-big svg { width: 100%; height: auto; display: block; }
+.slap-print { position: absolute; left: 50%; top: 44%; width: min(72vw, 330px); transform: translate(-50%, -50%) rotate(-10deg); opacity: 0; }
+.slap-print svg { width: 100%; height: auto; display: block; }
+.slap-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
 .slap-burst {
-  position: absolute; left: 50%; top: 16%;
-  display: grid; justify-items: center; gap: 0.4rem;
-  transform: translateX(-50%);
-  opacity: 0;
-  animation: slap-burst 2.4s ease both;
-  text-align: center; width: max-content; max-width: 92vw;
+  position: absolute; left: 50%; top: 9%; display: grid; justify-items: center; gap: 0.5rem;
+  transform-origin: 50% 0; opacity: 0; width: max-content; max-width: 92vw;
 }
-.slap-burst b {
-  font-size: clamp(3rem, 15vw, 6rem); font-weight: 800; letter-spacing: -0.04em; line-height: 1;
-  color: var(--on-tile); background: var(--danger);
-  padding: 0.08em 0.35em 0.14em; border-radius: 18px;
-  transform: rotate(-5deg);
-  box-shadow: 0 8px 0 rgba(0,0,0,0.15);
+.slap-star {
+  width: min(78vw, 300px); aspect-ratio: 2 / 1; display: grid; place-items: center;
+  background: #ffd24d;
+  clip-path: polygon(50% 0, 60% 22%, 85% 6%, 78% 32%, 100% 40%, 80% 55%, 96% 78%, 70% 74%, 62% 100%, 50% 80%, 36% 100%, 30% 74%, 4% 80%, 20% 56%, 0 38%, 22% 32%, 14% 6%, 40% 22%);
 }
+.slap-star b { font-size: clamp(2rem, 9vw, 3rem); font-weight: 800; letter-spacing: -0.02em; color: #c2334d; text-shadow: 3px 3px 0 #1b1e3a; transform: rotate(-6deg); }
 .slap-burst span {
   font-weight: 700; font-size: 1.05rem; background: var(--surface); color: var(--ink);
-  border: 2px solid var(--line); border-radius: 10px; padding: 0.35rem 0.8rem;
+  border: 2px solid var(--line); border-radius: 10px; padding: 0.35rem 0.8rem; text-align: center;
 }
-@keyframes slap-burst {
-  0%, 30% { opacity: 0; transform: translateX(-50%) scale(0.4); }
-  33% { opacity: 1; transform: translateX(-50%) scale(1.12); }
-  38% { transform: translateX(-50%) scale(1); }
-  82% { opacity: 1; }
-  100% { opacity: 0; transform: translateX(-50%) scale(1); }
-}
-body.slapped .game { animation: screen-jolt 0.45s cubic-bezier(.3,.7,.4,1); }
-@keyframes screen-jolt {
-  0% { transform: translate(0, 0); }
-  15% { transform: translate(-14px, 6px) rotate(-1deg); }
-  35% { transform: translate(10px, -4px) rotate(0.6deg); }
-  60% { transform: translate(-5px, 2px); }
-  100% { transform: none; }
-}
-
-/* Mini slap beside someone's seat */
-.slap-mini { position: fixed; z-index: 16; pointer-events: none; aspect-ratio: 240 / 270; }
-.slap-mini .critter {
-  width: 100%; height: 100%;
-  transform-origin: 50% 90%;
-  animation: mini-pop 2.2s cubic-bezier(.3,.8,.3,1) both;
-}
-.slap-mini.flip .critter { scale: -1 1; }
-.slap-mini .critter .arm { animation: arm-swing-mini 2.4s ease both; }
-@keyframes mini-pop {
-  0% { transform: scale(0); opacity: 0; }
-  12% { transform: scale(1.12); opacity: 1; }
-  17% { transform: scale(1); }
-  80% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(0); opacity: 0; }
-}
+.slap-mini { position: fixed; z-index: 16; pointer-events: none; aspect-ratio: 300 / 340; }
+.slap-mini-clip { width: 100%; height: 100%; overflow: hidden; }
+.slap-mini.flip .slap-mini-clip { transform: scaleX(-1); }
+@media (max-width: 760px) { .slap-char { width: min(46vh, 330px); right: -3vw; } }
 .ring.slapped { animation: ring-slapped 0.55s ease; }
 @keyframes ring-slapped {
   0% { transform: none; }
@@ -812,17 +730,14 @@ body.slapped .game { animation: screen-jolt 0.45s cubic-bezier(.3,.7,.4,1); }
 .slap-pref { display: flex; align-items: flex-end; gap: 0.5rem; }
 .slap-pref .select-field { flex: 1; }
 .slap-pref .btn { padding: 0.65rem 0.9rem; }
-@media (max-width: 760px) { .slap .critter { height: min(44vh, 360px); right: -2vw; } }
 
-/* ---------- Faces ---------- */
-.av svg { width: 100%; height: 100%; display: block; }
-.av svg * { fill: var(--ink); stroke: none; }
-.av svg path:not(.fill):not(.sweat), .av svg .hollow { fill: none; stroke: var(--ink); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
-.av svg .hollow { stroke-width: 2.5; }
-.av svg .sweat { fill: #4aa8ff; }
-.av.face-shocked { animation: shocked 0.5s ease; background: color-mix(in srgb, var(--danger) 18%, var(--surface)); }
+/* ---------- Faces (tinted in each player's colour) ---------- */
+.av { background: transparent; }
+.av svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.av .skin { fill: color-mix(in srgb, var(--pc) 52%, #ffffff); }
+.av.face-shocked { animation: shocked 0.5s ease; }
 @keyframes shocked { 30% { transform: scale(1.18); } 60% { transform: scale(0.95); } }
-.av.face-cool { background: color-mix(in srgb, var(--hit) 16%, var(--surface)); }
+.ring { padding: 2px; }
 
 /* Danger bar under each seat */
 .danger { width: calc(var(--av) * 1.05); height: 5px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 15%, transparent); overflow: hidden; }

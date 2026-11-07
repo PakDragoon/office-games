@@ -285,3 +285,25 @@ export function autoCard(st, id) {
   if (st.trick.length && !legal.some((c) => suitOf(c) === st.ledSuit)) return sorted[sorted.length - 1];
   return sorted[0];
 }
+
+// ---------- Giving up (only when two players are left) ----------
+
+export function canGiveUp(st, id) {
+  return !st.over && activeIds(st).length === 2 && activeIds(st).includes(id);
+}
+
+/** The player concedes: they lose the round, the other player takes the next finishing place. */
+export function giveUp(st, id) {
+  if (!canGiveUp(st, id)) return { ok: false, error: 'You can only give up when two players are left.' };
+  const other = activeIds(st).find((x) => x !== id);
+  // Cards still on the table go back to whoever played them, so hand counts stay honest.
+  for (const p of st.trick) st.hands[p.id].push(p.card);
+  st.trick = [];
+  st.ledSuit = null;
+  st.out.push(other);
+  st.loser = id;
+  st.gaveUp = id;
+  st.over = true;
+  st.turn = null;
+  return { ok: true, events: [{ type: 'finish', id: other, pos: st.out.length }, { type: 'roundOver', loser: id, gaveUp: true }] };
+}

@@ -6,7 +6,7 @@ Play at `https://pakdragoon.github.io/thulla/`.
 
 ## How to play
 
-Everyone sits around the table with their own colour, and you're always at the bottom. Each player is a little face that reacts to how many cards they hold: grinning when nearly out, worried and sweating with 13 or more, shocked for a moment after a thulla, and wearing sunglasses once safe. A bar under each player shows the danger at a glance (green, amber, red). Tap 💬 for quick chat (Shabash!, Uff yaar, Jaldi khelo, Ye lo thulla! and more), shown as a bubble over your seat. Cards land in front of whoever played them; a glowing ring shows whose turn it is (and counts down if the timer is on). Your playable cards are outlined green, cards you can play early are outlined amber, and the rest are dimmed.
+Everyone sits around the table with their own colour, and you're always at the bottom. Each player is a little face, tinted in their own colour, that reacts to how many cards they hold: grinning when nearly out, worried and sweating with 13 or more, shocked for a moment after a thulla, and wearing sunglasses once safe. A bar under each player shows the danger at a glance (green, amber, red). Tap 💬 for quick chat (Shabash!, Uff yaar, Jaldi khelo, Ye lo thulla! and more), shown as a bubble over your seat. Cards land in front of whoever played them; a glowing ring shows whose turn it is (and counts down if the timer is on). Your playable cards are outlined green, cards you can play early are outlined amber, and the rest are dimmed.
 
 1. One person types their name and clicks **Host a room**. They get a 4-letter room code.
 2. They click **Copy invite link** and send it to up to 7 friends (or just tell them the code).
@@ -30,6 +30,7 @@ If someone's page refreshes mid-game, they rejoin automatically, or can rejoin w
   - If you play your last card and it's the highest of the led suit, and then someone gives a thulla, you pick the trick up and you're back in.
   - If your thulla is your last card, you're safe.
   - If the player who should lead next is already safe, the next player clockwise who still has cards leads.
+- **Giving up:** when only two players are left, either of them can tap **Give up**. They take the loss straight away, the other player takes the next finishing place, and the round summary and history say "gave up".
 - **Losing:** the last player still holding cards loses the round. If the final clean trick empties everyone's hands at once, whoever played the highest card loses, since they would have had to lead.
 
 ### Optional: play early
@@ -69,7 +70,7 @@ Players named JD or Junaid get a 🍌 after their name everywhere.
 - **Crews:** in the lobby, the host can type a crew name (for example `office-squad`) and click **Use**. Every round played under that name is saved and adds up across rooms in the scoreboard's **All time** table. Saving to a crew needs the host to be signed in.
 - **Preferences** (this device only): sounds, high-contrast colors (which also switches to a four-color deck: blue diamonds, green clubs), and single-tap play on phones. By default, on a touch screen the first tap raises a card and a second tap (or the **Play** button) plays it, so a stray tap doesn't throw a card. With a mouse, one click plays.
 
-- **Thulla slap:** when you get a thulla, a cartoon cat or hippo pops up and slaps your screen; everyone else sees a mini one slap that player's avatar. Choose Random, Cat, Hippo or Off, and tap **Try it** to preview. It's skipped if the device asks for reduced motion.
+- **Thulla slap:** when you get a thulla, Kaalu the chubby grey cat or Moti the angry hippo pops up showing the back of his hand, winds up, swings in with the palm turning towards you, and smacks it flat against your screen (flash, table shake, "Thulla!" burst, then a paw print left on the glass). Everyone else sees a mini version smack that player's avatar. Choose Random, Cat, Hippo or Off, and tap **Try it** to preview. It's skipped if the device asks for reduced motion.
 
 Tap **?** in the game bar (or **How to play** on the home screen) for a rules summary that matches the room's settings.
 
