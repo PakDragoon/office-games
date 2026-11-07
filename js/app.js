@@ -1,4 +1,5 @@
 import { ANSWERS, EXTRA_GUESSES, BLOCKED_ANSWERS } from './words.js';
+import * as cloud from './cloud.js';
 
 /* =========================================================
    Wordle Party
@@ -143,6 +144,9 @@ function hostCreate(attempt = 0) {
       startedAt: 0,
       players: [newPlayer(id, S.myName, true, 0)],
       winRule: 'first',
+      crew: null,      // { id, name } when all-time scores are saved to Firebase
+      crewStatus: '',
+      allTime: null,   // the crew's saved totals
       used: [],        // answers already played in this room
       stats: {},       // lower-case name -> totals across rounds in this room
       history: [],     // [{ round, word, winner }]
@@ -150,6 +154,8 @@ function hostCreate(attempt = 0) {
     peer.on('connection', hostOnConnection);
     setBusy(false);
     hostBroadcast();
+    const savedCrew = readSavedCrew();
+    if (savedCrew) hostSetCrew(savedCrew);
   });
 
   peer.on('error', (err) => {
@@ -338,6 +344,77 @@ function hostRecordRound() {
     if (winner && p.id === winner.id) st.wins += 1;
   }
   room.history.push({ round: room.round, word: room.word, winner: winner ? winner.name : null });
+
+  if (room.crew) {
+    const crew = room.crew;
+    const record = {
+      word: room.word,
+      winRule: room.winRule,
+      winner: winner ? winner.name : null,
+      room: room.code,
+      players: players.map((p) => ({
+        name: p.name,
+        solved: p.solved,
+        guesses: p.patterns.length,
+        ms: p.solved ? p.finishMs : null,
+      })),
+    };
+    room.crewStatus = 'Saving this round…';
+    cloud.saveRound(crew.id, crew.name, record)
+      .then((saved) => {
+        if (H.room !== room || room.crew?.id !== crew.id) return;
+        room.allTime = saved;
+        room.crewStatus = `Saved. ${saved.rounds.toLocaleString('en-US')} rounds played as this crew.`;
+        hostBroadcast();
+      })
+      .catch((err) => {
+        console.warn('Saving to crew failed', err);
+        if (H.room !== room) return;
+        room.crewStatus = `This round wasn’t saved. ${cloud.errorText(err)}`;
+        hostBroadcast();
+      });
+  }
+}
+
+/* ---------- crews: all-time scores saved in Firebase (host only) ---------- */
+function readSavedCrew() {
+  try { return localStorage.getItem('wordleparty-crew') || ''; } catch { return ''; }
+}
+
+async function hostSetCrew(rawName) {
+  const room = H.room;
+  if (!room) return;
+  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  try { localStorage.setItem('wordleparty-crew', name); } catch {}
+  if (!name) {
+    room.crew = null;
+    room.allTime = null;
+    room.crewStatus = '';
+    hostBroadcast();
+    return;
+  }
+  const id = cloud.crewId(name);
+  if (id.length < 3) {
+    toast('Crew names need at least 3 letters or numbers');
+    return;
+  }
+  room.crew = { id, name };
+  room.allTime = null;
+  room.crewStatus = 'Connecting to saved scores…';
+  hostBroadcast();
+  try {
+    const data = await cloud.loadCrew(id);
+    if (H.room !== room || room.crew?.id !== id) return;
+    room.allTime = data;
+    room.crewStatus = data
+      ? `${data.rounds.toLocaleString('en-US')} rounds played as this crew so far.`
+      : 'New crew. Scores start saving after the first round.';
+  } catch (err) {
+    console.warn('Loading crew failed', err);
+    if (H.room !== room || room.crew?.id !== id) return;
+    room.crewStatus = cloud.errorText(err);
+  }
+  hostBroadcast();
 }
 
 function publicView() {
@@ -364,6 +441,9 @@ function publicView() {
     })),
     word: room.status === 'ended' ? room.word : null,
     stats: Object.values(room.stats),
+    crew: room.crew ? room.crew.name : null,
+    crewStatus: room.crewStatus,
+    allTime: room.allTime,
     history: room.history.slice(-10),
   };
 }
@@ -754,6 +834,12 @@ function renderLobby(v) {
   $('lobby-rules').hidden = S.isHost;
   $('word-status').textContent = wordStatusText();
   $('word-status').hidden = !S.isHost;
+  const crewLine = $('crew-status');
+  crewLine.textContent = v.crew
+    ? `Crew “${v.crew}”: ${v.crewStatus}`
+    : S.isHost ? 'All-time scores aren’t being saved. Add a crew name to save them.' : '';
+  crewLine.hidden = !crewLine.textContent;
+  if (S.isHost && document.activeElement !== $('crew-input')) $('crew-input').value = v.crew || '';
   if (S.isHost) {
     $('strict-toggle').checked = v.strict;
     for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
@@ -782,6 +868,39 @@ function esc(t) {
 }
 
 function scoresHTML(v) {
+  return `<h3 class="scores-sub">This room</h3>${roomScoresHTML(v)}${crewScoresHTML(v)}`;
+}
+
+function crewScoresHTML(v) {
+  if (!v.crew) return '';
+  const head = `<h3 class="scores-sub">All time: ${esc(v.crew)}</h3>`;
+  const all = v.allTime;
+  if (!all || !all.players.length) return `${head}<p class="scores-empty">${esc(v.crewStatus || 'No saved rounds yet.')}</p>`;
+  const here = new Map(v.players.map((p) => [p.name.toLowerCase(), p]));
+  const rows = all.players
+    .map((p) => ({ ...p, avg: p.solved ? p.guessSum / p.solved : null, me: here.get(p.name.toLowerCase())?.id === S.myId }))
+    .sort((a, b) => b.wins - a.wins || (b.wins / b.played || 0) - (a.wins / a.played || 0) || (a.avg ?? 99) - (b.avg ?? 99));
+  const body = rows.map((r) => {
+    const color = here.get(r.name.toLowerCase())?.color;
+    const dot = color == null ? 'var(--line)' : `var(--p${color})`;
+    return `
+    <tr>
+      <td><span class="pname"><span class="dot" style="background: ${dot}"></span><span>${esc(label(r.name))}${r.me ? ' (you)' : ''}</span></span></td>
+      <td class="wins">${r.wins}</td>
+      <td>${r.played}</td>
+      <td>${r.avg == null ? '–' : r.avg.toFixed(1)}</td>
+      <td title="Best streak: ${r.bestStreak}">${r.streak}</td>
+    </tr>`;
+  }).join('');
+  return `${head}
+    <table class="scores">
+      <thead><tr><th scope="col">Player</th><th scope="col">Wins</th><th scope="col" title="Rounds played">Played</th><th scope="col" title="Average guesses when solved">Avg</th><th scope="col" title="Current win streak (hover a number for the best)">Streak</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <p class="scores-note">${esc(v.crewStatus || '')}</p>`;
+}
+
+function roomScoresHTML(v) {
   const stats = v.stats || [];
   if (stats.length === 0) {
     return '<p class="scores-empty">Wins and times show up here once the first round ends. They carry over for every round you play in this room.</p>';
@@ -1043,6 +1162,11 @@ for (const r of document.querySelectorAll('input[name="win-rule"]')) {
     hostBroadcast();
   });
 }
+
+$('crew-btn').addEventListener('click', () => S.isHost && hostSetCrew($('crew-input').value));
+$('crew-input').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') $('crew-btn').click();
+});
 
 $('start-btn').addEventListener('click', () => S.isHost && hostStart());
 $('again-btn').addEventListener('click', () => S.isHost && hostStart());
