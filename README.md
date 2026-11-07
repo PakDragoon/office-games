@@ -78,9 +78,9 @@ Thulla uses the same Firebase project as Wordle Party (`wordle-party-81870`), in
 
 ## Setup
 
-### 1. Firebase config (one time)
+### 1. Firebase config
 
-Open `js/cloud.js` in the Wordle Party repo, copy its whole `firebaseConfig` object, and paste it over the `firebaseConfig` object near the top of Thulla's `js/cloud.js`. The config is meant to be public; the security rules and API-key restrictions protect the project.
+Already done: `js/cloud.js` has the same Firebase config as Wordle Party (it's meant to be public; the security rules and API-key restrictions protect the project). The only thing to add is the Analytics `measurementId`, see Analytics below.
 
 ### 2. Security rules (one time, and whenever `firestore.rules` changes)
 
@@ -136,7 +136,8 @@ No names, room codes or cards are sent. Players can switch it off under Settings
 
 1. Firebase console → ⚙️ **Project settings** → **Integrations** → **Google Analytics** → **Enable**, and link or create a Google Analytics account.
 2. Project settings → **General** → **Your apps** → your web app. Its config now includes `measurementId: "G-…"`.
-3. Paste that `measurementId` into the `firebaseConfig` in Thulla's `js/cloud.js` (and Wordle Party's `js/analytics.js`, below), then upload.
+3. Paste that `measurementId` into the `firebaseConfig` in `js/cloud.js` (in both Thulla and Wordle Party), then upload.
+4. In the Google Cloud console → APIs & Services → Credentials → Browser key → API restrictions, also allow **Firebase Installations API**. Without it Analytics silently sends nothing.
 
 ### Where to see it
 

@@ -4,16 +4,16 @@
 // Uses the same Firebase project as Wordle Party, but only the thullaCrews and
 // thullaUsers collections, so Wordle's data is never read or written here.
 
-// Paste the firebaseConfig object from Wordle Party's js/cloud.js here (it's meant
-// to be public; security rules and API-key restrictions protect the project).
+// Same Firebase project as Wordle Party. This config is meant to be public; security rules
+// and API-key restrictions protect the project.
 export const firebaseConfig = {
-  apiKey: '',
+  apiKey: 'AIzaSyAzZxF9QMPjN3iMIgjycybnHG7a5Va3Fxo',
   authDomain: 'wordle-party-81870.firebaseapp.com',
   projectId: 'wordle-party-81870',
-  storageBucket: '',
-  messagingSenderId: '',
-  appId: '',
-  measurementId: 'G-AB12CD34EF', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
+  storageBucket: 'wordle-party-81870.firebasestorage.app',
+  messagingSenderId: '782876412988',
+  appId: '1:782876412988:web:dbf115a0f2910e9615c739',
+  measurementId: '', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
 };
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
