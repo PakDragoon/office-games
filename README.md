@@ -110,6 +110,40 @@ Nothing else needs changing in Firebase: Google sign-in is already on, `pakdrago
 3. Under **Build and deployment**, set **Source** to *Deploy from a branch*, pick `main` and `/ (root)`, then **Save**.
 4. After a minute or two, the game is live at `https://pakdragoon.github.io/thulla/`.
 
+## Analytics (traffic and game stats)
+
+Thulla can send anonymous usage stats to Google Analytics through your Firebase project. Once it's set up, you get:
+- visitors, daily and monthly users, new vs returning
+- countries, devices and browsers
+- time on site and pages viewed
+- these game events:
+
+| Event | When | Details sent |
+|---|---|---|
+| `room_created` | someone hosts a room | |
+| `room_joined` | someone joins a room | |
+| `game_started` | the first round of a game starts (host only) | players, rounds setting, timer, play early, take cards, crew |
+| `round_finished` | a round ends (host only) | players, round number, gave up, tricks |
+| `game_finished` | the host ends the game | rounds, players |
+| `give_up` | a player gives up | |
+| `quick_chat` | a quick-chat phrase is sent | phrase |
+| `slap_preview` | someone taps "Try it" | cat or hippo |
+| `login` | someone signs in with Google | |
+
+No names, room codes or cards are sent. Players can switch it off under Settings → "Share anonymous usage stats". Ad blockers also block it, so real numbers are a bit higher than what you see.
+
+### Turning it on (one time)
+
+1. Firebase console → ⚙️ **Project settings** → **Integrations** → **Google Analytics** → **Enable**, and link or create a Google Analytics account.
+2. Project settings → **General** → **Your apps** → your web app. Its config now includes `measurementId: "G-…"`.
+3. Paste that `measurementId` into the `firebaseConfig` in Thulla's `js/cloud.js` (and Wordle Party's `js/analytics.js`, below), then upload.
+
+### Where to see it
+
+- **Firebase console → Analytics → Dashboard / Realtime** for a quick view. Realtime shows people on the site right now.
+- **Google Analytics (analytics.google.com)** for full reports. Both games share one property; to see them separately, go to **Reports → Engagement → Pages and screens** and look at the paths `/thulla/` and `/wordle/`.
+- New data takes up to 24 hours to appear in reports; Realtime and **DebugView** are instant.
+
 ## Run it locally
 
 Browsers block JavaScript modules on `file://` pages, so start a small local server:

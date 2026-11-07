@@ -13,6 +13,7 @@ export const firebaseConfig = {
   storageBucket: '',
   messagingSenderId: '',
   appId: '',
+  measurementId: '', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
 };
 
 const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
@@ -24,6 +25,14 @@ export const isConfigured = () => Boolean(firebaseConfig.apiKey && firebaseConfi
 
 let fb = null;
 let loading = null;
+let appPromise = null;
+
+// One shared Firebase app for sign-in, scores and analytics.
+function firebaseApp() {
+  appPromise ||= import(FB + 'firebase-app.js').then((m) =>
+    m.getApps().find((a) => a.name === 'thulla') || m.initializeApp(firebaseConfig, 'thulla'));
+  return appPromise;
+}
 let currentUser = null;
 const listeners = new Set();
 
@@ -31,17 +40,17 @@ async function load() {
   if (fb) return fb;
   if (!isConfigured()) throw new Error('Firebase isn’t set up yet. Paste the config into js/cloud.js.');
   loading ||= (async () => {
-    const [appMod, authMod, fsMod] = await Promise.all([
-      import(FB + 'firebase-app.js'),
+    const [app, authMod, fsMod] = await Promise.all([
+      firebaseApp(),
       import(FB + 'firebase-auth.js'),
       import(FB + 'firebase-firestore.js'),
     ]);
-    const app = appMod.initializeApp(firebaseConfig, 'thulla');
     const auth = authMod.getAuth(app);
     const db = fsMod.getFirestore(app);
     fb = { auth, db, A: authMod, F: fsMod };
     authMod.onAuthStateChanged(auth, (u) => {
       currentUser = u && u.providerData.some((p) => p.providerId === 'google.com') ? u : null;
+      if (currentUser) track('login', { method: 'Google' });
       try { currentUser ? localStorage.setItem(SIGNED_IN_KEY, '1') : localStorage.removeItem(SIGNED_IN_KEY); } catch {}
       listeners.forEach((cb) => cb(publicUser()));
     });
@@ -184,4 +193,38 @@ export async function saveCrewRound(name, round) {
     });
   });
   return { ...saved, updatedAt: null };
+}
+
+// ---------- Analytics (Google Analytics through Firebase) ----------
+// Loads for everyone (guests too) once measurementId is set, unless the player turns it off
+// in Settings. Page views are automatic; the game logs a few events (see README: Analytics).
+
+let analytics = null;
+let analyticsLoading = null;
+const queued = [];
+
+export const analyticsConfigured = () => isConfigured() && Boolean(firebaseConfig.measurementId);
+
+export function initAnalytics(enabled = true) {
+  if (!enabled || !analyticsConfigured() || analyticsLoading) return;
+  analyticsLoading = (async () => {
+    const [app, A] = await Promise.all([firebaseApp(), import(FB + 'firebase-analytics.js')]);
+    if (!(await A.isSupported())) return null;
+    analytics = { A, inst: A.getAnalytics(app) };
+    queued.splice(0).forEach(([n, p]) => A.logEvent(analytics.inst, n, p));
+    return analytics;
+  })().catch(() => null);
+}
+
+export function setAnalyticsEnabled(on) {
+  if (analytics) analytics.A.setAnalyticsCollectionEnabled(analytics.inst, on);
+  else if (on) initAnalytics(true);
+}
+
+/** Log a custom event. Safe to call any time; does nothing when analytics is off or not set up. */
+export function track(name, params = {}) {
+  try {
+    if (analytics) analytics.A.logEvent(analytics.inst, name, params);
+    else if (analyticsLoading && queued.length < 50) queued.push([name, params]);
+  } catch {}
 }

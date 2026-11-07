@@ -29,7 +29,7 @@ const cleanName = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 16
 // Preferences (this device only)
 // ---------------------------------------------------------------------------
 const prefs = (() => {
-  const base = { sound: true, contrast: false, tapOnce: false, slapper: 'random' };
+  const base = { sound: true, contrast: false, tapOnce: false, slapper: 'random', analytics: true };
   try { return { ...base, ...JSON.parse(localStorage.getItem('thulla-prefs') || '{}') }; }
   catch { return base; }
 })();
@@ -168,6 +168,7 @@ function hostStart(name) {
     H.players.push(p);
     me.role = 'host'; me.id = p.id; me.code = code; me.name = name;
     saveSession({ code, name, role: 'host' });
+    cloud.track('room_created');
     setBusy(false);
     broadcast();
   });
@@ -304,6 +305,12 @@ function hostStartRound() {
   H.round = E.createRound({ seats, dealer: H.dealer, allowTake: H.settings.allowTake, earlyPlay: H.settings.earlyPlay });
   for (const id of seats) H.scores[id] ||= { rounds: 0, losses: 0, posSum: 0, given: 0, received: 0 };
   H.roundNo++;
+  if (H.roundNo === 1) {
+    cloud.track('game_started', {
+      players: seats.length, rounds_setting: H.settings.rounds || 0, timer: H.settings.timer,
+      play_early: H.settings.earlyPlay ? 1 : 0, take_cards: H.settings.allowTake ? 1 : 0, crew: H.settings.crew ? 1 : 0,
+    });
+  }
   H.phase = 'playing';
   H.resolving = null; H.take = null; H.stuck = null; H.lastResult = null; H.final = null;
   fxAll({ kind: 'roundStart', no: H.roundNo, leader: nameOf(H.round.turn) });
@@ -324,6 +331,7 @@ function hostEndRoundEarly() {
 
 function hostEndGame() {
   if (!H) return;
+  cloud.track('game_finished', { rounds: H.roundNo, players: Object.keys(H.scores).length });
   clearAllTimers();
   H.round = null; H.resolving = null; H.take = null;
   H.phase = 'over';
@@ -450,6 +458,7 @@ function hostGiveUp(p) {
   if (H.take) { clearTimer('take'); H.take = null; }
   clearAllTimers();
   const res = E.giveUp(r, p.id);
+  cloud.track('give_up');
   if (!res.ok) { sendTo(p, { t: 'error', msg: res.error }); return; }
   fxAll({ kind: 'gaveUp', id: p.id, name: p.name });
   hostFinishRound();
@@ -521,6 +530,7 @@ function hostFinishRound() {
   H.history.unshift({ no: H.roundNo, loser: nameOf(r.loser), players: r.seats.length, gaveUp: Boolean(r.gaveUp) });
   H.lastResult = { no: H.roundNo, ended: false, loser: r.loser, results, gaveUp: Boolean(r.gaveUp) };
   const gameOver = Boolean(H.settings.rounds && H.roundNo >= H.settings.rounds);
+  cloud.track('round_finished', { players: results.length, round: H.roundNo, gave_up: r.gaveUp ? 1 : 0, tricks: r.tricks });
   H.phase = gameOver ? 'over' : 'between';
   H.round = null;
   if (gameOver) H.final = standings();
@@ -701,6 +711,7 @@ function joinRoom(code, name) {
         done = true; me.joining = false; setBusy(false);
         me.role = 'guest'; me.id = msg.id; me.code = code; me.name = name; me.conn = conn;
         saveSession({ code, name, role: 'guest' });
+        cloud.track('room_joined');
         const url = new URL(location.href); url.searchParams.set('room', code); history.replaceState(null, '', url);
         $('#closed-overlay').hidden = true;
         return;
@@ -1373,6 +1384,7 @@ $('#chat-bar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-chat]');
   if (!b) return;
   send({ t: 'chat', i: Number(b.dataset.chat) });
+  cloud.track('quick_chat', { phrase: CHAT_PHRASES[Number(b.dataset.chat)] || '' });
   $('#chat-bar').hidden = true;
   $('#chat-btn').setAttribute('aria-expanded', 'false');
 });
@@ -1458,6 +1470,8 @@ function openSettings() {
   $('#pref-contrast').checked = !!prefs.contrast;
   $('#pref-tap').checked = !!prefs.tapOnce;
   $('#pref-slapper').value = prefs.slapper || 'random';
+  $('#pref-analytics').checked = prefs.analytics !== false;
+  $('#pref-analytics').closest('label').hidden = !cloud.analyticsConfigured();
   renderAccount();
   $('#settings-overlay').hidden = false;
   loadStats();
@@ -1468,11 +1482,13 @@ $('#pref-sound').addEventListener('change', (e) => { prefs.sound = e.target.chec
 $('#pref-contrast').addEventListener('change', (e) => { prefs.contrast = e.target.checked; savePrefs(); applyPrefs(); });
 $('#pref-tap').addEventListener('change', (e) => { prefs.tapOnce = e.target.checked; savePrefs(); });
 $('#pref-slapper').addEventListener('change', (e) => { prefs.slapper = e.target.value; savePrefs(); });
+$('#pref-analytics').addEventListener('change', (e) => { prefs.analytics = e.target.checked; savePrefs(); cloud.setAnalyticsEnabled(prefs.analytics); });
 $('#slap-test').addEventListener('click', () => {
   const kind = pickCritter(prefs.slapper === 'off' ? 'random' : prefs.slapper);
   $('#settings-overlay').hidden = true;
   (kind === 'cat' ? sfx.meow : sfx.grunt)();
   slapMe(kind, 'Thulla!', 'This is what a thulla feels like', () => sfx.slap(true));
+  cloud.track('slap_preview', { critter: kind });
 });
 
 $('#sign-in-btn').addEventListener('click', async () => {
@@ -1534,6 +1550,7 @@ cloud.onUser(() => {
 // ===========================================================================
 applyPrefs();
 cloud.restore();
+cloud.initAnalytics(prefs.analytics !== false);
 renderAccount();
 try { $('#name-input').value = localStorage.getItem('thulla-name') || $('#name-input').value; } catch {}
 {
