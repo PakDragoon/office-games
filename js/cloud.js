@@ -20,27 +20,37 @@ const firebaseConfig = {
   storageBucket: 'wordle-party-81870.firebasestorage.app',
   messagingSenderId: '782876412988',
   appId: '1:782876412988:web:dbf115a0f2910e9615c739',
+  measurementId: '', // Google Analytics, e.g. 'G-XXXXXXXXXX' (see README: Analytics)
 };
 
 let loading = null;
 let user = null;
+let appPromise = null;
+
+// One shared Firebase app for sign-in, scores and analytics (the default app, so existing sign-ins carry on).
+function firebaseApp() {
+  appPromise ||= import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`).then((m) =>
+    m.getApps().find((a) => a.name === '[DEFAULT]') || m.initializeApp(firebaseConfig));
+  return appPromise;
+}
 const listeners = new Set();
 
 function load() {
   if (!loading) {
     loading = (async () => {
       const base = `https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}`;
-      const [appSdk, authSdk, fs] = await Promise.all([
-        import(`${base}/firebase-app.js`),
+      const [app, authSdk, fs] = await Promise.all([
+        firebaseApp(),
         import(`${base}/firebase-auth.js`),
         import(`${base}/firebase-firestore.js`),
       ]);
-      const app = appSdk.initializeApp(firebaseConfig);
       const auth = authSdk.getAuth(app);
       await new Promise((resolve) => {
         let first = true;
         authSdk.onAuthStateChanged(auth, (u) => {
+          const wasSignedIn = Boolean(user);
           user = u ? { uid: u.uid, name: u.displayName || 'Player', email: u.email || '', photo: u.photoURL || '' } : null;
+          if (user && !wasSignedIn && !first) track('login', { method: 'Google' });
           try { localStorage.setItem('wordleparty-signedin', user ? '1' : ''); } catch {}
           for (const fn of listeners) fn(user);
           if (first) { first = false; resolve(); }
@@ -222,6 +232,43 @@ export async function saveGame(game) {
     tx.set(gameRef, { ...game, at: fs.serverTimestamp() });
     return p;
   });
+}
+
+/* ---------------- analytics (Google Analytics through Firebase) ----------------
+   Loads for everyone (guests too) once measurementId is set, unless the player turns it
+   off in Settings. Page views are automatic; the game logs a few events (see README). */
+
+let analytics = null;
+let analyticsLoading = null;
+const queued = [];
+
+export const analyticsConfigured = () => Boolean(firebaseConfig.apiKey && firebaseConfig.measurementId);
+
+export function initAnalytics(enabled = true) {
+  if (!enabled || !analyticsConfigured() || analyticsLoading) return;
+  analyticsLoading = (async () => {
+    const [app, A] = await Promise.all([
+      firebaseApp(),
+      import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-analytics.js`),
+    ]);
+    if (!(await A.isSupported())) return null;
+    analytics = { A, inst: A.getAnalytics(app) };
+    queued.splice(0).forEach(([n, p]) => A.logEvent(analytics.inst, n, p));
+    return analytics;
+  })().catch(() => null);
+}
+
+export function setAnalyticsEnabled(on) {
+  if (analytics) analytics.A.setAnalyticsCollectionEnabled(analytics.inst, on);
+  else if (on) initAnalytics(true);
+}
+
+/** Log a custom event. Safe to call any time; does nothing when analytics is off or not set up. */
+export function track(name, params = {}) {
+  try {
+    if (analytics) analytics.A.logEvent(analytics.inst, name, params);
+    else if (analyticsLoading && queued.length < 50) queued.push([name, params]);
+  } catch {}
 }
 
 /* ---------------- errors ---------------- */

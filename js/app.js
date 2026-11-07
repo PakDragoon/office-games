@@ -60,7 +60,7 @@ const WORDS = {
   big: false,
 };
 /* ---------- Preferences (this device only) ---------- */
-const PREFS = { sound: true, contrast: false };
+const PREFS = { sound: true, contrast: false, analytics: true };
 try { Object.assign(PREFS, JSON.parse(localStorage.getItem('wordleparty-prefs') || '{}')); } catch {}
 function savePrefs() {
   try { localStorage.setItem('wordleparty-prefs', JSON.stringify(PREFS)); } catch {}
@@ -163,6 +163,7 @@ function hostCreate(attempt = 0) {
     S.myId = id;
     S.isHost = true;
     S.code = code;
+    cloud.track('room_created');
     H.conns.clear();
     H.room = {
       code,
@@ -312,6 +313,11 @@ function hostStartGame() {
   room.stats = {};
   room.history = [];
   room.matchRound = 0;
+  cloud.track('game_started', {
+    players: room.players.filter((p) => p.connected).length,
+    rounds_setting: room.maxRounds || 0, timer: room.timer || 0,
+    win_rule: room.winRule, hard: room.hard ? 1 : 0, crew: room.crew ? 1 : 0,
+  });
   hostStart();
 }
 
@@ -328,6 +334,7 @@ function hostBackToLobby() {
 function hostEndGame() {
   const room = H.room;
   if (room.status !== 'ended') return;
+  cloud.track('game_finished', { rounds: room.matchRound, players: Object.keys(room.stats).length });
   room.status = 'over';
   hostBroadcast();
 }
@@ -437,6 +444,7 @@ function hostCheckEnd() {
     clearTimeout(H.timer);
     hostRecordRound();
     room.status = room.maxRounds && room.matchRound >= room.maxRounds ? 'over' : 'ended';
+    if (room.status === 'over') cloud.track('game_finished', { rounds: room.matchRound, players: Object.keys(room.stats).length });
   }
 }
 
@@ -461,6 +469,10 @@ function hostRecordRound() {
     if (winner && p.id === winner.id) st.wins += 1;
   }
   room.history.push({ round: room.round, word: room.word, winner: winner ? winner.name : null });
+  cloud.track('round_finished', {
+    players: players.length, solved: players.filter((p) => p.solved).length,
+    round: room.matchRound, win_rule: room.winRule, hard: room.hard ? 1 : 0,
+  });
 
   if (room.crew && !cloud.currentUser()) {
     room.crewStatus = 'This round wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
@@ -652,6 +664,7 @@ function onMessage(msg) {
     case 'welcome':
       S.myId = msg.id;
       S.code = msg.code;
+      if (!S.isHost) cloud.track('room_joined');
       setBusy(false);
       break;
     case 'reject':
@@ -721,11 +734,21 @@ function applyState(v) {
   }
   if (roundOver && prev && prev.status === 'playing') sfx('over');
   if (roundOver) saveMyGame(v);
+  if (roundOver) trackMyRound(v);
   if (roundOver) {
     if (S.resultsClosedRound !== v.round || (v.status === 'over' && prev && prev.status !== 'over')) showResults(v);
   } else {
     $('results').hidden = true;
   }
+}
+
+// Every player (signed in or not) logs their own round once, for analytics.
+function trackMyRound(v) {
+  const m = me();
+  if (!m || S.trackedRound === v.round || !v.word) return;
+  if (!m.done && m.patterns.length === 0) return;
+  S.trackedRound = v.round;
+  cloud.track('round_played', { solved: m.solved ? 1 : 0, guesses: m.patterns.length });
 }
 
 // Signed-in players save their own result to their profile, once per round.
@@ -1252,6 +1275,7 @@ async function showMeaning(word) {
 
 /* ---------- share my result ---------- */
 async function shareResult() {
+  cloud.track('share_result');
   const v = S.view;
   const m = me();
   if (!v || !m) return;
@@ -1420,6 +1444,8 @@ async function openSettings() {
   $('account-error').textContent = '';
   $('pref-sound').checked = PREFS.sound;
   $('pref-contrast').checked = PREFS.contrast;
+  $('pref-analytics').checked = PREFS.analytics !== false;
+  $('pref-analytics').closest('label').hidden = !cloud.analyticsConfigured();
   renderAccount(cloud.currentUser());
   if (cloud.currentUser()) loadMyStats();
 }
@@ -1567,6 +1593,7 @@ $('signout-btn').addEventListener('click', async () => {
 });
 $('pref-sound').addEventListener('change', (e) => { PREFS.sound = e.target.checked; savePrefs(); if (PREFS.sound) sfx('rival'); });
 $('pref-contrast').addEventListener('change', (e) => { PREFS.contrast = e.target.checked; savePrefs(); });
+$('pref-analytics').addEventListener('change', (e) => { PREFS.analytics = e.target.checked; savePrefs(); cloud.setAnalyticsEnabled(PREFS.analytics); });
 $('again-btn').addEventListener('click', () => S.isHost && hostStart());
 $('end-btn').addEventListener('click', () => S.isHost && hostEndGame());
 $('newgame-btn').addEventListener('click', () => S.isHost && hostBackToLobby());
@@ -1719,5 +1746,6 @@ function wordStatusText() {
     // A host who signs in mid-room starts saving to their crew straight away.
     if (S.isHost && H.room && H.room.crew && !H.room.allTime) hostSetCrew(H.room.crew.name);
   });
+  cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();
 })();
