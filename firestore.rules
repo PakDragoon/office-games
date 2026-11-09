@@ -1,12 +1,14 @@
 rules_version = '2';
 // Paste this into Firebase console > Firestore Database > Rules, then click Publish.
 //
-// This one file covers BOTH games in the wordle-party-81870 project. Firestore only has
-// one set of rules per database, so publishing a Thulla-only file would break Wordle Party.
-// The Wordle Party section below is unchanged from the Wordle repo.
+// This one file covers ALL THREE games in the wordle-party-81870 project. Firestore only
+// has one set of rules per database, so publishing a file that lacks a game's section breaks
+// that game's saving. The Wordle Party and Thulla sections are unchanged from Thulla's file;
+// copy the Guesstimate section into Thulla's firestore.rules too, so either file is safe.
 //
 // Only players signed in with Google can read or save anything.
 // Wordle Party: crews, users. Thulla: thullaCrews, thullaUsers.
+// Guesstimate: guessCrews, guessUsers.
 // - Crews: any signed-in player can add a round; saved rounds can't be edited or deleted,
 //   and a crew's round count can only go up by one.
 // - Profiles: each player can only write their own profile.
@@ -144,6 +146,68 @@ service cloud.firestore {
         && d.rounds is int
         && d.losses is int && d.losses >= 0 && d.losses <= d.rounds
         && d.posSum is int && d.given is int && d.received is int;
+    }
+
+    // ============================ Guesstimate ===========================
+
+    match /guessCrews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validGuessCrew()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && validGuessCrew()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['room', 'difficulty', 'winner', 'players', 'at'])
+          && request.resource.data.room is string
+          && request.resource.data.difficulty in ['easy', 'normal', 'hard']
+          && request.resource.data.winner is string
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 1
+          && request.resource.data.players.size() <= 8;
+        allow update, delete: if false;
+      }
+    }
+
+    match /guessUsers/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validGuessUser()
+        && request.resource.data.plays == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validGuessUser()
+        && request.resource.data.plays == resource.data.plays + 1;
+      allow delete: if false;
+    }
+
+    function validGuessCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'games', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.games is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validGuessUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'plays', 'games', 'wins', 'rounds', 'points', 'kinds',
+                               'dailies', 'lastDaily', 'streak', 'bestStreak', 'bestDaily', 'updatedAt'])
+        && d.plays is int
+        && d.games is int && d.wins is int && d.wins >= 0 && d.wins <= d.games
+        && d.rounds is int && d.points is int && d.points >= 0 && d.points <= d.rounds * 100
+        && d.kinds is map
+        && d.dailies is int && d.lastDaily is string
+        && d.streak is int && d.bestStreak is int
+        && d.bestDaily is int && d.bestDaily >= 0 && d.bestDaily <= 100;
     }
   }
 }
