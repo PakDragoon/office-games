@@ -25,6 +25,7 @@
       --violet: #8b5cf6;
       --liar: #d63c58;
       --suit-red: #d0243f;
+      --rot: #5a3a1a;
       --art: #f3f5fc;
       --shadow: 0 1px 0 rgba(27, 30, 58, 0.04), 0 18px 40px -26px rgba(27, 30, 58, 0.4);
       --font: "Bricolage Grotesque", "Segoe UI", system-ui, -apple-system, sans-serif;
@@ -45,6 +46,7 @@
         --violet: #a98bff;
         --liar: #ff6a80;
         --suit-red: #ff5c73;
+        --rot: #8a5a2c;
         --art: #111317;
         --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
         color-scheme: dark;
@@ -115,6 +117,14 @@
     .g .t:nth-child(3) { background: var(--hit); } .g .t:nth-child(4) { background: var(--pink); } .g .t:nth-child(5) { background: var(--violet); }
     .w .t { width: 38px; height: 38px; font-size: 1.2rem; }
     .w .hit { background: var(--hit); } .w .near { background: var(--near); } .w .miss { background: var(--miss); }
+    .rot .tiles { gap: 4px; align-items: flex-start; }
+    .rot .t { position: relative; width: 36px; height: 36px; font-size: 1.15rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink); }
+    .rot .t.m1 { border-radius: 8px 8px 10px 10px; }
+    .rot .t.m2, .rot .t.m3 { color: var(--rot); border-color: var(--rot); background: color-mix(in srgb, var(--rot) 12%, var(--surface)); }
+    .rot .t.m2 { transform: skewX(-4deg); } .rot .t.m3 { transform: skewX(-6deg) scaleY(1.06); transform-origin: top; }
+    .rot .t i { position: absolute; top: calc(100% - 3px); width: 7px; border: 1.5px solid currentColor; border-top: 0; border-radius: 0 0 6px 6px; background: inherit; }
+    .rot .t.m1 i { color: var(--ink); } .rot .t.m2 i, .rot .t.m3 i { color: var(--rot); }
+    .rot .banana { width: 64px; margin-left: 10px; align-self: center; transform: rotate(-8deg); }
     .cards { display: flex; }
     .card {
       position: relative; display: grid; place-items: center; width: 44px; height: 62px; margin: 0 -4px;
@@ -143,6 +153,23 @@
 
   <ul class="games">
     <li>
+      <a class="game" href="https://pakdragoon.github.io/rotten/">
+        <div class="art rot" aria-hidden="true">
+          <div class="tiles">
+            <span class="t">R</span><span class="t">O</span><span class="t m1">T<i style="left:22px;height:6px"></i></span><span class="t m1">T<i style="left:8px;height:9px"></i><i style="left:22px;height:5px"></i></span>
+            <span class="t m2">E<i style="left:6px;height:14px"></i><i style="left:20px;height:22px"></i></span><span class="t m3">N<i style="left:5px;height:18px"></i><i style="left:15px;height:10px"></i><i style="left:23px;height:28px"></i></span>
+            <svg class="banana" viewBox="0 0 200 130"><path d="M36 44 C30 34 24 28 17 21" fill="none" stroke="#6b6a2a" stroke-width="9" stroke-linecap="round"/><circle cx="16" cy="20" r="5" fill="#3b2a18"/><path d="M30 46 C36 120 156 128 184 38 C178 40 174 41 171 43 C146 86 62 84 38 42 Z" fill="#e9b93c" stroke="#8a6420" stroke-width="3"/><path d="M38 42 C62 84 146 86 171 43 L179 41 C156 106 56 101 35 47 Z" fill="rgba(255,255,255,.28)"/><ellipse cx="82" cy="86" rx="5" ry="3.5" fill="#4a2a12"/><ellipse cx="120" cy="92" rx="4" ry="3" fill="#4a2a12"/><ellipse cx="148" cy="80" rx="3.5" ry="2.5" fill="#4a2a12"/><path d="M178 40c3-3 8-3 9 1s-3 6-7 5-4-4-2-6z" fill="#2e2014"/></svg>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Rotten</h2><span class="new">NEW</span></div>
+          <p>Type a word with the letters to pass the banana on before it splats. Nobody knows when it will go off, so be quick. Last one standing wins.</p>
+          <ul class="facts"><li>2 to 8 players</li><li>Words, English or Roman Urdu</li><li>Daily puzzle and practice</li></ul>
+          <span class="play">Play Rotten</span>
+        </div>
+      </a>
+    </li>
+    <li>
       <a class="game" href="https://pakdragoon.github.io/the-liar/">
         <div class="art liar" aria-hidden="true">
           <div class="tiles">
@@ -170,7 +197,7 @@
           </div>
         </div>
         <div class="body">
-          <div class="title"><h2>Guesstimate</h2><span class="new">NEW</span></div>
+          <div class="title"><h2>Guesstimate</h2></div>
           <p>Count the dots, track the ball, eyeball the angle, split the line, time seconds in your head. Everyone gets the same puzzle; closest guess wins.</p>
           <ul class="facts"><li>1 to 8 players</li><li>Daily puzzle and practice</li><li>About 5 minutes</li></ul>
           <span class="play">Play Guesstimate</span>
