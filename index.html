@@ -148,8 +148,8 @@
             <label class="select-field">After a splat
               <select id="set-afterSplat"><option value="keep">Keep the same letters</option><option value="new">New letters</option></select>
             </label>
-            <label class="select-field">At least 2 s per turn
-              <select id="set-minTurn"><option value="on">On</option><option value="off">Off</option></select>
+            <label class="select-field">Shortest turn
+              <select id="set-minTurn"><option value="5">5 seconds</option><option value="3">3 seconds</option><option value="8">8 seconds</option><option value="off">Off</option></select>
             </label>
             <label class="select-field">No repeated words
               <select id="set-noRepeat"><option value="game">Within a game</option><option value="room">For the whole room</option></select>
@@ -196,8 +196,12 @@
     <section class="play">
       <div class="table" id="table">
         <div class="seats" id="seats"></div>
-        <div class="centre">
+        <div class="banana-spot" id="banana-spot" hidden>
           <div class="banana-host" id="banana-host"></div>
+          <span class="banana-age" id="banana-age"></span>
+        </div>
+        <div class="centre">
+          <div class="turn-label" id="turn-label" aria-live="polite"></div>
           <div class="prompt" id="prompt" aria-live="polite"></div>
           <div class="timer" id="timer" hidden></div>
           <div class="flash" id="flash" aria-live="polite"></div>
@@ -267,6 +271,7 @@
       <div class="table solo-table">
         <div class="centre">
           <div class="banana-host" id="solo-banana"></div>
+          <span class="banana-age" id="solo-age"></span>
           <div class="prompt" id="solo-prompt" aria-live="polite"></div>
           <div class="timer" id="solo-timer"></div>
           <div class="flash" id="solo-flash" aria-live="polite"></div>

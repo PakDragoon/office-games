@@ -5,7 +5,7 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 // How long the banana lasts before it splats, picked at random from the room's range (ms)
 export const FUSES = { fast: [5000, 15000], normal: [10000, 30000], relaxed: [20000, 45000] };
-export const TIMES = { countdownMs: 3000, splatMs: 1800, minTurnMs: 2000, offlineOutMs: 20000 };
+export const TIMES = { countdownMs: 3000, splatMs: 1800, offlineOutMs: 20000 };
 // After this many splats on the same letters, they change even when the room keeps them
 export const PROMPT_MAX_SPLATS = 2;
 export const MAX_WORD = 30;
@@ -17,7 +17,7 @@ export const DEFAULT_SETTINGS = {
   match: 'open',       // open | 3 | 5 (best of)
   fuse: 'normal',      // fast | normal | relaxed
   showTimer: 'hidden', // hidden | shown
-  minTurn: 'on',       // on | off
+  minTurn: '5',        // seconds the holder always gets: 3 | 5 | 8 | off
   difficulty: 'normal',// easy | normal | hard | ramp
   promptLen: 'mix',    // mix | 2 | 3
   afterSplat: 'keep',  // keep | new
@@ -30,7 +30,7 @@ export const DEFAULT_SETTINGS = {
 
 const CHOICES = {
   lives: [1, 2, 3, 5], maxLives: ['start', 'plus1', 'none'], bonus: ['off', 'az', 'easy'], match: ['open', '3', '5'],
-  fuse: ['fast', 'normal', 'relaxed'], showTimer: ['hidden', 'shown'], minTurn: ['on', 'off'],
+  fuse: ['fast', 'normal', 'relaxed'], showTimer: ['hidden', 'shown'], minTurn: ['3', '5', '8', 'off'],
   difficulty: ['easy', 'normal', 'hard', 'ramp'], promptLen: ['mix', '2', '3'], afterSplat: ['keep', 'new'],
   words: ['en', 'mix', 'ur'], minLen: [3, 4, 5], noRepeat: ['game', 'room'], forms: ['block', 'allow'], hints: ['on', 'off'],
 };
@@ -48,6 +48,9 @@ export function maxLivesFor(st) {
   if (st.maxLives === 'plus1') return st.lives + 1;
   return 99;
 }
+
+// The least time a player gets when the banana reaches them (0 = no minimum)
+export const minTurnMs = (st) => (st.minTurn === 'off' ? 0 : (Number(st.minTurn) || 5) * 1000);
 
 export const matchTarget = (st) => (st.match === '3' ? 2 : st.match === '5' ? 3 : 0);
 

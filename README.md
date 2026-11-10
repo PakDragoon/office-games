@@ -12,7 +12,9 @@ Play at `https://pakdragoon.github.io/rotten/`.
 
 **Your turn.** Players sit round a table and one of them holds the banana. The holder gets 2 or 3 letters, like **AN**, and types any word with those letters together (b**an**ana, pl**an**et). A good word passes the banana to the next player with new letters. Everyone sees the holder type live, with the letters picked out.
 
-**Splat.** The banana splats at a random moment the room can't see. It browns and gets spots as it ages, which is a clue, not a clock. Whoever holds it loses a life; the banana moves on to the next player. At 0 lives you're out and watch. The last player standing wins.
+**Whose turn.** The banana sits next to whoever holds it and moves round the table as it's passed. The middle of the table says whose turn it is, their seat is tagged, and your table glows when it's yours.
+
+**Splat.** The banana splats at a random moment the room can't see. It ages from Fresh to Ripe, Spotty, Mushy and Rotten! (spots, then bruises, stink lines and flies), which is a clue, not a clock. Whoever holds it loses a life; the banana moves on to the next player. At 0 lives you're out and watch. The last player standing wins.
 
 **Bonus life.** Use every letter of the alphabet across your words and you get a life back. The **You** panel (and the built-in keyboard) shows which letters you've used.
 
@@ -33,7 +35,7 @@ Play at `https://pakdragoon.github.io/rotten/`.
 | Games | **Play until we stop**, Best of 3, Best of 5 |
 | Letter length | **2 or 3 letters**, 2, 3 |
 | After a splat | **Keep the same letters**, New letters (letters always change after 2 splats in a row) |
-| At least 2 s per turn | **On**, Off (when the banana is passed with under 2 seconds left, the holder gets 2) |
+| Shortest turn | **5 s**, 3 s, 8 s, Off (when the banana is passed with less time left than this, the holder gets this long) |
 | No repeated words | **Within a game**, For the whole room |
 | Plurals and -ing forms | **Count as a repeat**, Count as new words |
 | Typing hints | **Say "not a word" while typing**, Off (find out when you send) |
@@ -78,7 +80,8 @@ There's no server of our own. The host's browser runs the game: it holds the hid
 | `style.css` | All styling (tokens and font shared with the other games) |
 | `js/engine.js` | Game rules: settings, checking words, Roman Urdu spelling, repeats, prompts, turn order, bonus letters, the daily. No network or DOM |
 | `js/prompts.js` | Generated prompt lists (see Words) |
-| `js/banana.js` | The banana: ageing colour and spots, the splat |
+| `js/banana.js` | The banana: ageing colour, spots, bruises, stink lines and flies, the rot stage label, the splat |
+| `js/logo.js` | The melting ROTTEN logo (SVG drips, warped letters, acid drops) |
 | `js/keys.js` | The built-in keyboard |
 | `js/app.js` | Rooms (host and players), screens, daily and practice |
 | `js/cloud.js` | Firebase sign-in, crew scores, personal stats, analytics |

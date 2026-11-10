@@ -29,6 +29,7 @@ check('bad values fall back', E.cleanSettings({ lives: 9, fuse: 'x', minLen: 5 }
 check('unknown keys dropped', !('evil' in E.cleanSettings({ evil: 1 })));
 check('max lives', E.maxLivesFor({ lives: 3, maxLives: 'start' }) === 3 && E.maxLivesFor({ lives: 3, maxLives: 'plus1' }) === 4
   && E.maxLivesFor({ lives: 3, maxLives: 'none' }) === 99);
+check('min turn', E.minTurnMs({ minTurn: '5' }) === 5000 && E.minTurnMs({ minTurn: 'off' }) === 0 && E.minTurnMs(E.cleanSettings({ minTurn: 'on' })) === 5000);
 check('match target', E.matchTarget({ match: 'open' }) === 0 && E.matchTarget({ match: '3' }) === 2 && E.matchTarget({ match: '5' }) === 3);
 
 // ---------- Fuse ----------

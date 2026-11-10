@@ -1,7 +1,8 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
-import { createBanana } from './banana.js';
+import { createBanana, stageOf } from './banana.js';
 import { createKeyboard } from './keys.js';
+import { meltingLogo } from './logo.js';
 
 /* =========================================================
    Rotten
@@ -395,10 +396,11 @@ function hostWakeAt(at) {
 // Whoever just got the banana has at least a moment to answer
 function hostMinTurn() {
   const room = H.room;
-  if (room.settings.minTurn !== 'on') return;
+  const min = E.minTurnMs(room.settings);
+  if (!min) return;
   const now = Math.max(Date.now(), room.pausedUntil, room.startAt);
-  if (room.fuseEnd - now < E.TIMES.minTurnMs) {
-    room.fuseEnd = now + E.TIMES.minTurnMs;
+  if (room.fuseEnd - now < min) {
+    room.fuseEnd = now + min;
     hostScheduleFuse();
   }
 }
@@ -870,6 +872,7 @@ function renderGame(v) {
     S.splatSeen = v.lastSplat.seq;
     const who = v.lastSplat.pid === S.myId ? 'You' : nameOf(v, v.lastSplat.pid);
     banana.splat(PREFS.anim);
+    setAge($('banana-age'), -1);
     SOUND.splat();
     clearTimeout(S.unsplatTimer);
     if (v.status === 'play') S.unsplatTimer = setTimeout(() => banana.reset(), Math.max(300, v.pausedFor));
@@ -938,15 +941,27 @@ function renderSeats(v) {
     const x = 50 + 41 * Math.cos(a), y = 50 + 39 * Math.sin(a);
     const holder = p.id === v.holder;
     const tag = !p.connected ? 'Offline' : p.away ? 'Away' : '';
+    const turnTag = holder && v.status === 'play' && !tag ? (p.id === S.myId ? 'Your turn' : 'Turn') : '';
     const initial = esc([...p.name][0] || '?').toUpperCase();
     return `<div class="seat pc${p.color}${holder ? ' holder' : ''}${p.alive ? '' : ' out'}${active(p) ? '' : ' off'}${p.id === S.myId ? ' me' : ''}"
       style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
       <span class="face">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : initial}</span>
       <span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span>
       <span class="lives">${v.status === 'over' && p.place === 1 ? '<span class="crown">Winner</span>' : hearts(p.lives, cap)}</span>
-      ${tag ? `<span class="seat-tag">${tag}</span>` : ''}
+      ${tag ? `<span class="seat-tag">${tag}</span>` : turnTag ? `<span class="seat-tag turn">${turnTag}</span>` : ''}
     </div>`;
   }).join('');
+  // The banana sits between the table's centre and whoever holds it
+  const at = (pausedNow(v) || v.status === 'over') && v.lastSplat ? v.lastSplat.pid : v.holder;
+  const idx = seated.findIndex((p) => p.id === at);
+  const spot = $('banana-spot');
+  if (idx >= 0) {
+    const a = -Math.PI / 2 + (idx / n) * Math.PI * 2;
+    spot.style.left = `${(50 + 41 * 0.66 * Math.cos(a)).toFixed(2)}%`;
+    spot.style.top = `${(50 + 39 * 0.66 * Math.sin(a)).toFixed(2)}%`;
+    spot.hidden = false;
+  } else if (v.status !== 'over') spot.hidden = true;
+  $('table').classList.toggle('my-turn', isMyTurn(v));
 }
 
 function renderCentre(v) {
@@ -956,6 +971,12 @@ function renderCentre(v) {
   const prompt = v.status === 'play' ? v.prompt : '';
   $('prompt').innerHTML = prompt ? [...prompt].map((c) => `<span class="tile">${esc(c)}</span>`).join('') : '';
   $('prompt').classList.toggle('mine', isMyTurn(v));
+  const holder = pOf(v, v.holder);
+  const label = $('turn-label');
+  label.className = `turn-label${isMyTurn(v) ? ' mine' : ''}`;
+  label.innerHTML = v.status !== 'play' || !holder ? ''
+    : isMyTurn(v) ? 'Your turn!'
+    : `<span class="pen-dot pc${holder.color}"></span>${esc(holder.name)}’s turn`;
   $('timer').hidden = v.fuseLeft == null || v.status !== 'play';
   if (v.status === 'over') {
     const w = v.winner ? pOf(v, v.winner) : null;
@@ -1166,7 +1187,11 @@ function startLoop() {
     const since = performance.now() - S.viewAt;
     const live = v.status === 'play' && since >= v.startsIn && since >= v.pausedFor;
     const max = E.FUSES[v.settings.fuse][1];
-    if (v.status === 'play' && since >= v.pausedFor) banana.setRot((v.fuseAge + since) / max);
+    if (v.status === 'play' && since >= v.pausedFor) {
+      const rot = (v.fuseAge + since) / max;
+      banana.setRot(rot);
+      setAge($('banana-age'), since >= v.startsIn ? rot : -1);
+    } else if (v.status === 'play') setAge($('banana-age'), -1);
     banana.setLive(live);
     if (v.fuseLeft != null && v.status === 'play') {
       const left = Math.max(0, v.fuseLeft - since);
@@ -1177,6 +1202,14 @@ function startLoop() {
   };
   loopId = requestAnimationFrame(frame);
 }
+// The rot stage under the banana: Fresh, Ripe, Spotty, Mushy, Rotten!
+function setAge(el, rot) {
+  const text = rot < 0 ? '' : stageOf(rot);
+  if (el.textContent === text) return;
+  el.textContent = text;
+  el.className = `banana-age ${text.replace('!', '').toLowerCase()}`;
+}
+
 function stopLoop() {
   cancelAnimationFrame(loopId);
   loopId = 0;
@@ -1584,12 +1617,13 @@ function practiceSolved(word) {
   // Like a room: the next letters, but the same banana keeps ageing (with a moment to answer)
   const p = E.pickPrompt(SOLO.bands, E.bandFor(PRACTICE.difficulty, SOLO.wordsPlayed), 'mix', Math.random, SOLO.prompts);
   SOLO.prompts = [p, ...SOLO.prompts].slice(0, 40);
-  SOLO.fuseEnd = Math.max(SOLO.fuseEnd, performance.now() + E.TIMES.minTurnMs);
+  SOLO.fuseEnd = Math.max(SOLO.fuseEnd, performance.now() + E.minTurnMs({ minTurn: '5' }));
   soloShowPrompt(p);
 }
 
 function practiceSplat() {
   soloBanana.splat(PREFS.anim);
+  setAge($('solo-age'), -1);
   SOUND.splat();
   soloFlash(SOLO.streak ? `Splat! Streak of ${SOLO.streak} over` : 'Splat!', 'splat');
   SOLO.streak = 0;
@@ -1611,10 +1645,12 @@ function soloLoop() {
       const ms = now - SOLO.promptStart;
       $('solo-timer').textContent = E.formatMs(ms);
       soloBanana.setRot(ms / 30000);
+      setAge($('solo-age'), ms / 30000);
       soloBanana.setLive(true);
     } else {
       if (now < SOLO.pauseUntil) return;
       soloBanana.setRot((now - SOLO.fuseStart) / SOLO.fuseMax);
+      setAge($('solo-age'), (now - SOLO.fuseStart) / SOLO.fuseMax);
       soloBanana.setLive(true);
       $('solo-timer').textContent = '';
       if (t - SOLO.lastTick > TICK_MS) { SOLO.lastTick = t; SOUND.tick(); }
@@ -1770,7 +1806,7 @@ if (new URLSearchParams(location.search).has('debug')) window.__rotten = { S, H,
    Start
    ========================================================= */
 (function init() {
-  $('logo-row').innerHTML = [...'ROTTEN'].map((c, i) => `<span class="tile${i === 4 ? ' odd' : ''}">${c}</span>`).join('');
+  $('logo-row').innerHTML = meltingLogo();
   const saved = store.get('name', '');
   if (saved) $('name-input').value = saved;
   const room = new URLSearchParams(location.search).get('room');
