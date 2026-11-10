@@ -15,7 +15,7 @@ Play at `https://pakdragoon.github.io/the-liar/`.
 **Drawing.** Players take turns adding to one shared drawing, in a random order that stays the same for all 3 rounds. The liar is never first, so there's always something on the paper before they draw. Everyone draws in their own colour and watches each line appear live. You get a chime and a buzz when it's your turn.
 
 - **One line** (host setting): pen down, draw, lift. You have 15 seconds to start and 10 seconds for the line.
-- **Free draw** (host setting): as many strokes as you like for 5, 8, 12, 15, 20 or 30 seconds.
+- **Free draw** (host setting): as many strokes as you like for 5, 8, 12, 15, 20 or 30 seconds. Finished early? Press **Done drawing** and the turn moves on.
 
 Draw enough to prove you know the word, but not so much that the liar can work it out.
 

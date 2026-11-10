@@ -182,6 +182,7 @@
           <b id="turn-title"></b>
           <span id="turn-sub"></span>
         </div>
+        <button class="btn primary wide" id="turn-done" type="button" hidden>Done drawing</button>
         <ol class="order-list" id="order-list"></ol>
         <button class="vote-now" id="vote-now" type="button" aria-pressed="false">
           <b>Ready to vote</b><span id="vote-now-count"></span>
@@ -246,7 +247,7 @@
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <p>3 to 8 players. Everyone gets the same secret word, except one player: <b>the liar</b>, who only sees the category.</p>
   <h3>Drawing</h3>
-  <p>Players take turns adding to one shared drawing, in an order picked at random (the liar is never first). There are 3 rounds in the same order. Depending on the room, a turn is <b>one line</b> (pen down, draw, lift) or <b>free drawing</b> for a few seconds. Every player draws in their own colour.</p>
+  <p>Players take turns adding to one shared drawing, in an order picked at random (the liar is never first). There are 3 rounds in the same order. Depending on the room, a turn is <b>one line</b> (pen down, draw, lift) or <b>free drawing</b> for a set time (press <b>Done drawing</b> to finish early). Every player draws in their own colour.</p>
   <p>Draw enough to prove you know the word, but not so much that the liar can work it out.</p>
   <h3>Voting</h3>
   <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. The most votes is accused; a tie means nobody is.</p>

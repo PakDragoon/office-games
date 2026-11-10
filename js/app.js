@@ -123,7 +123,7 @@ function chime() {
 const S = {
   myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false,
   heard: 0, reconnecting: false, secret: null, gameShown: -1, turnKey: '', phaseKey: '', savedGame: -1,
-  penTimers: [], strokeDone: false,
+  penTimers: [], strokeDone: false, penOn: false,
 };
 const H = { room: null, conns: new Map(), seen: new Map(), phaseTimer: 0, turnTimer: 0 };
 
@@ -210,6 +210,7 @@ function hostOnMessage(conn, msg) {
     case 'ink': return hostInk(conn.peer, msg.sid, msg.pts, msg.end === true);
     case 'ready': return hostReady(conn.peer);
     case 'votenow': return hostVoteNow(conn.peer, msg.on === true);
+    case 'done': return hostDone(conn.peer);
     case 'vote': return hostVote(conn.peer, msg.target);
     case 'guess': return hostGuess(conn.peer, msg.word);
     case 'sync': return sendDrawing(conn);
@@ -441,6 +442,14 @@ function hostInk(pid, sid, pts, end) {
   if (pid !== S.myId) onMessage(relay);
   if (end && room.settings.mode === 'stroke') return hostEndTurn();
   if (changed) hostBroadcast();
+}
+
+// Free draw: the drawer finished early and pressed Done
+function hostDone(pid) {
+  const room = H.room;
+  if (!room || room.status !== 'draw' || room.order[room.turn] !== pid || room.settings.mode !== 'free') return;
+  if (Date.now() < room.turnStart - 300) return;
+  hostEndTurn();
 }
 
 function hostEndTurn() {
@@ -853,6 +862,7 @@ let clockTimer = 0;
 function stopPen() {
   S.penTimers.forEach(clearTimeout);
   S.penTimers = [];
+  S.penOn = false;
   sheet.disable();
 }
 
@@ -990,11 +1000,12 @@ function renderDraw(v) {
           onInk: (sid, pts, end) => toHost({ t: 'ink', sid, pts, end }),
           onStroke: () => { if (single) { S.strokeDone = true; renderTurnStatus(S.view); } },
         });
+        S.penOn = true;
         renderTurnStatus(S.view);
       }, startsIn));
       if (!single) {
         // Free draw: the pen lifts when time is up (the host also stops accepting ink)
-        S.penTimers.push(setTimeout(() => { sheet.disable(); renderTurnStatus(S.view); }, Math.max(0, v.endsIn)));
+        S.penTimers.push(setTimeout(() => { sheet.disable(); S.penOn = false; renderTurnStatus(S.view); }, Math.max(0, v.endsIn)));
       }
     }
   }
@@ -1018,13 +1029,15 @@ function renderTurnStatus(v) {
   if (myTurn) {
     title = 'Your turn';
     if (single) sub = S.strokeDone ? 'Done. Nice line.' : v.strokeLive ? 'Keep going, lift to finish' : 'Draw one line on the paper';
-    else sub = 'Draw until the time runs out';
+    else sub = S.penOn ? 'Draw, then press Done (or let the clock run out)' : 'Done. Over to the next player';
   } else {
     title = `${drawer ? drawer.name : 'Someone'} is drawing`;
     sub = single ? (v.strokeLive ? 'Drawing their line…' : 'Thinking about their line…') : 'Watch closely';
   }
   $('turn-title').textContent = title;
   $('turn-sub').textContent = sub;
+  // Free draw: finish early instead of waiting for the clock
+  $('turn-done').hidden = !(myTurn && !single && S.penOn);
   $('sheet-host').classList.toggle('my-turn', myTurn);
 }
 
@@ -1044,6 +1057,17 @@ function renderOrder(v) {
       <span class="tag">${tag}</span><span class="rounds">${dots}</span></li>`;
   }).join('');
 }
+
+$('turn-done').addEventListener('click', () => {
+  const v = S.view;
+  if (!v || v.status !== 'draw' || v.drawer !== S.myId || !S.penOn) return;
+  S.penTimers.forEach(clearTimeout);
+  S.penTimers = [];
+  sheet.disable();   // sends the last points of a stroke still in progress first
+  S.penOn = false;
+  toHost({ t: 'done' });
+  renderTurnStatus(v);
+});
 
 $('vote-now').addEventListener('click', () => {
   const v = S.view;
