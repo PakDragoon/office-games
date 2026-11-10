@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Quick multiplayer games for a break with your colleagues. Free, no sign-up: one person hosts, everyone joins with a code.">
+  <title>Office games</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><rect x='6' y='6' width='9' height='9' rx='2' fill='%233e9b5e'/><rect x='17' y='6' width='9' height='9' rx='2' fill='%23ffffff'/><rect x='6' y='17' width='9' height='9' rx='2' fill='%235b9cf8'/><rect x='17' y='17' width='9' height='9' rx='2' fill='%23e0566e'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #e9ecf7;
+      --surface: #ffffff;
+      --ink: #1b1e3a;
+      --muted: #5d6285;
+      --line: #c4c9e3;
+      --hit: #3e9b5e;
+      --near: #d39b22;
+      --miss: #7a7f99;
+      --blue: #3f7ef0;
+      --pink: #e2559a;
+      --violet: #8b5cf6;
+      --liar: #d63c58;
+      --suit-red: #d0243f;
+      --art: #f3f5fc;
+      --shadow: 0 1px 0 rgba(27, 30, 58, 0.04), 0 18px 40px -26px rgba(27, 30, 58, 0.4);
+      --font: "Bricolage Grotesque", "Segoe UI", system-ui, -apple-system, sans-serif;
+      color-scheme: light;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e0f12;
+        --surface: #15171b;
+        --ink: #e8e9ec;
+        --muted: #8d919b;
+        --line: #2a2d33;
+        --hit: #4fb477;
+        --near: #d8a640;
+        --miss: #3a3d46;
+        --blue: #5b9cf8;
+        --pink: #ff6fae;
+        --violet: #a98bff;
+        --liar: #ff6a80;
+        --suit-red: #ff5c73;
+        --art: #111317;
+        --shadow: 0 1px 0 rgba(0, 0, 0, 0.3), 0 18px 40px -26px rgba(0, 0, 0, 0.9);
+        color-scheme: dark;
+      }
+    }
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { min-height: 100%; }
+    body {
+      margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 16px; line-height: 1.5;
+      -webkit-tap-highlight-color: transparent;
+      padding: env(safe-area-inset-top, 0px) 0 env(safe-area-inset-bottom, 0px);
+    }
+    a { color: inherit; }
+    :focus-visible { outline: 3px solid var(--blue); outline-offset: 3px; }
+
+    main { width: 100%; max-width: 1120px; margin: 0 auto; padding: 3.5rem 1.5rem 2.5rem; display: grid; gap: 2.25rem; }
+    header { display: grid; gap: 0.9rem; max-width: 46rem; }
+    .marks { display: flex; gap: 6px; }
+    .marks i { width: 30px; height: 30px; border-radius: 7px; animation: in 0.45s cubic-bezier(.3, 1.4, .5, 1) both; }
+    .marks i:nth-child(1) { background: var(--hit); }
+    .marks i:nth-child(2) { background: var(--surface); border: 1.5px solid var(--line); animation-delay: 0.06s; }
+    .marks i:nth-child(3) { background: var(--blue); animation-delay: 0.12s; }
+    .marks i:nth-child(4) { background: transparent; border: 1.5px solid var(--liar); transform: rotate(-9deg) translateY(-3px); animation-delay: 0.18s; }
+    @keyframes in { from { transform: translateY(-10px); opacity: 0; } }
+    h1 { margin: 0; font-size: clamp(2.8rem, 9vw, 4.4rem); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95; }
+    .lede { margin: 0; font-size: 1.15rem; color: var(--ink); max-width: 40ch; }
+    .how { margin: 0; color: var(--muted); }
+
+    .games { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; }
+    @media (max-width: 760px) { .games { grid-template-columns: minmax(0, 1fr); } main { padding-top: 2.5rem; } }
+    .game {
+      position: relative; display: grid; grid-template-rows: auto 1fr; height: 100%;
+      background: var(--surface); border: 1px solid var(--line); border-radius: 18px; overflow: hidden;
+      text-decoration: none; box-shadow: var(--shadow); transition: transform 0.15s ease, border-color 0.15s ease;
+    }
+    .game:hover { transform: translateY(-2px); border-color: var(--ink); }
+    .art {
+      display: grid; place-items: center; height: 150px; border-bottom: 1px solid var(--line);
+      background: radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--ink) 9%, transparent) 1px, transparent 0) 0 0 / 18px 18px, var(--art);
+    }
+    .body { display: grid; gap: 0.6rem; align-content: start; padding: 1.1rem 1.2rem 1.25rem; }
+    .title { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
+    .title h2 { margin: 0; font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em; }
+    .new {
+      font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; color: var(--bg); background: var(--liar);
+      border-radius: 999px; padding: 0.12rem 0.55rem 0.15rem;
+    }
+    .body p { margin: 0; color: var(--muted); }
+    .facts { list-style: none; margin: 0.15rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .facts li { font-size: 0.82rem; font-weight: 600; color: var(--muted); border: 1px solid var(--line); border-radius: 999px; padding: 0.15rem 0.6rem; }
+    .play {
+      justify-self: start; margin-top: 0.35rem; font-weight: 700; color: var(--bg); background: var(--ink);
+      border-radius: 10px; padding: 0.6rem 1rem;
+    }
+
+    /* Each game's own mark, drawn small */
+    .tiles { display: flex; gap: 5px; align-items: flex-end; }
+    .t {
+      display: grid; place-items: center; width: 40px; height: 40px; border-radius: 8px;
+      font-weight: 800; font-size: 1.35rem; color: #fff;
+    }
+    .liar .t { color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink); }
+    .liar .t.small { width: 26px; height: 26px; font-size: 0.85rem; color: var(--muted); border-color: var(--line); border-radius: 6px; }
+    .liar .t.odd { color: var(--liar); border-color: var(--liar); transform: rotate(-9deg) translateY(-5px); }
+    .liar .gap { width: 6px; }
+    .g .t svg { width: 60%; height: 60%; fill: currentColor; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+    .g .t:nth-child(1) { background: var(--blue); } .g .t:nth-child(2) { background: var(--near); }
+    .g .t:nth-child(3) { background: var(--hit); } .g .t:nth-child(4) { background: var(--pink); } .g .t:nth-child(5) { background: var(--violet); }
+    .w .t { width: 38px; height: 38px; font-size: 1.2rem; }
+    .w .hit { background: var(--hit); } .w .near { background: var(--near); } .w .miss { background: var(--miss); }
+    .cards { display: flex; }
+    .card {
+      position: relative; display: grid; place-items: center; width: 44px; height: 62px; margin: 0 -4px;
+      background: #fff; color: #1b1e3a; border: 1.5px solid rgba(27, 30, 58, 0.25); border-radius: 7px;
+      font-weight: 800; font-size: 1.35rem; box-shadow: 0 6px 14px -8px rgba(0, 0, 0, 0.5);
+    }
+    .card::after { content: attr(data-s); position: absolute; top: 2px; left: 5px; font-size: 0.6rem; }
+    .card.red { color: #d0243f; }
+    .card:nth-child(1) { transform: rotate(-12deg) translateY(6px); }
+    .card:nth-child(2) { transform: rotate(-5deg) translateY(1px); }
+    .card:nth-child(3) { transform: rotate(2deg); }
+    .card:nth-child(4) { transform: rotate(9deg) translateY(4px); }
+
+    footer { color: var(--muted); font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="marks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    <h1>office games</h1>
+    <p class="lede">Quick multiplayer games for a break with your colleagues. Free, nothing to install, no sign-up.</p>
+    <p class="how">One person hosts and gets a 4-letter code; everyone else joins with it, on a laptop or a phone.</p>
+  </header>
+
+  <ul class="games">
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/the-liar/">
+        <div class="art liar" aria-hidden="true">
+          <div class="tiles">
+            <span class="t small">T</span><span class="t small">H</span><span class="t small">E</span><span class="gap"></span>
+            <span class="t">L</span><span class="t odd">I</span><span class="t">A</span><span class="t">R</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>The Liar</h2><span class="new">NEW</span></div>
+          <p>Everyone draws the same secret word, one line at a time. One of you doesn’t know it and is bluffing with every stroke. Find the liar.</p>
+          <ul class="facts"><li>3 to 8 players</li><li>Drawing and bluffing</li><li>About 5 minutes a game</li></ul>
+          <span class="play">Play The Liar</span>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/guesstimate/">
+        <div class="art g" aria-hidden="true">
+          <div class="tiles">
+            <span class="t"><svg viewBox="0 0 24 24"><circle cx="7" cy="8" r="2.6"/><circle cx="16" cy="6.5" r="2.6"/><circle cx="11.5" cy="15" r="2.6"/><circle cx="18" cy="16.5" r="2.6"/><circle cx="5.5" cy="17" r="2"/></svg></span>
+            <span class="t"><svg viewBox="0 0 24 24"><path d="M3 15 L10 21 L21 5" fill="none" stroke-dasharray="2.5 2.5"/><circle cx="21" cy="5" r="2.8"/></svg></span>
+            <span class="t"><svg viewBox="0 0 24 24"><path d="M4 19H21M4 19L16 5" fill="none"/><path d="M11 19a7 7 0 0 0 -2.4 -5.3" fill="none"/></svg></span>
+            <span class="t"><svg viewBox="0 0 24 24"><path d="M3 13H21" fill="none"/><circle cx="3.5" cy="13" r="2.2"/><path d="M13 5v4.5M10.5 6.5L13 9.5L15.5 6.5" fill="none"/></svg></span>
+            <span class="t"><svg viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="7.5" fill="none"/><path d="M12 13.5V9.5M9.5 3h5M12 3v3M18.3 7.2l1.4-1.4" fill="none"/></svg></span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Guesstimate</h2><span class="new">NEW</span></div>
+          <p>Count the dots, track the ball, eyeball the angle, split the line, time seconds in your head. Everyone gets the same puzzle; closest guess wins.</p>
+          <ul class="facts"><li>1 to 8 players</li><li>Daily puzzle and practice</li><li>About 5 minutes</li></ul>
+          <span class="play">Play Guesstimate</span>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/thulla/">
+        <div class="art" aria-hidden="true">
+          <div class="cards">
+            <span class="card" data-s="♠">T</span><span class="card red" data-s="♥">H</span><span class="card" data-s="♣">U</span><span class="card red" data-s="♦">L</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Thulla</h2></div>
+          <p>The Pakistani card game. Get rid of your cards before your friends do. Can’t follow suit? Hit them with a thulla.</p>
+          <ul class="facts"><li>2 to 8 players</li><li>Cards</li><li>About 10 minutes a round</li></ul>
+          <span class="play">Play Thulla</span>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/wordle/">
+        <div class="art w" aria-hidden="true">
+          <div class="tiles">
+            <span class="t hit">W</span><span class="t miss">O</span><span class="t near">R</span><span class="t hit">D</span><span class="t miss">L</span><span class="t hit">E</span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Wordle Party</h2></div>
+          <p>Race your friends on the same Wordle word. Watch their colours fill in live, never their letters.</p>
+          <ul class="facts"><li>Up to 5 players</li><li>Words</li><li>A few minutes a round</li></ul>
+          <span class="play">Play Wordle Party</span>
+        </div>
+      </a>
+    </li>
+  </ul>
+
+  <footer>
+    <span>Bookmark this page to find every game in one place.</span>
+    <span>Works best in Chrome, Edge, Firefox or Safari.</span>
+  </footer>
+</main>
+</body>
+</html>
