@@ -8,7 +8,7 @@ export const ROUNDS = 3;
 export const BOARD = { w: 800, h: 600 };
 // One-stroke mode: time to start your line, and the longest a line may last
 export const STROKE = { startMs: 15000, maxMs: 10000 };
-export const FREE_SECONDS = [5, 8, 12];
+export const FREE_SECONDS = [5, 8, 12, 15, 20, 30];
 export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 30000 };
 export const OPTION_COUNT = 12;
 export const MAX_INK = 4000;   // numbers (x, y pairs) allowed in one stroke

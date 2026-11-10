@@ -18,7 +18,7 @@ const PEER_OPTIONS = { debug: 1 };
 const PING_MS = 2000;
 const AWAY_MS = 9000;
 const LOST_MS = 12000;
-const MAX_STROKES_PER_TURN = 80;
+const MAX_STROKES_PER_TURN = 200;
 
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -36,6 +36,7 @@ const store = {
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
 const ROOM_PREFS = { mode: 'stroke', seconds: 8, categories: [], ...store.get('room', {}) };
+if (!E.FREE_SECONDS.includes(ROOM_PREFS.seconds)) ROOM_PREFS.seconds = 8;
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
