@@ -1,0 +1,339 @@
+rules_version = '2';
+// Paste this into Firebase console > Firestore Database > Rules, then click Publish.
+//
+// This one file covers ALL FIVE games in the wordle-party-81870 project. Firestore only
+// has one set of rules per database, so publishing a file that lacks a game's section breaks
+// that game's saving. The same file lives in the Thulla, Guesstimate, The Liar and Rotten repos;
+// keep all copies identical, so whichever one is published, every game keeps saving.
+//
+// Only players signed in with Google can read or save anything.
+// Wordle Party: crews, users. Thulla: thullaCrews, thullaUsers.
+// Guesstimate: guessCrews, guessUsers. The Liar: liarCrews, liarUsers.
+// Rotten: rottenCrews, rottenUsers.
+// - Crews: any signed-in player can add a round; saved rounds can't be edited or deleted,
+//   and a crew's round count can only go up by one.
+// - Profiles: each player can only write their own profile.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isGoogleUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    // ===================== Wordle Party (unchanged) =====================
+
+    match /crews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validCrew()
+        && request.resource.data.rounds == 1;
+      allow update: if isGoogleUser()
+        && validCrew()
+        && request.resource.data.rounds == resource.data.rounds + 1;
+      allow delete: if false;
+
+      match /rounds/{roundId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['word', 'winRule', 'hard', 'winner', 'room', 'players', 'at'])
+          && request.resource.data.word is string
+          && request.resource.data.word.size() == 5
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 1
+          && request.resource.data.players.size() <= 5;
+        allow update, delete: if false;
+      }
+    }
+
+    match /users/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validUser()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validUser()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if isGoogleUser() && request.auth.uid == uid;
+        allow create: if isGoogleUser()
+          && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['word', 'room', 'solved', 'guesses', 'ms', 'won', 'opener', 'at'])
+          && request.resource.data.word is string
+          && request.resource.data.word.size() == 5
+          && request.resource.data.guesses is int
+          && request.resource.data.guesses >= 0
+          && request.resource.data.guesses <= 6;
+        allow update, delete: if false;
+      }
+    }
+
+    function validCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'rounds', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.rounds is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'games', 'wins', 'solved', 'guessSum', 'bestMs',
+                               'streak', 'bestStreak', 'dist', 'openers', 'updatedAt'])
+        && d.games is int
+        && d.dist is list && d.dist.size() == 6
+        && d.openers is map;
+    }
+
+    // ============================== Thulla ==============================
+
+    match /thullaCrews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validThullaCrew()
+        && request.resource.data.rounds == 1;
+      allow update: if isGoogleUser()
+        && validThullaCrew()
+        && request.resource.data.rounds == resource.data.rounds + 1;
+      allow delete: if false;
+
+      match /rounds/{roundId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['room', 'loser', 'players', 'at'])
+          && request.resource.data.room is string
+          && request.resource.data.loser is string
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 2
+          && request.resource.data.players.size() <= 8;
+        allow update, delete: if false;
+      }
+    }
+
+    match /thullaUsers/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validThullaUser()
+        && request.resource.data.rounds == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validThullaUser()
+        && request.resource.data.rounds == resource.data.rounds + 1;
+      allow delete: if false;
+    }
+
+    function validThullaCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'rounds', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.rounds is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validThullaUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'rounds', 'losses', 'posSum', 'playersSum',
+                               'given', 'received', 'updatedAt'])
+        && d.rounds is int
+        && d.losses is int && d.losses >= 0 && d.losses <= d.rounds
+        && d.posSum is int && d.given is int && d.received is int;
+    }
+
+    // ============================ Guesstimate ===========================
+
+    match /guessCrews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validGuessCrew()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && validGuessCrew()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['room', 'difficulty', 'winner', 'players', 'at'])
+          && request.resource.data.room is string
+          && request.resource.data.difficulty in ['easy', 'normal', 'hard']
+          && request.resource.data.winner is string
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 1
+          && request.resource.data.players.size() <= 8;
+        allow update, delete: if false;
+      }
+    }
+
+    match /guessUsers/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validGuessUser()
+        && request.resource.data.plays == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validGuessUser()
+        && request.resource.data.plays == resource.data.plays + 1;
+      allow delete: if false;
+    }
+
+    function validGuessCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'games', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.games is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validGuessUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'plays', 'games', 'wins', 'rounds', 'points', 'kinds',
+                               'dailies', 'lastDaily', 'streak', 'bestStreak', 'bestDaily', 'updatedAt'])
+        && d.plays is int
+        && d.games is int && d.wins is int && d.wins >= 0 && d.wins <= d.games
+        && d.rounds is int && d.points is int && d.points >= 0 && d.points <= d.rounds * 100
+        && d.kinds is map
+        && d.dailies is int && d.lastDaily is string
+        && d.streak is int && d.bestStreak is int
+        && d.bestDaily is int && d.bestDaily >= 0 && d.bestDaily <= 100;
+    }
+
+    // ============================= The Liar =============================
+
+    match /liarCrews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validLiarCrew()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && validLiarCrew()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['room', 'word', 'category', 'liar', 'result', 'players', 'at'])
+          && request.resource.data.word is string && request.resource.data.word.size() <= 40
+          && request.resource.data.category is string && request.resource.data.category.size() <= 40
+          && request.resource.data.liar is string
+          && request.resource.data.result in ['caught', 'escaped', 'stolen']
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 3
+          && request.resource.data.players.size() <= 8;
+        allow update, delete: if false;
+      }
+    }
+
+    match /liarUsers/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validLiarUser()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validLiarUser()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+    }
+
+    function validLiarCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'games', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.games is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validLiarUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'games', 'liarGames', 'liarWins', 'catches', 'correctVotes',
+                               'points', 'updatedAt'])
+        && d.games is int
+        && d.liarGames is int && d.liarGames >= 0 && d.liarGames <= d.games
+        && d.liarWins is int && d.liarWins >= 0 && d.liarWins <= d.liarGames
+        && d.catches is int && d.catches >= 0 && d.catches <= d.games
+        && d.correctVotes is int && d.correctVotes >= 0 && d.correctVotes <= d.games
+        && d.points is int && d.points >= 0 && d.points <= d.games * 5;
+    }
+
+    // ============================== Rotten ==============================
+
+    match /rottenCrews/{crewId} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && crewId.matches('^[a-z0-9-]{3,40}$')
+        && validRottenCrew()
+        && request.resource.data.games == 1;
+      allow update: if isGoogleUser()
+        && validRottenCrew()
+        && request.resource.data.games == resource.data.games + 1;
+      allow delete: if false;
+
+      match /games/{gameId} {
+        allow read: if isGoogleUser();
+        allow create: if isGoogleUser()
+          && request.resource.data.keys().hasOnly(['room', 'winner', 'players', 'at'])
+          && request.resource.data.room is string
+          && request.resource.data.winner is string && request.resource.data.winner.size() <= 40
+          && request.resource.data.players is list
+          && request.resource.data.players.size() >= 2
+          && request.resource.data.players.size() <= 8;
+        allow update, delete: if false;
+      }
+    }
+
+    // Every write is one play: a room game or a daily puzzle
+    match /rottenUsers/{uid} {
+      allow read: if isGoogleUser();
+      allow create: if isGoogleUser()
+        && request.auth.uid == uid
+        && validRottenUser()
+        && request.resource.data.plays == 1;
+      allow update: if isGoogleUser()
+        && request.auth.uid == uid
+        && validRottenUser()
+        && request.resource.data.plays == resource.data.plays + 1;
+      allow delete: if false;
+    }
+
+    function validRottenCrew() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'games', 'players', 'history', 'updatedAt'])
+        && d.name is string && d.name.size() <= 40
+        && d.games is int
+        && d.players is map
+        && d.history is list && d.history.size() <= 20;
+    }
+
+    function validRottenUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['name', 'photo', 'plays', 'games', 'wins', 'words', 'splats', 'longest',
+                               'dailies', 'lastDaily', 'bestDaily', 'updatedAt'])
+        && d.plays is int
+        && d.games is int && d.dailies is int && d.games + d.dailies == d.plays
+        && d.wins is int && d.wins >= 0 && d.wins <= d.games
+        && d.words is int && d.words >= 0 && d.words <= d.games * 500
+        && d.splats is int && d.splats >= 0 && d.splats <= d.games * 10
+        && d.longest is int && d.longest >= 0 && d.longest <= 30
+        && d.lastDaily is string
+        && d.bestDaily is int && d.bestDaily >= 0;
+    }
+  }
+}

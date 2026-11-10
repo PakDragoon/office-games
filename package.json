@@ -1,0 +1,1 @@
+{ "name": "rotten", "private": true, "type": "module", "scripts": { "test": "node test/engine.test.mjs", "words": "node tools/build-words.mjs" } }
