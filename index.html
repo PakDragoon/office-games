@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A typing race for friends. Everyone gets the same paragraph: type it first, type it right. Or practise on your own.">
+  <title>Fast Fingers</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='3' y='8' width='26' height='21' rx='5' fill='%231b1e3a'/><rect x='3' y='3' width='26' height='21' rx='5' fill='%23e8590c' stroke='%231b1e3a' stroke-width='2'/><path d='M12.5 19V8.5h8M12.5 13.5h6' stroke='%23fff' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Fast Fingers">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-sub" aria-hidden="true">type it first, type it right</span>
+      </h1>
+      <p class="lede">A typing race. Everyone gets the same paragraph at the same moment, and the fastest fingers win. Race your friends, or practise on your own.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+      <p class="credit">⌨️ Game idea by <a href="https://www.linkedin.com/in/junaid-salman-9a6662208/" target="_blank" rel="noopener noreferrer">Junaid</a></p>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Race up to 8 friends on the same paragraph. You pick how long it is.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice solo-card">
+        <h2>On your own</h2>
+        <p>Paragraph after paragraph, as long as you like. Your best speed is kept in this browser.</p>
+        <div class="seg" id="pr-length" role="group" aria-label="Paragraph length">
+          <button type="button" data-value="short"><b>Short</b><small>about 30 words</small></button>
+          <button type="button" data-value="medium"><b>Medium</b><small>about 55 words</small></button>
+          <button type="button" data-value="long"><b>Long</b><small>about 100 words</small></button>
+        </div>
+        <div class="opt-row">
+          <label class="toggle"><input type="checkbox" id="pr-caps"> Capital letters</label>
+          <label class="toggle"><input type="checkbox" id="pr-punct"> Punctuation</label>
+        </div>
+        <p class="best-line" id="best-line"></p>
+        <button class="btn primary" id="practice-btn" type="button">Practice</button>
+      </section>
+      <section class="choice steps">
+        <h2>How a race goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 9h20M6 15h20M6 21h12"/></svg><b>One paragraph</b><span>The same words for everyone in the room.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="17" r="10"/><path d="M16 11v6l4 2M13 4h6"/></svg><b>3, 2, 1, go</b><span>Everyone starts at the same moment.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="24" height="15" rx="3"/><path d="M9 14h2M14 14h2M19 14h2M10 19h12"/></svg><b>Type it right</b><span>A wrong key doesn’t count: hit the right one to move on.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 28V5M8 6h15l-3 5 3 5H8"/></svg><b>First to finish</b><span>Wins the race. Everyone gets their speed.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Paragraph</span>
+          <div class="seg" id="set-length" role="group" aria-label="Paragraph length">
+            <button type="button" data-value="short"><b>Short</b><small>about 30 words</small></button>
+            <button type="button" data-value="medium"><b>Medium</b><small>about 55 words</small></button>
+            <button type="button" data-value="long"><b>Long</b><small>about 100 words</small></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Include</span>
+          <div class="opt-row">
+            <label class="toggle"><input type="checkbox" id="set-caps"> Capital letters</label>
+            <label class="toggle"><input type="checkbox" id="set-punct"> Punctuation</label>
+          </div>
+          <p class="small-note muted" id="include-note"></p>
+        </div>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start race</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game (rooms and practice) ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="play" id="play">
+      <div class="round-line" id="status-line" aria-live="polite"></div>
+      <ul class="lanes" id="lanes"></ul>
+      <p class="small-note muted center" id="watching"></p>
+
+      <div class="typebox" id="type-box">
+        <div class="type-text" id="type-text"></div>
+        <input class="type-input" id="type-input" aria-label="Type the paragraph here" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" inputmode="text" enterkeyhint="done">
+        <div class="focus-hint" id="focus-hint" hidden>Click or tap here to type</div>
+      </div>
+      <div class="stat-row" id="stat-row">
+        <div><span>Speed</span><b id="stat-wpm">0</b></div>
+        <div><span>Accuracy</span><b id="stat-acc">100%</b></div>
+        <div><span>Time</span><b id="stat-time">0.0s</b></div>
+      </div>
+
+      <div id="result-view" class="card-panel" hidden></div>
+
+      <div class="host-row" id="host-actions" hidden>
+        <button class="btn ghost" id="end-race" type="button">End race now</button>
+        <button class="btn ghost" id="end-game" type="button">Back to the lobby</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound (countdown, finish, wrong keys)</label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name, settings and best speeds stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>Everyone in the room gets the same paragraph. After 3, 2, 1 you all start typing it at the same moment. The first to reach the end wins.</p>
+  <ul class="rule-points">
+    <li>The highlighted character is the one to type next. Spaces count too.</li>
+    <li>A <b>wrong key doesn’t move you on</b>. The character turns red until you hit the right one, so there’s nothing to delete.</li>
+    <li>Every wrong key lowers your <b>accuracy</b>.</li>
+    <li>You can watch everyone’s progress in the lanes above the paragraph.</li>
+  </ul>
+  <h3>Speed</h3>
+  <p>Speed is shown in <b>words per minute (wpm)</b>. Five characters count as one word, the usual way typing speed is measured, so long and short words are treated fairly.</p>
+  <h3>The host’s choices</h3>
+  <ul class="rule-points">
+    <li><b>Paragraph:</b> short (about 30 words), medium (about 55) or long (about 100).</li>
+    <li><b>Capital letters:</b> switch off and everything is lower case.</li>
+    <li><b>Punctuation:</b> switch off and it’s only letters, numbers and spaces.</li>
+  </ul>
+  <h3>When a race ends</h3>
+  <p>When everyone has finished. Once the first player is done, the rest get a little longer (at least 20 seconds) before time runs out; whoever hasn’t finished is ranked by how far they got. Join in the middle of a race and you watch it, then race in the next one.</p>
+  <h3>On your own</h3>
+  <p>Practice works the same way, without the countdown: the clock starts on your first key. Your best speed for each kind of paragraph is kept in this browser.</p>
+  <p class="credit">⌨️ Game idea by <a href="https://www.linkedin.com/in/junaid-salman-9a6662208/" target="_blank" rel="noopener noreferrer">Junaid</a>. Thank you!</p>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
