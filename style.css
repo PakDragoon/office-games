@@ -258,6 +258,39 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .stroke { fill: none; stroke: var(--pc); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; transition: opacity 0.2s ease; }
 .stroke.dim { opacity: 0.1; }
 
+/* Words game: the board of words, one row per player, one column per round */
+.clue-board {
+  aspect-ratio: 4 / 3; overflow: auto; border-radius: 9px; background: var(--paper);
+  padding: clamp(0.6rem, 2vw, 1.2rem); display: grid; align-content: center;
+}
+.clue-board.my-turn { box-shadow: 0 0 0 2px var(--ink); }
+.clue-grid { display: grid; grid-template-columns: minmax(5.5rem, auto) repeat(3, minmax(0, 1fr)); gap: 0.45rem 0.6rem; align-items: center; }
+.clue-grid .rh { font-size: 0.78rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; text-align: center; }
+.clue-grid .who { display: flex; align-items: center; gap: 0.45rem; font-weight: 800; color: var(--pc); min-width: 0; }
+.clue-grid .who span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clue-grid .cell {
+  min-height: 2.6rem; display: grid; place-items: center; text-align: center; padding: 0.3rem 0.5rem;
+  border-radius: 10px; border: 1.5px dashed color-mix(in srgb, var(--ink) 14%, transparent);
+  font-weight: 800; font-size: clamp(0.95rem, 1.7vw, 1.2rem); line-height: 1.15; overflow-wrap: anywhere; transition: opacity 0.2s ease;
+}
+.clue-grid .cell.said { border: 1.5px solid color-mix(in srgb, var(--pc) 55%, transparent); background: color-mix(in srgb, var(--pc) 10%, var(--surface)); color: var(--ink); animation: hand-in-plain 0.35s ease both; }
+.clue-grid .cell.passed { border-style: solid; color: var(--muted); font-weight: 600; font-style: italic; font-size: 0.85rem; }
+.clue-grid .cell.now { border: 2px solid var(--pc); color: var(--pc); font-weight: 700; font-size: 0.85rem; animation: typing 1.2s ease-in-out infinite; }
+@keyframes typing { 50% { background: color-mix(in srgb, var(--pc) 12%, transparent); } }
+.clue-grid .dim { opacity: 0.18; }
+.clue-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.5rem; }
+.clue-form input { font-size: 1.2rem; font-weight: 700; }
+.clue-form .btn { padding: 0.7rem 1.2rem; }
+.clue-hint { grid-column: 1 / -1; margin: 0; min-height: 1.3rem; font-size: 0.9rem; font-weight: 700; color: var(--muted); }
+.clue-hint.bad { color: var(--liar); }
+.clue-hint.good { color: var(--hit, var(--ink)); }
+@media (max-width: 560px) {
+  .clue-board { aspect-ratio: auto; min-height: 15rem; }
+  .clue-grid { grid-template-columns: minmax(4rem, auto) repeat(3, minmax(0, 1fr)); gap: 0.35rem 0.4rem; }
+  .clue-grid .cell { min-height: 2.3rem; padding: 0.25rem 0.3rem; font-size: 0.9rem; }
+  .clue-grid .who { font-size: 0.9rem; }
+}
+
 .handoff {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: grid; justify-items: center; gap: 0.1rem;

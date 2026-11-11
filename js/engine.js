@@ -9,6 +9,9 @@ export const BOARD = { w: 800, h: 600 };
 // One-stroke mode: time to start your line, and the longest a line may last
 export const STROKE = { startMs: 15000, maxMs: 10000 };
 export const FREE_SECONDS = [5, 8, 12, 15, 20, 30];
+// Words game: seconds to type your word each turn
+export const WORD_SECONDS = [20, 30, 45, 60];
+export const CLUE = { maxChars: 24, maxWords: 2 };
 export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 30000 };
 export const OPTION_COUNT = 12;
 export const MAX_INK = 4000;   // numbers (x, y pairs) allowed in one stroke
@@ -128,4 +131,42 @@ export function cleanInk(pts, room = MAX_INK) {
     out.push(Math.max(0, Math.min(BOARD.w, Math.round(x))), Math.max(0, Math.min(BOARD.h, Math.round(y))));
   }
   return out;
+}
+
+// ---------- Words game: the clue each player types ----------
+
+// Tidy what was typed: single spaces, no odd characters, not too long
+export function cleanClue(raw) {
+  return String(raw ?? '').normalize('NFKC').replace(/[\u2018\u2019]/g, "'")
+    .replace(/[^\p{L}\p{N}' -]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, CLUE.maxChars + 8);
+}
+
+// Letters and numbers only, lower case: how two clues (or a clue and the word) are compared
+export const clueKey = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
+
+/**
+ * Can this clue be played? Returns '' when it's fine, or the reason.
+ * word: the secret word (checked only for players who know it, so the liar learns nothing
+ * from a refusal). said: clues already played this game.
+ */
+export function clueProblem(raw, { word = '', said = [] } = {}) {
+  const c = cleanClue(raw);
+  if (!clueKey(c)) return 'Type a word';
+  if (c.length > CLUE.maxChars) return `At most ${CLUE.maxChars} letters`;
+  if (c.split(' ').length > CLUE.maxWords) return CLUE.maxWords === 1 ? 'Just one word' : `At most ${CLUE.maxWords} words`;
+  const k = clueKey(c);
+  if (word && givesAway(c, word)) return 'That gives the word away';
+  if (said.some((x) => clueKey(x) === k)) return 'Someone already said that';
+  return '';
+}
+
+// The word itself, a word made from it (teapot, teas, cricketer), or a main part of a
+// two-word answer (cricket for "cricket bat"). Words that merely contain it (steam) are fine.
+function givesAway(clue, word) {
+  const w = clueKey(word);
+  if (!w) return false;
+  if (clueKey(clue) === w) return true;
+  const parts = String(word).split(/[\s-]+/).map(clueKey).filter((x) => x.length >= 4);
+  return String(clue).split(/[\s-]+/).map(clueKey).filter(Boolean)
+    .some((t) => t === w || (w.length >= 3 && t.startsWith(w)) || parts.includes(t) || (parts.length > 1 && parts.some((x) => t.startsWith(x))));
 }

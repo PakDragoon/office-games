@@ -6,7 +6,8 @@ import * as cloud from './cloud.js';
 /* =========================================================
    The Liar
    Everyone gets the same secret word except the liar, who only knows the category.
-   Players take turns adding to one shared drawing (3 rounds, same order), then vote.
+   Players take turns adding to one shared drawing, or (the Words game) saying one word
+   about it (3 rounds, same order), then vote.
    One player hosts: their browser is the "server". It picks the word and the liar,
    sends each player only their own card, relays the ink live and counts the votes.
    Connections use PeerJS (WebRTC).
@@ -35,8 +36,11 @@ const store = {
   },
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
-const ROOM_PREFS = { mode: 'stroke', seconds: 8, categories: [], ...store.get('room', {}) };
+const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, categories: [], ...store.get('room', {}) };
 if (!E.FREE_SECONDS.includes(ROOM_PREFS.seconds)) ROOM_PREFS.seconds = 8;
+if (!E.WORD_SECONDS.includes(ROOM_PREFS.wordSeconds)) ROOM_PREFS.wordSeconds = 30;
+if (!['draw', 'words'].includes(ROOM_PREFS.play)) ROOM_PREFS.play = 'draw';
+const wordsGame = (st) => st && st.play === 'words';
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
@@ -149,7 +153,7 @@ function hostCreate(attempt = 0) {
       players: [newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || '')],
       used: new Set(store.get('seen', [])),
       liar: null, word: '', category: '', order: [], round: 0, turn: 0,
-      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [],
+      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [],
       votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
       crew: null, crewStatus: '',
     };
@@ -211,6 +215,7 @@ function hostOnMessage(conn, msg) {
     case 'ready': return hostReady(conn.peer);
     case 'votenow': return hostVoteNow(conn.peer, msg.on === true);
     case 'done': return hostDone(conn.peer);
+    case 'clue': return hostClue(conn.peer, msg.text);
     case 'vote': return hostVote(conn.peer, msg.target);
     case 'guess': return hostGuess(conn.peer, msg.word);
     case 'sync': return sendDrawing(conn);
@@ -234,6 +239,7 @@ function hostJoin(conn, rawName, uid, photo, client) {
     if (room.order.includes(old.id)) room.order = room.order.map((x) => (x === old.id ? conn.peer : x));
     if (room.liar === old.id) room.liar = conn.peer;
     for (const s of room.strokes) if (s.pid === old.id) s.pid = conn.peer;
+    for (const c of room.clues) if (c.pid === old.id) c.pid = conn.peer;
     if (room.votes[old.id]) { room.votes[conn.peer] = room.votes[old.id]; delete room.votes[old.id]; }
     for (const [v, t] of Object.entries(room.votes)) if (t === old.id) room.votes[v] = conn.peer;
     if (room.accused === old.id) room.accused = conn.peer;
@@ -363,12 +369,12 @@ function hostStartGame() {
   store.set('seen', [...room.used].slice(-700));
   room.order = E.turnOrder(ids, room.liar, rnd);
   Object.assign(room, {
-    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], strokeSid: null, turnStrokes: 0,
+    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], strokeSid: null, turnStrokes: 0,
     votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
     deadline: Date.now() + E.TIMES.roleMs,
   });
   H.phaseTimer = setTimeout(hostStartDrawing, E.TIMES.roleMs);
-  cloud.track('game_started', { players: ids.length, mode: room.settings.mode, categories: room.settings.categories.length || 0 });
+  cloud.track('game_started', { players: ids.length, mode: wordsGame(room.settings) ? 'words' : room.settings.mode, categories: room.settings.categories.length || 0 });
   hostSendSecrets();
   hostBroadcast();
 }
@@ -404,7 +410,8 @@ function hostBeginTurn() {
   if (!drawer || !active(drawer)) return hostAdvance();   // skip anyone who's gone
   const now = Date.now();
   room.turnStart = now + E.TIMES.handoffMs;
-  room.deadline = room.turnStart + (room.settings.mode === 'stroke' ? E.STROKE.startMs : room.settings.seconds * 1000);
+  room.deadline = room.turnStart + (wordsGame(room.settings) ? room.settings.wordSeconds * 1000
+    : room.settings.mode === 'stroke' ? E.STROKE.startMs : room.settings.seconds * 1000);
   room.strokeSid = null;
   room.turnStrokes = 0;
   clearTimeout(H.turnTimer);
@@ -414,7 +421,7 @@ function hostBeginTurn() {
 
 function hostInk(pid, sid, pts, end) {
   const room = H.room;
-  if (!room || room.status !== 'draw' || room.order[room.turn] !== pid || typeof sid !== 'string') return;
+  if (!room || room.status !== 'draw' || wordsGame(room.settings) || room.order[room.turn] !== pid || typeof sid !== 'string') return;
   if (Date.now() < room.turnStart - 300) return;
   sid = sid.slice(0, 60);
   let stroke = room.strokes.find((s) => s.sid === sid);
@@ -452,12 +459,37 @@ function hostDone(pid) {
   hostEndTurn();
 }
 
+// Words game: the player whose turn it is says their word
+const turnClue = (room) => room.clues.find((c) => c.round === room.round && c.turn === room.turn);
+
+function hostClue(pid, raw) {
+  const room = H.room;
+  if (!room || room.status !== 'draw' || !wordsGame(room.settings) || room.order[room.turn] !== pid) return;
+  if (Date.now() < room.turnStart - 300 || turnClue(room)) return;
+  // Only players who know the word are checked against it, so a refusal tells the liar nothing
+  const problem = E.clueProblem(raw, { word: pid === room.liar ? '' : room.word, said: room.clues.filter((c) => !c.passed).map((c) => c.text) });
+  if (problem) { tell(pid, { t: 'nope', reason: problem }); return; }
+  const p = byId(pid);
+  room.clues.push({ pid, color: p ? p.color : 0, round: room.round, turn: room.turn, text: E.cleanClue(raw) });
+  hostEndTurn();
+}
+
 function hostEndTurn() {
   const room = H.room;
   if (!room || room.status !== 'draw') return;
   clearTimeout(H.turnTimer);
   room.strokeSid = null;
+  // Words game: no word in time (or they left) and the turn is passed, for everyone to see
+  if (wordsGame(room.settings) && !turnClue(room) && room.order[room.turn]) {
+    const p = byId(room.order[room.turn]);
+    room.clues.push({ pid: room.order[room.turn], color: p ? p.color : 0, round: room.round, turn: room.turn, text: '', passed: true });
+  }
   hostAdvance();
+}
+
+function tell(pid, msg) {
+  if (pid === S.myId) onMessage(msg);
+  else send(H.conns.get(pid), msg);
 }
 
 function hostAdvance() {
@@ -641,6 +673,7 @@ function publicView() {
     endsIn: room.deadline ? room.deadline - now : 0,
     strokeLive: Boolean(room.strokeSid),
     strokeCount: room.strokes.length,
+    clues: room.status === 'lobby' ? [] : room.clues,
     voteNowHave: have, voteNowNeed: need,
     players: room.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
@@ -808,6 +841,13 @@ function onMessage(msg) {
     case 'ink':
       if (msg.pid !== S.myId) sheet.add(msg.sid, msg.pid, msg.color, msg.pts || []);
       break;
+    case 'nope':
+      S.clueSent = false;
+      S.clueError = String(msg.reason || '').slice(0, 80);
+      updateClueHint();
+      $('clue-send').disabled = false;
+      $('clue-input').focus();
+      break;
     case 'state':
       applyState(msg);
       break;
@@ -842,7 +882,7 @@ function applyState(v) {
     // Keep a drawing that just arrived for this game (joining mid-game); otherwise clean paper
     if (S.drawingGame !== v.game) sheet.clear();
     S.drawingGame = v.game;
-    sheet.highlight(null);
+    highlight(null);
     $('replay-btn').disabled = false;
   }
   // Missing strokes (joined late or a hiccup): ask the host for the full drawing
@@ -857,6 +897,13 @@ function applyState(v) {
    The game screen
    ========================================================= */
 const sheet = createSheet($('sheet-host'));
+// Pointing at a player lights up only their lines (or their words)
+let litId = null;
+function highlight(id) {
+  litId = id;
+  sheet.highlight(id);
+  $('clue-board').querySelectorAll('[data-pid]').forEach((el) => el.classList.toggle('dim', Boolean(id) && el.dataset.pid !== id));
+}
 let clockTimer = 0;
 
 function stopPen() {
@@ -904,7 +951,7 @@ function renderGame(v) {
     S.phaseKey = phaseKey;
     if (v.endsIn > 0) {
       const total = v.status === 'draw'
-        ? (v.settings.mode === 'stroke' ? (v.strokeLive ? E.STROKE.maxMs : E.STROKE.startMs) : v.settings.seconds * 1000)
+        ? wordsGame(v.settings) ? v.settings.wordSeconds * 1000 : (v.settings.mode === 'stroke' ? (v.strokeLive ? E.STROKE.maxMs : E.STROKE.startMs) : v.settings.seconds * 1000)
         : { role: E.TIMES.roleMs, vote: E.TIMES.voteMs, guess: E.TIMES.guessMs }[v.status];
       runClock(performance.now() + v.endsIn, total);
     } else {
@@ -919,14 +966,21 @@ function renderGame(v) {
   $('result-panel').hidden = v.status !== 'result';
   $('my-card').hidden = spectator || v.status === 'result' || v.status === 'role';
   $('sheet-host').classList.toggle('voting', v.status === 'vote');
+  const words = wordsGame(v.settings);
+  $('sheet-host').hidden = words;
+  $('clue-board').hidden = !words;
+  $('result-tools').hidden = words;
+  $('vote-tip').textContent = words ? 'Point at a name to see only their words.' : 'Point at a name to see only their lines.';
+  if (words) renderClues(v);
+  if (!(words && v.status === 'draw' && v.drawer === S.myId)) $('clue-form').hidden = true;
 
   if (v.status === 'role') renderRole(v);
   if (v.status === 'draw') renderDraw(v);
-  else { stopPen(); $('handoff').hidden = true; $('sheet-host').classList.remove('my-turn'); }
+  else { stopPen(); $('handoff').hidden = true; $('sheet-host').classList.remove('my-turn'); $('clue-board').classList.remove('my-turn'); }
   if (v.status === 'vote') renderVote(v);
   if (v.status === 'guess') renderGuess(v);
   if (v.status === 'result') renderResult(v);
-  if (v.status !== 'vote' && v.status !== 'result') sheet.highlight(null);
+  if (v.status !== 'vote' && v.status !== 'result') highlight(null);
   renderScores(v);
   renderCard();
 }
@@ -944,9 +998,10 @@ function renderCard() {
   $('card-secret').innerHTML = html;
   $('role-secret').innerHTML = html;
   const liarTip = S.secret && S.secret.liar;
+  const words = S.view && wordsGame(S.view.settings);
   $('role-tip').textContent = liarTip
-    ? 'Nobody knows but you. Watch what the others draw and blend in. Don’t get caught.'
-    : 'One player doesn’t know this word. Draw enough to show you know it, but not so much the liar can copy you.';
+    ? (words ? 'Nobody knows but you. Listen to the others’ words and blend in. Don’t get caught.' : 'Nobody knows but you. Watch what the others draw and blend in. Don’t get caught.')
+    : (words ? 'One player doesn’t know this word. Give a word that shows you know it, but not so obvious the liar can work it out.' : 'One player doesn’t know this word. Draw enough to show you know it, but not so much the liar can copy you.');
 }
 
 function holdToPeek(btn) {
@@ -979,20 +1034,35 @@ function renderDraw(v) {
   const myTurn = v.drawer === S.myId && mine.inGame;
   const drawer = v.players.find((p) => p.id === v.drawer);
   const single = v.settings.mode === 'stroke';
+  const words = wordsGame(v.settings);
   const turnKey = `${v.game}:${v.round}:${v.turn}`;
 
   if (S.turnKey !== turnKey) {
     S.turnKey = turnKey;
     S.strokeDone = false;
     stopPen();
+    Object.assign(S, { clueSent: false, clueError: '', clueOpen: false });
+    $('clue-form').hidden = true;
     // Hand-off banner: whose turn it is
     const startsIn = Math.max(0, v.turnStartsIn);
     $('handoff').hidden = false;
     $('handoff').className = `handoff pc${drawer ? drawer.color : 0}`;
     $('handoff-name').textContent = myTurn ? 'Your turn' : `${drawer ? drawer.name : 'Someone'}’s turn`;
-    $('handoff-sub').textContent = single ? 'One line' : `${v.settings.seconds} seconds`;
+    $('handoff-sub').textContent = words ? 'Say one word' : single ? 'One line' : `${v.settings.seconds} seconds`;
     S.penTimers.push(setTimeout(() => { $('handoff').hidden = true; }, Math.max(600, startsIn)));
-    if (myTurn) {
+    if (myTurn && words) {
+      chime();
+      S.penTimers.push(setTimeout(() => {
+        S.clueOpen = true;
+        $('clue-input').value = '';
+        $('clue-send').disabled = false;
+        $('clue-form').hidden = false;
+        updateClueHint();
+        $('clue-input').focus();
+        renderTurnStatus(S.view);
+      }, startsIn));
+      S.penTimers.push(setTimeout(() => { S.clueOpen = false; $('clue-form').hidden = true; renderTurnStatus(S.view); }, Math.max(0, v.endsIn)));
+    } else if (myTurn) {
       chime();
       S.penTimers.push(setTimeout(() => {
         sheet.enable({
@@ -1025,8 +1095,12 @@ function renderTurnStatus(v) {
   const single = v.settings.mode === 'stroke';
   const box = $('turn-status');
   box.className = `turn-status pc${drawer ? drawer.color : 0}${myTurn ? ' mine' : ''}`;
+  const words = wordsGame(v.settings);
   let title, sub;
-  if (myTurn) {
+  if (words) {
+    title = myTurn ? 'Your turn' : `${drawer ? drawer.name : 'Someone'} is thinking`;
+    sub = myTurn ? (S.clueSent ? 'Sent. Over to the next player' : S.clueOpen ? 'Type a word about the secret word' : 'Get ready…') : 'Their word appears on the board';
+  } else if (myTurn) {
     title = 'Your turn';
     if (single) sub = S.strokeDone ? 'Done. Nice line.' : v.strokeLive ? 'Keep going, lift to finish' : 'Draw one line on the paper';
     else sub = S.penOn ? 'Draw, then press Done (or let the clock run out)' : 'Done. Over to the next player';
@@ -1038,7 +1112,8 @@ function renderTurnStatus(v) {
   $('turn-sub').textContent = sub;
   // Free draw: finish early instead of waiting for the clock
   $('turn-done').hidden = !(myTurn && !single && S.penOn);
-  $('sheet-host').classList.toggle('my-turn', myTurn);
+  $('sheet-host').classList.toggle('my-turn', myTurn && !words);
+  $('clue-board').classList.toggle('my-turn', myTurn && words);
 }
 
 function renderOrder(v) {
@@ -1051,12 +1126,79 @@ function renderOrder(v) {
     }).join('');
     const now = id === v.drawer;
     const next = v.order[(v.turn + 1) % v.order.length] === id && !now;
-    const tag = !p.connected ? 'Offline' : p.away ? 'Away' : now ? 'Drawing' : next ? 'Next' : '';
+    const tag = !p.connected ? 'Offline' : p.away ? 'Away' : now ? (wordsGame(v.settings) ? 'Thinking' : 'Drawing') : next ? 'Next' : '';
     return `<li class="pc${p.color}${now ? ' now' : ''}${active(p) ? '' : ' off'}">
       <span class="pen-dot"></span><span class="nm">${esc(p.name)}${id === S.myId ? ' (you)' : ''}</span>
       <span class="tag">${tag}</span><span class="rounds">${dots}</span></li>`;
   }).join('');
 }
+
+/* ---------- Words game: the board and your word ---------- */
+// Built once per game (and when the order changes); after that only the cells that change are
+// touched, so a new word animates in without replaying the others.
+function renderClues(v) {
+  const board = $('clue-board');
+  const order = v.order.length ? v.order : v.players.filter((p) => p.inGame).map((p) => p.id);
+  const players = order.map((id) => v.players.find((x) => x.id === id)).filter(Boolean);
+  const key = `${v.game}|${players.map((p) => `${p.id}:${p.color}:${p.name}`).join(',')}|${S.myId}`;
+  if (board.dataset.key !== key) {
+    board.dataset.key = key;
+    const cells = ['<span></span>', ...[1, 2, 3].map((r) => `<span class="rh">Round ${r}</span>`)];
+    players.forEach((p, i) => {
+      cells.push(`<span class="who pc${p.color}" data-pid="${esc(p.id)}"><i class="pen-dot"></i><span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>`);
+      for (let r = 0; r < E.ROUNDS; r++) cells.push(`<span class="cell pc${p.color}" data-pid="${esc(p.id)}" data-cell="${r}-${i}"></span>`);
+    });
+    board.innerHTML = `<div class="clue-grid">${cells.join('')}</div>`;
+  }
+  players.forEach((p, i) => {
+    for (let r = 0; r < E.ROUNDS; r++) {
+      const el = board.querySelector(`[data-cell="${r}-${i}"]`);
+      if (!el) continue;
+      const c = (v.clues || []).find((x) => x.round === r && x.turn === i);
+      const now = v.status === 'draw' && v.round === r && v.turn === i;
+      const kind = c ? (c.passed ? 'passed' : 'said') : now ? 'now' : '';
+      const text = c ? (c.passed ? 'passed' : c.text) : now ? (p.id === S.myId ? 'your turn' : 'thinking…') : '';
+      if (el.dataset.kind === kind && el.textContent === text) continue;
+      el.dataset.kind = kind;
+      el.className = `cell pc${p.color}${kind ? ` ${kind}` : ''}`;
+      el.textContent = text;
+    }
+  });
+  highlight(litId);
+}
+
+function myClueCheck(text) {
+  const v = S.view;
+  const secret = S.secret || {};
+  return E.clueProblem(text, { word: secret.liar ? '' : secret.word || '', said: (v ? v.clues || [] : []).filter((c) => !c.passed).map((c) => c.text) });
+}
+
+function updateClueHint() {
+  const el = $('clue-hint');
+  const raw = $('clue-input').value;
+  let text = '', cls = '';
+  if (S.clueError) { text = S.clueError; cls = 'bad'; }
+  else if (raw.trim()) {
+    const p = myClueCheck(raw);
+    if (p) { text = p; cls = 'bad'; } else { text = 'Press Enter to say it'; cls = 'good'; }
+  } else text = 'One or two words. Not the word itself.';
+  el.textContent = text;
+  el.className = `clue-hint ${cls}`;
+}
+
+$('clue-input').addEventListener('input', () => { S.clueError = ''; updateClueHint(); });
+$('clue-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const v = S.view;
+  if (!v || v.status !== 'draw' || v.drawer !== S.myId || S.clueSent || !S.clueOpen) return;
+  const raw = $('clue-input').value;
+  const problem = myClueCheck(raw);
+  if (problem) { S.clueError = problem; updateClueHint(); return; }
+  S.clueSent = true;
+  $('clue-send').disabled = true;
+  toHost({ t: 'clue', text: E.cleanClue(raw) });
+  renderTurnStatus(v);
+});
 
 $('turn-done').addEventListener('click', () => {
   const v = S.view;
@@ -1102,9 +1244,9 @@ $('vote-list').addEventListener('click', (e) => {
 // Pointing at a name lights up only their lines
 ['pointerover', 'focusin'].forEach((ev) => $('vote-list').addEventListener(ev, (e) => {
   const b = e.target.closest('.suspect');
-  if (b) sheet.highlight(b.dataset.id);
+  if (b) highlight(b.dataset.id);
 }));
-['pointerleave', 'focusout'].forEach((ev) => $('vote-list').addEventListener(ev, () => sheet.highlight(null)));
+['pointerleave', 'focusout'].forEach((ev) => $('vote-list').addEventListener(ev, () => highlight(null)));
 
 /* ---------- The liar's last guess ---------- */
 function renderGuess(v) {
@@ -1163,7 +1305,7 @@ function renderResult(v) {
 
 $('replay-btn').addEventListener('click', async () => {
   $('replay-btn').disabled = true;
-  sheet.highlight(null);
+  highlight(null);
   await sheet.replay();
   $('replay-btn').disabled = false;
 });
@@ -1184,9 +1326,9 @@ $('result-votes').addEventListener('pointerover', (e) => {
   const v = S.view;
   if (!li || !v) return;
   const p = v.players.filter((x) => x.inGame)[[...li.parentNode.children].indexOf(li)];
-  if (p) sheet.highlight(p.id);
+  if (p) highlight(p.id);
 });
-$('result-votes').addEventListener('pointerleave', () => sheet.highlight(null));
+$('result-votes').addEventListener('pointerleave', () => highlight(null));
 $('next-game').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
 $('to-lobby').addEventListener('click', () => { if (S.isHost) hostBackToLobby(); });
 
@@ -1213,7 +1355,9 @@ function segment(container, get, set) {
   return paint;
 }
 
+const paintPlay = segment($('set-play'), () => ROOM_PREFS.play, (v) => { ROOM_PREFS.play = v; roomSettingsChanged(); });
 const paintMode = segment($('set-mode'), () => ROOM_PREFS.mode, (v) => { ROOM_PREFS.mode = v; roomSettingsChanged(); });
+$('set-word-seconds').addEventListener('change', (e) => { ROOM_PREFS.wordSeconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-seconds').addEventListener('change', (e) => { ROOM_PREFS.seconds = Number(e.target.value); roomSettingsChanged(); });
 const paintAllCats = segment($('set-cats-all'), () => (ROOM_PREFS.categories.length ? 'pick' : 'all'), (v) => {
   ROOM_PREFS.categories = v === 'all' ? [] : (ROOM_PREFS.categories.length ? ROOM_PREFS.categories : [...CATEGORY_NAMES]);
@@ -1241,9 +1385,14 @@ function roomSettingsChanged() {
 }
 
 function paintRoomSettings() {
+  paintPlay();
   paintMode();
   paintAllCats();
-  $('seconds-field').hidden = ROOM_PREFS.mode !== 'free';
+  const words = ROOM_PREFS.play === 'words';
+  $('mode-setting').hidden = words;
+  $('word-seconds-field').hidden = !words;
+  $('set-word-seconds').value = String(ROOM_PREFS.wordSeconds);
+  $('seconds-field').hidden = words || ROOM_PREFS.mode !== 'free';
   $('set-seconds').value = String(ROOM_PREFS.seconds);
   const picking = ROOM_PREFS.categories.length > 0;
   $('cat-picks').hidden = !picking;
@@ -1254,7 +1403,7 @@ function paintRoomSettings() {
 function settingsLines(st) {
   const cats = st.categories.length ? `${plural(st.categories.length, 'category')}: ${st.categories.join(', ')}` : 'All categories';
   return [
-    `<li><b>${st.mode === 'stroke' ? 'One line per turn' : `Free draw, ${st.seconds} seconds a turn`}</b></li>`,
+    `<li><b>${wordsGame(st) ? `Words: say a word each turn, ${st.wordSeconds} seconds` : st.mode === 'stroke' ? 'Draw: one line per turn' : `Draw: free draw, ${st.seconds} seconds a turn`}</b></li>`,
     `<li>${esc(cats)}</li>`,
     `<li>${E.ROUNDS} rounds, then the vote</li>`,
   ].join('');

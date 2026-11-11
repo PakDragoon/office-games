@@ -1,6 +1,6 @@
 # The Liar
 
-A drawing game for 3 to 8 colleagues, in the browser. Everyone draws the same secret word, one line at a time. One of you doesn't know it and is bluffing with every stroke. Find the liar.
+A bluffing game for 3 to 8 colleagues, in the browser. Everyone gets the same secret word and takes turns to draw it (**Draw**) or to say a word about it (**Words**). One of you doesn't know it and is bluffing every turn. Find the liar.
 
 Play at `https://pakdragoon.github.io/the-liar/`.
 
@@ -12,16 +12,18 @@ Play at `https://pakdragoon.github.io/the-liar/`.
 
 **Your card.** Everyone gets a secret word and its category, except one player: **the liar**, who only sees the category. Cards are hidden behind **Hold to see your card**, so the person next to you can't read your screen. Press **I'm ready** (or wait 15 seconds).
 
-**Drawing.** Players take turns adding to one shared drawing, in a random order that stays the same for all 3 rounds. The liar is never first, so there's always something on the paper before they draw. Everyone draws in their own colour and watches each line appear live. You get a chime and a buzz when it's your turn.
+**Draw** (host setting). Players take turns adding to one shared drawing, in a random order that stays the same for all 3 rounds. The liar is never first, so there's always something on the paper before they draw. Everyone draws in their own colour and watches each line appear live. You get a chime and a buzz when it's your turn.
 
 - **One line** (host setting): pen down, draw, lift. You have 15 seconds to start and 10 seconds for the line.
 - **Free draw** (host setting): as many strokes as you like for 5, 8, 12, 15, 20 or 30 seconds. Finished early? Press **Done drawing** and the turn moves on.
 
 Draw enough to prove you know the word, but not so much that the liar can work it out.
 
+**Words** (host setting). The same turns and rounds, but instead of drawing you type a word about the secret word (one or two words, 20, 30, 45 or 60 seconds). Everyone sees it on a board with a row per player and a column per round. You can't use the word itself, a word made from it (*teapot* for *tea*) or the main part of a two-word answer (*cricket* for *cricket bat*), and you can't repeat a word someone already said. Run out of time and your turn shows as **passed**. The liar's words are never checked against the secret word, so a refusal can't tell them what it is (and if they happen to type it, it simply counts).
+
 **Ready to vote.** Anyone can press it at any time. When everyone but one has pressed it, the drawing stops and the vote starts. Otherwise the vote starts after round 3.
 
-**The vote.** Pick who you think the liar is (45 seconds). Point at a name to see only that player's lines. The most votes is accused; a tie accuses nobody.
+**The vote.** Pick who you think the liar is (45 seconds). Point at a name to see only that player's lines (or words). The most votes is accused; a tie accuses nobody.
 
 **Last chance.** If the liar is accused, they pick the secret word from 12 options in its category (30 seconds). Pick right, and they steal the win.
 
@@ -34,7 +36,7 @@ Draw enough to prove you know the word, but not so much that the liar can work i
 | Liar caught but names the word | 2 to the liar |
 | You voted for the liar | 1 extra, whatever happens |
 
-After each game everyone sees the word, the liar, who voted for whom and the points, and can **Replay drawing** (line by line, in the order it was drawn) or **Save picture** as a PNG. The host clicks **Next game** (a new word and liar, never the same liar twice running) or **Change settings**.
+After each game everyone sees the word, the liar, who voted for whom and the points, and can **Replay drawing** (line by line, in the order it was drawn) or **Save picture** as a PNG (in Draw; in Words the board stays up). The host clicks **Next game** (a new word and liar, never the same liar twice running) or **Change settings**.
 
 ## Words
 
@@ -53,7 +55,7 @@ A room never repeats a word, and the host's browser remembers the last 700 words
 
 ## How it works
 
-There's no server of our own. The host's browser runs the game: it picks the word and the liar, sends each player only their own card, relays every line live and counts the votes. Other players connect straight to it with PeerJS (WebRTC). The host checks everything that arrives: only the current drawer's ink counts (cleaned and kept inside the sheet), votes must be for another player in the game, and only the accused liar can guess, from the 12 options.
+There's no server of our own. The host's browser runs the game: it picks the word and the liar, sends each player only their own card, relays every line live and counts the votes. Other players connect straight to it with PeerJS (WebRTC). The host checks everything that arrives: only the current drawer's ink counts (cleaned and kept inside the sheet), only the current player's word counts (checked against the rules above), votes must be for another player in the game, and only the accused liar can guess, from the 12 options.
 
 The drawing is an 800 × 600 sheet scaled to each screen, so lines land in the same place on a phone and a monitor.
 
@@ -62,7 +64,7 @@ The drawing is an 800 × 600 sheet scaled to each screen, so lines land in the s
 | `index.html` | Screens and sheets |
 | `style.css` | All styling (tokens and font shared with the other games) |
 | `js/words.js` | The word list |
-| `js/engine.js` | Game rules: picking words and the liar, turn order, "Ready to vote", tally, points, cleaning ink. No network or DOM |
+| `js/engine.js` | Game rules: picking words and the liar, turn order, "Ready to vote", tally, points, cleaning ink, checking typed words (`clueProblem`). No network or DOM |
 | `js/sketch.js` | The drawing: pen, live strokes, highlighting a player, replay, PNG export |
 | `js/app.js` | Rooms (host and players), phases and screens |
 | `js/cloud.js` | Firebase sign-in, crew scores, personal stats, analytics |
@@ -82,7 +84,7 @@ Same Firebase project as the other games (`wordle-party-81870`), with its own co
 
 ## Testing
 
-- Rules: `node test/engine.test.mjs` (or `npm test`). It checks the word list (size, no duplicates, every category big enough), word picking without repeats, the liar's options, turn order (liar never first), the liar never repeating, the vote threshold, tallies and ties, every outcome and its points, and cleaning ink from the network.
+- Rules: `node test/engine.test.mjs` (or `npm test`). It checks the word list (size, no duplicates, every category big enough), word picking without repeats, the liar's options, turn order (liar never first), the liar never repeating, the vote threshold, tallies and ties, every outcome and its points, cleaning ink from the network, and the Words game's checks (the word itself, words made from it, repeats, length).
 - Browser tests (multi-player, via Playwright) covered: joining and the 3-player minimum, one-line and free-draw turns, the drawing being identical in every browser, hold to peek, vote now, all three outcomes, replay and save, next game, refresh mid-game, the drawer leaving mid-turn, rejoining, joining mid-game as a spectator, forged ink, votes and guesses (ignored), a dropped connection, Away players being skipped, same names, the host leaving, light and dark themes, and phones. Open the game with `?debug` to expose its state as `window.__theliar` for such tests.
 - Locally: `python3 -m http.server 8000`, then open `http://localhost:8000` in three windows with different names.
 

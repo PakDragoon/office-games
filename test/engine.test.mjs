@@ -104,4 +104,27 @@ assert.deepEqual(E.cleanInk(null), []);
 assert.equal(E.cleanInk(new Array(10000).fill(5)).length, E.MAX_INK);
 assert.equal(E.cleanInk(new Array(100).fill(5), 10).length, 10, 'respects remaining room');
 
+// 9. Words game: clues
+assert.equal(E.cleanClue('  hot   <b>drink</b> '), 'hot b drink b');
+assert.equal(E.cleanClue('it’s'), "it's");
+assert.equal(E.clueProblem(''), 'Type a word');
+assert.equal(E.clueProblem('!!!'), 'Type a word');
+assert.equal(E.clueProblem('morning'), '');
+assert.equal(E.clueProblem('ice cream'), '', 'two words are fine');
+assert.equal(E.clueProblem('very hot drink'), 'At most 2 words');
+assert.equal(E.clueProblem('supercalifragilisticexpialidocious'), 'At most 24 letters');
+assert.equal(E.clueProblem('Tea', { word: 'tea' }), 'That gives the word away');
+assert.equal(E.clueProblem('teapot', { word: 'tea' }), 'That gives the word away', 'made from the word');
+assert.equal(E.clueProblem('cricket', { word: 'cricket bat' }), 'That gives the word away', 'part of the word');
+assert.equal(E.clueProblem('ice-cream', { word: 'ice cream' }), 'That gives the word away', 'spacing and hyphens');
+assert.equal(E.clueProblem('ox', { word: 'box' }), '', 'short clues inside the word are fine');
+assert.equal(E.clueProblem('steam', { word: 'tea' }), '', 'only contains it: fine');
+assert.equal(E.clueProblem('teas', { word: 'tea' }), 'That gives the word away');
+assert.equal(E.clueProblem('bats', { word: 'cricket bat' }), '', 'short part of the answer is not checked');
+assert.equal(E.clueProblem('green tea', { word: 'tea' }), 'That gives the word away');
+assert.equal(E.clueProblem('Leaves', { said: ['leaves'] }), 'Someone already said that');
+assert.equal(E.clueProblem('leaf', { said: ['leaves'] }), '');
+assert.equal(E.clueProblem('teapot', { word: '' }), '', 'the liar is not checked against the word');
+assert.ok(E.WORD_SECONDS.includes(30));
+
 console.log(`engine: all checks passed (${total} words in ${CATEGORY_NAMES.length} categories)`);

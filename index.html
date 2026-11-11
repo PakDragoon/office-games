@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Everyone draws the same secret word, one line at a time. One of you doesn't know it. Find the liar.">
+  <meta name="description" content="Everyone draws the same secret word, or gives a word about it, in turns. One of you doesn't know it. Find the liar.">
   <title>The Liar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><path d='M7 21c4-9 8 3 12-6 2-4 5-2 6 0' fill='none' stroke='%23e0566e' stroke-width='3' stroke-linecap='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,9 +33,9 @@
     <div class="home-intro">
       <h1 class="logo" aria-label="The Liar">
         <span class="logo-row" id="logo-row" aria-hidden="true"></span>
-        <span class="logo-sub" aria-hidden="true">a drawing game with one liar</span>
+        <span class="logo-sub" aria-hidden="true">draw it or say it, one of you is lying</span>
       </h1>
-      <p class="lede">Everyone draws the same secret word, one line at a time. One of you doesn’t know it and is bluffing with every stroke. Find the liar.</p>
+      <p class="lede">Everyone gets the same secret word and takes turns to draw it, or to say one word about it. One of you doesn’t know it and is bluffing every turn. Find the liar.</p>
       <label class="field">Your name
         <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
       </label>
@@ -59,7 +59,7 @@
         <h2>How a game goes</h2>
         <ol class="step-list">
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="5" width="18" height="22" rx="3"/><path d="M12 13h8M12 18h5"/></svg><b>Get your card</b><span>A secret word, or “you are the liar”.</span></li>
-          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24c5-10 9 2 14-7 2-4 4-3 6-1"/><circle cx="26" cy="16" r="1.6"/></svg><b>Draw in turns</b><span>3 rounds, one line each, same drawing.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24c5-10 9 2 14-7 2-4 4-3 6-1"/><circle cx="26" cy="16" r="1.6"/></svg><b>Draw or say a word</b><span>3 rounds, one turn each: a line on the drawing, or a word.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 16l5 5 9-11"/><rect x="4" y="4" width="24" height="24" rx="5"/></svg><b>Vote</b><span>Point at the liar. Majority decides.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="13" r="6"/><path d="M8 27c1.5-5 4.5-7 8-7s6.5 2 8 7"/><path d="M13 12.5h.01M19 12.5h.01"/></svg><b>Last chance</b><span>A caught liar can still steal it by naming the word.</span></li>
         </ol>
@@ -84,12 +84,27 @@
     <div class="lobby-setup">
       <div id="host-settings" class="host-settings" hidden>
         <div class="setting">
+          <span class="setting-label">Game</span>
+          <div class="seg two" id="set-play" role="group" aria-label="Game">
+            <button type="button" data-value="draw"><b>Draw</b><small>Add to one shared drawing</small></button>
+            <button type="button" data-value="words"><b>Words</b><small>Type a word about it</small></button>
+          </div>
+        </div>
+        <div class="setting" id="mode-setting">
           <span class="setting-label">Each turn</span>
           <div class="seg two" id="set-mode" role="group" aria-label="Each turn">
             <button type="button" data-value="stroke"><b>One line</b><small>Pen down, draw, lift</small></button>
             <button type="button" data-value="free"><b>Free draw</b><small>As much as you like, timed</small></button>
           </div>
         </div>
+        <label class="select-field" id="word-seconds-field">Seconds to type your word
+          <select id="set-word-seconds">
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
         <label class="select-field" id="seconds-field">Seconds per turn
           <select id="set-seconds">
             <option value="5">5 seconds</option>
@@ -151,6 +166,7 @@
       </div>
       <div class="sheet-card">
         <div class="sheet-host" id="sheet-host"></div>
+        <div class="clue-board" id="clue-board" hidden></div>
         <div class="handoff" id="handoff" hidden>
           <span class="handoff-name" id="handoff-name"></span>
           <span class="handoff-sub" id="handoff-sub"></span>
@@ -167,6 +183,12 @@
           </div>
         </div>
       </div>
+      <form class="clue-form" id="clue-form" autocomplete="off" hidden>
+        <label class="sr-only" for="clue-input">Your word</label>
+        <input class="text-input" id="clue-input" maxlength="32" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Your word">
+        <button class="btn primary" id="clue-send" type="submit">Say it</button>
+        <p class="clue-hint" id="clue-hint" aria-live="polite"></p>
+      </form>
     </section>
 
     <aside class="side">
@@ -191,7 +213,7 @@
 
       <section class="panel" id="vote-panel" hidden>
         <div class="panel-head"><h2 id="vote-title">Who is the liar?</h2><span class="muted" id="vote-count"></span></div>
-        <p class="small-note muted">Point at a name to see only their lines.</p>
+        <p class="small-note muted" id="vote-tip">Point at a name to see only their lines.</p>
         <ul class="suspects" id="vote-list"></ul>
       </section>
 
@@ -211,7 +233,7 @@
           <div><span class="muted">The liar</span><b class="reveal-liar" id="result-liar"></b></div>
         </div>
         <ul class="vote-results" id="result-votes"></ul>
-        <div class="result-tools">
+        <div class="result-tools" id="result-tools">
           <button class="btn ghost" id="replay-btn" type="button">Replay drawing</button>
           <button class="btn ghost" id="save-btn" type="button">Save picture</button>
         </div>
@@ -246,11 +268,15 @@
 <section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <p>3 to 8 players. Everyone gets the same secret word, except one player: <b>the liar</b>, who only sees the category.</p>
-  <h3>Drawing</h3>
+  <p>The host picks the game: <b>Draw</b> or <b>Words</b>.</p>
+  <h3>Draw</h3>
   <p>Players take turns adding to one shared drawing, in an order picked at random (the liar is never first). There are 3 rounds in the same order. Depending on the room, a turn is <b>one line</b> (pen down, draw, lift) or <b>free drawing</b> for a set time (press <b>Done drawing</b> to finish early). Every player draws in their own colour.</p>
   <p>Draw enough to prove you know the word, but not so much that the liar can work it out.</p>
+  <h3>Words</h3>
+  <p>Same turns and rounds, but instead of drawing you type <b>a word about the secret word</b> (one or two words). Everyone sees it on the board. You can’t use the word itself (or a word made from it, like <i>teapot</i> for <i>tea</i>) or repeat a word someone already said. Run out of time and your turn is passed, which looks suspicious.</p>
+  <p>Too obvious and the liar works out the word; too vague and you look like the liar.</p>
   <h3>Voting</h3>
-  <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. The most votes is accused; a tie means nobody is.</p>
+  <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. Point at a name to see only their lines or words. The most votes is accused; a tie means nobody is.</p>
   <h3>Last chance</h3>
   <p>If the liar is caught, they get one try to pick the secret word from 12 options. Right, and they steal the win.</p>
   <h3>Points</h3>
