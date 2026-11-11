@@ -149,6 +149,10 @@
     .fc .flip b { animation: fc-flip 3.2s ease-in-out infinite; }
     .fc .flip.f2 b { animation-delay: 0.12s; }
     @keyframes fc-flip { 0%, 45% { transform: scaleX(1); } 52% { transform: scaleX(0.08); } 60%, 100% { transform: scaleX(1); } }
+    /* Melon Burst: a squeezed melon in rubber bands */
+    .mb svg { width: 150px; height: auto; overflow: visible; }
+    .mb .wob { transform-box: view-box; transform-origin: 120px 170px; animation: mb-tremble 0.28s ease-in-out infinite; }
+    @keyframes mb-tremble { 0%, 100% { transform: rotate(-1.2deg); } 50% { transform: rotate(1.2deg); } }
   </style>
 </head>
 <body>
@@ -161,6 +165,25 @@
   </header>
 
   <ul class="games">
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/melonburst/">
+        <div class="art mb" aria-hidden="true">
+          <svg viewBox="0 0 240 200"><ellipse cx="120" cy="186" rx="76" ry="8" fill="rgba(0,0,0,.12)"/><g class="wob">
+            <path d="M30 105 C30 50 80 40 112 62 L128 62 C160 40 210 50 210 105 C210 160 160 170 128 148 L112 148 C80 170 30 160 30 105Z" fill="#2f8f4e" stroke="#174d2b" stroke-width="2.5"/>
+            <path d="M34 80 C70 70 90 92 120 80 S180 70 206 82 M32 108 C70 98 90 120 120 108 S180 98 208 110 M38 134 C70 126 90 146 120 134 S180 126 204 136" fill="none" stroke="#1d6236" stroke-width="8" stroke-linecap="round" opacity=".85"/>
+            <path d="M110 62 C118 90 118 120 110 148" fill="none" stroke="#e8453c" stroke-width="5" stroke-linecap="round"/><path d="M116 61 C124 90 124 120 116 149" fill="none" stroke="#f2b630" stroke-width="5" stroke-linecap="round"/><path d="M122 61 C130 90 130 120 122 149" fill="none" stroke="#3d7fe0" stroke-width="5" stroke-linecap="round"/><path d="M128 62 C136 90 136 120 128 148" fill="none" stroke="#9b5de5" stroke-width="5" stroke-linecap="round"/>
+            <ellipse cx="62" cy="100" rx="8" ry="9" fill="#fff" stroke="#10301c" stroke-width="1.5"/><ellipse cx="86" cy="100" rx="8" ry="9" fill="#fff" stroke="#10301c" stroke-width="1.5"/><circle cx="63" cy="101" r="2.4" fill="#10301c"/><circle cx="87" cy="101" r="2.4" fill="#10301c"/>
+            <path d="M54 86 l13 -5 M95 86 l-13 -5" stroke="#10301c" stroke-width="2.6" stroke-linecap="round"/><path d="M66 120 q3 -4 6 0 t6 0 t6 0" fill="none" stroke="#10301c" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M200 74 q12 -6 16 -16" fill="none" stroke="#6b5a2a" stroke-width="5" stroke-linecap="round"/></g></svg>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Melon Burst</h2><span class="new">NEW</span></div>
+          <p>Guess the word letter by letter. Every wrong letter snaps another rubber band round your watermelon, and one too many makes it burst.</p>
+          <ul class="facts"><li>1 to 8 players</li><li>Race, or pick words 1v1 / 2v2</li><li>Daily word and practice</li></ul>
+          <span class="play">Play Melon Burst</span>
+        </div>
+      </a>
+    </li>
     <li>
       <a class="game" href="https://pakdragoon.github.io/flipchip/">
         <div class="art fc" aria-hidden="true">
