@@ -178,7 +178,7 @@ const SOUND = {
    ========================================================= */
 const S = {
   myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false,
-  heard: 0, reconnecting: false, gameShown: -1, wordSeen: -1, splatSeen: -1, holderSeen: null, savedGame: -1,
+  heard: 0, reconnecting: false, gameShown: -1, wordSeen: -1, splatSeen: -1, holderSeen: null, bananaSeat: -1, savedGame: -1,
   typing: '', typingFor: null, sentTyping: '', pending: '', viewAt: 0, refreshTimer: 0,
 };
 const H = { room: null, conns: new Map(), seen: new Map(), fuseTimer: 0, phaseTimer: 0, rnd: Math.random };
@@ -899,6 +899,7 @@ function renderGame(v) {
 
   renderSeats(v);
   renderCentre(v);
+  placeBanana();   // the letters may have changed size
   renderAnswer(v);
   renderMe(v, spectator);
   renderLog(v);
@@ -938,13 +939,12 @@ function renderSeats(v) {
   const cap = E.maxLivesFor(v.settings);
   $('seats').innerHTML = seated.map((p, i) => {
     const a = -Math.PI / 2 + (i / n) * Math.PI * 2;
-    const x = 50 + 41 * Math.cos(a), y = 50 + 39 * Math.sin(a);
     const holder = p.id === v.holder;
     const tag = !p.connected ? 'Offline' : p.away ? 'Away' : '';
     const turnTag = holder && v.status === 'play' && !tag ? (p.id === S.myId ? 'Your turn' : 'Turn') : '';
     const initial = esc([...p.name][0] || '?').toUpperCase();
     return `<div class="seat pc${p.color}${holder ? ' holder' : ''}${p.alive ? '' : ' out'}${active(p) ? '' : ' off'}${p.id === S.myId ? ' me' : ''}"
-      style="left:${x.toFixed(2)}%;top:${y.toFixed(2)}%">
+      data-a="${a.toFixed(4)}">
       <span class="face">${p.photo ? `<img src="${esc(p.photo)}" alt="">` : initial}</span>
       <span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span>
       <span class="lives">${v.status === 'over' && p.place === 1 ? '<span class="crown">Winner</span>' : hearts(p.lives, cap)}</span>
@@ -955,14 +955,73 @@ function renderSeats(v) {
   const at = (pausedNow(v) || v.status === 'over') && v.lastSplat ? v.lastSplat.pid : v.holder;
   const idx = seated.findIndex((p) => p.id === at);
   const spot = $('banana-spot');
-  if (idx >= 0) {
-    const a = -Math.PI / 2 + (idx / n) * Math.PI * 2;
-    spot.style.left = `${(50 + 41 * 0.66 * Math.cos(a)).toFixed(2)}%`;
-    spot.style.top = `${(50 + 39 * 0.66 * Math.sin(a)).toFixed(2)}%`;
-    spot.hidden = false;
-  } else if (v.status !== 'over') spot.hidden = true;
+  S.bananaSeat = idx;
+  if (idx >= 0) spot.hidden = false;
+  else if (v.status !== 'over') spot.hidden = true;
+  layoutTable();
   $('table').classList.toggle('my-turn', isMyTurn(v));
 }
+
+// Seats go round an ellipse sized from the table and each seat's measured size, so faces,
+// names and hearts never get cut off at the table's edge.
+function layoutTable() {
+  const W = $('table').clientWidth, H = $('table').clientHeight;
+  for (const seat of $('seats').children) {
+    const a = parseFloat(seat.dataset.a);
+    const rx = W / 2 - seat.offsetWidth / 2 - 6, ry = H / 2 - seat.offsetHeight / 2 - 6;
+    seat.style.left = `${(W / 2 + rx * Math.cos(a)).toFixed(1)}px`;
+    seat.style.top = `${(H / 2 + ry * Math.sin(a)).toFixed(1)}px`;
+  }
+  placeBanana();
+}
+
+// Where the banana goes. Big tables: between the centre letters and the holder's seat, as close
+// to the seat as it gets without covering it or the letters (it shrinks if the gap is small).
+// Phone-sized tables have no such gap, so a small banana sits on the holder's face instead and
+// its Fresh/Ripe label moves under the turn label.
+function placeBanana() {
+  const spot = $('banana-spot');
+  const seat = $('seats').children[S.bananaSeat];
+  const age = $('banana-age');
+  const W = $('table').clientWidth, H = $('table').clientHeight;
+  const small = W < 520;
+  spot.classList.toggle('badge', small);
+  if (small && age.parentElement === spot) $('turn-label').after(age);
+  if (!small && age.parentElement !== spot) spot.append(age);
+  if (spot.hidden || !seat) return;
+  const face = seat.querySelector('.face');
+  const sx = parseFloat(seat.style.left), sy = parseFloat(seat.style.top);
+  if (small) {
+    // bottom-right corner of the face
+    spot.style.left = `${(sx + face.offsetLeft + face.offsetWidth - seat.offsetWidth / 2 - 2).toFixed(1)}px`;
+    spot.style.top = `${(sy + face.offsetTop + face.offsetHeight - seat.offsetHeight / 2 - 6).toFixed(1)}px`;
+    spot.style.setProperty('--k', '1');
+    return;
+  }
+  const table = $('table').getBoundingClientRect();
+  const dx = sx - W / 2, dy = sy - H / 2;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len, uy = dy / len;
+  // How far a box reaches along the line from the table's centre towards the seat
+  const reach = (w, h) => (w / 2) * Math.abs(ux) + (h / 2) * Math.abs(uy);
+  const outer = (el) => {
+    const r = el.getBoundingClientRect();
+    if (!r.width) return 0;
+    const cx = r.left + r.width / 2 - table.left - W / 2, cy = r.top + r.height / 2 - table.top - H / 2;
+    return cx * ux + cy * uy + reach(r.width, r.height);
+  };
+  const lettersReach = Math.max(0, outer($('turn-label')), outer($('prompt')), $('timer').hidden ? 0 : outer($('timer')));
+  const gap = 8;
+  const seatReach = reach(seat.offsetWidth * 1.08, seat.offsetHeight * 1.08);
+  const spotReach = reach(spot.offsetWidth, spot.offsetHeight);
+  const room = len - seatReach - lettersReach - gap * 2;
+  const k = Math.min(1, Math.max(0.5, room / (spotReach * 2)));
+  const d = Math.max(0, len - seatReach - gap - spotReach * k);
+  spot.style.left = `${(W / 2 + ux * d).toFixed(1)}px`;
+  spot.style.top = `${(H / 2 + uy * d).toFixed(1)}px`;
+  spot.style.setProperty('--k', k.toFixed(3));
+}
+if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => layoutTable()).observe($('table'));
 
 function renderCentre(v) {
   const started = startedFor(v);
@@ -976,7 +1035,7 @@ function renderCentre(v) {
   label.className = `turn-label${isMyTurn(v) ? ' mine' : ''}`;
   label.innerHTML = v.status !== 'play' || !holder ? ''
     : isMyTurn(v) ? 'Your turn!'
-    : `<span class="pen-dot pc${holder.color}"></span>${esc(holder.name)}’s turn`;
+    : `<span class="pen-dot pc${holder.color}"></span><span class="tn">${esc(holder.name)}</span>’s turn`;
   $('timer').hidden = v.fuseLeft == null || v.status !== 'play';
   if (v.status === 'over') {
     const w = v.winner ? pOf(v, v.winner) : null;
