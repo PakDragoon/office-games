@@ -140,6 +140,15 @@
 
     footer { color: var(--muted); font-size: 0.9rem; display: flex; flex-wrap: wrap; gap: 0.4rem 1.5rem; border-top: 1px solid var(--line); padding-top: 1rem; }
     @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    /* Flipchip: chips on a scrap of felt, one mid-flip */
+    .fc .felt { display: grid; grid-template-columns: repeat(4, 30px); gap: 2px; padding: 5px; background: #23603f; border: 3px solid #1d5137; border-radius: 9px; }
+    .fc .c { width: 30px; height: 30px; border-radius: 50%; background: #2e7a55; position: relative; }
+    .fc .c b { position: absolute; inset: 3px; border-radius: 50%; }
+    .fc .d b { background: radial-gradient(circle, #23263f 0 48%, #3b3f63 50% 56%, transparent 58%), repeating-conic-gradient(from 8deg, #f1ecdf 0 13deg, #23263f 13deg 45deg); }
+    .fc .l b { background: radial-gradient(circle, #f6f2e7 0 48%, #d9d2bf 50% 56%, transparent 58%), repeating-conic-gradient(from 8deg, #23263f 0 13deg, #f6f2e7 13deg 45deg); }
+    .fc .flip b { animation: fc-flip 3.2s ease-in-out infinite; }
+    .fc .flip.f2 b { animation-delay: 0.12s; }
+    @keyframes fc-flip { 0%, 45% { transform: scaleX(1); } 52% { transform: scaleX(0.08); } 60%, 100% { transform: scaleX(1); } }
   </style>
 </head>
 <body>
@@ -152,6 +161,23 @@
   </header>
 
   <ul class="games">
+    <li>
+      <a class="game" href="https://pakdragoon.github.io/flipchip/">
+        <div class="art fc" aria-hidden="true">
+          <div class="felt">
+            <span class="c"></span><span class="c d"><b></b></span><span class="c"></span><span class="c"></span>
+            <span class="c d"><b></b></span><span class="c l flip"><b></b></span><span class="c l flip f2"><b></b></span><span class="c d"><b></b></span>
+            <span class="c"></span><span class="c d"><b></b></span><span class="c l"><b></b></span><span class="c"></span>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Flipchip</h2><span class="new">NEW</span></div>
+          <p>Trap a line of your opponent’s chips between two of yours and they all flip to your colour. Most chips when the board fills up wins.</p>
+          <ul class="facts"><li>2 players, others watch</li><li>Board game</li><li>Play the computer too</li></ul>
+          <span class="play">Play Flipchip</span>
+        </div>
+      </a>
+    </li>
     <li>
       <a class="game" href="https://pakdragoon.github.io/rotten/">
         <div class="art rot" aria-hidden="true">
