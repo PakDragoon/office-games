@@ -1,6 +1,6 @@
-# Wordle Party
+# Lettuce Party
 
-Multiplayer Wordle for up to 5 players. Everyone gets the same word, and you can watch the others' colored tiles fill in live, without seeing their letters.
+A multiplayer five-letter word game for up to 5 players. Everyone gets the same word, and you can watch the others' colored tiles fill in live, without seeing their letters.
 
 ## How to play
 
@@ -38,7 +38,7 @@ Firebase setup for project `wordle-party-81870` (one time, in the [Firebase cons
 1. **Google sign-in:** Build → Authentication → Sign-in method → Google → Enable, pick a support email, Save. (Anonymous sign-in is no longer used and can be turned off.)
 2. **Authorized domains:** Authentication → Settings → Authorized domains → make sure `pakdragoon.github.io` is listed.
 3. **Database:** Build → Firestore Database, Standard edition, database ID `(default)`, production mode.
-4. **Security rules:** Firestore Database → Rules → replace everything with `firestore.rules` → Publish. Do this again whenever `firestore.rules` changes. The same project also runs Thulla, and Firestore has one set of rules per database, so Thulla's `firestore.rules` contains these Wordle rules too; keep the two files in step.
+4. **Security rules:** Firestore Database → Rules → replace everything with `firestore.rules` → Publish. Do this again whenever `firestore.rules` changes. The same project also runs Thulla, and Firestore has one set of rules per database, so Thulla's `firestore.rules` contains these Lettuce Party rules too; keep the two files in step.
 5. **Restrict the API key** in the [Google Cloud console](https://console.cloud.google.com/apis/credentials) → Browser key (auto created by Firebase):
    - Application restrictions → Websites: `https://pakdragoon.github.io/*` and `https://wordle-party-81870.firebaseapp.com/*` (the second is needed for the Google sign-in window). Add `http://localhost:8000/*` for local testing.
    - API restrictions → Restrict key → Identity Toolkit API, Token Service API, Cloud Firestore API, and **Firebase Installations API** (needed for Analytics).
@@ -47,7 +47,7 @@ The Firebase config in `js/cloud.js` is meant to be public; the security rules a
 
 ## Analytics (traffic and game stats)
 
-Wordle Party can send anonymous usage stats to Google Analytics through the Firebase project: visitors, daily and monthly users, countries, devices, time on site, plus these game events:
+Lettuce Party can send anonymous usage stats to Google Analytics through the Firebase project: visitors, daily and monthly users, countries, devices, time on site, plus these game events:
 
 | Event | When | Details sent |
 |---|---|---|
@@ -69,7 +69,7 @@ To turn it on:
 3. Paste it into `measurementId` in `firebaseConfig` in `js/cloud.js`.
 4. Add **Firebase Installations API** to the API key's allowed APIs (step 5 above).
 
-See it in the Firebase console under **Analytics** (Realtime is instant; reports fill in within 24 hours) or at [analytics.google.com](https://analytics.google.com). Wordle Party and Thulla share one property; compare them under **Reports → Engagement → Pages and screens** by the paths `/wordle/` and `/thulla/`.
+See it in the Firebase console under **Analytics** (Realtime is instant; reports fill in within 24 hours) or at [analytics.google.com](https://analytics.google.com). All the office games share one property; compare them under **Reports → Engagement → Pages and screens** by the paths `/lettuce-party/` and `/thulla/`.
 
 ## Deploy on GitHub Pages
 
@@ -83,10 +83,12 @@ See it in the Firebase console under **Analytics** (Realtime is instant; reports
    js/app.js
    js/cloud.js
    js/words.js
+   words/answers.txt
+   words/valid.txt
    ```
 2. On GitHub, go to **Settings → Pages**.
 3. Under **Build and deployment**, set **Source** to *Deploy from a branch*, pick `main` and `/ (root)`, then **Save**.
-4. After a minute or two, the game is live at `https://pakdragoon.github.io/wordle/`.
+4. After a minute or two, the game is live at `https://pakdragoon.github.io/lettuce-party/`.
 
 ## Run it locally
 
@@ -114,6 +116,6 @@ Trade-offs to know about:
 
 ## Customizing
 
-- **Word list:** when someone hosts a room, their browser downloads the word lists (other players don't need them, since only the host checks guesses). The secret word comes from the official NYT Wordle answer list, about 2,300 common words. A guess is accepted if any of these knows it: the NYT Wordle guess list ([`wordles`](https://www.npmjs.com/package/wordles)), the community Wordle list ([tabatkins/wordle-list](https://github.com/tabatkins/wordle-list)), or the 5-letter words in a general English dictionary ([`an-array-of-english-words`](https://www.npmjs.com/package/an-array-of-english-words)). The lobby shows how many words loaded. If every download fails, the built-in lists in `js/words.js` are used, which you can extend by pasting in more words separated by spaces. Answers don't repeat within a room until every possible answer has been played. Swear words, slurs and other offensive words are never picked as the answer, though they can still be typed as guesses. The game combines `BLOCKED_ANSWERS` in `js/words.js` with the public [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) list; add words to `BLOCKED_ANSWERS` to block more. The host can also untick **Only accept words from the word list** in the lobby to allow any 5 letters.
+- **Word list:** when someone hosts a room, their browser downloads the word lists (other players don't need them, since only the host checks guesses). The secret word comes from `words/answers.txt`, about 1,900 everyday 5-letter words from [SCOWL](https://www.npmjs.com/package/wordlist-english) (sizes 10, 20 and 35, no proper nouns, plurals and -ed/-ing/-er forms left out). A guess is accepted if it's in `words/valid.txt`, every 5-letter word from SCOWL and [`an-array-of-english-words`](https://www.npmjs.com/package/an-array-of-english-words) (about 12,600). Rebuild both with `node tools/build-words.mjs` (downloads the sources into the git-ignored `tools/.cache/`). The lobby shows how many words loaded. If the files fail to load, the built-in lists in `js/words.js` are used. Answers don't repeat within a room until every possible answer has been played. Swear words, slurs and other offensive words are never picked as the answer, though they can still be typed as guesses. The game combines `BLOCKED_ANSWERS` in `js/words.js` with the public [LDNOOBW](https://github.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words) list; add words to `BLOCKED_ANSWERS` to block more. The host can also untick **Only accept words from the word list** in the lobby to allow any 5 letters.
 - **Player limit:** change `MAX_PLAYERS` at the top of `js/app.js`. Above 5, add a `--p5` color in `style.css` and a matching `.rival.c5` rule for each extra player.
 - **Colors and fonts:** all in the `:root` variables at the top of `style.css`, with separate dark-mode values below them.

@@ -2,14 +2,14 @@ import { ANSWERS, EXTRA_GUESSES, BLOCKED_ANSWERS } from './words.js';
 import * as cloud from './cloud.js';
 
 /* =========================================================
-   Wordle Party
+   Lettuce Party
    One player hosts. Their browser is the "server": it picks the
    word, checks every guess and sends everyone the colour patterns.
    Other players connect to the host directly with PeerJS (WebRTC).
    Non-host players never receive the word or anyone's letters.
    ========================================================= */
 
-const PREFIX = 'wordleparty-v1-';      // namespaces our room ids on the PeerJS server
+const PREFIX = 'lettuceparty-v1-';      // namespaces our room ids on the PeerJS server
 const MAX_PLAYERS = 5;
 const ROWS = 6;
 const COLS = 5;
@@ -17,37 +17,18 @@ const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I or O, easy to read out l
 
 /* ---------- Word lists ----------
    Only the host's browser checks guesses, so only the host downloads these.
-   Possible answers: the official NYT Wordle answer list (about 2,300 common words).
-   Accepted guesses: everything from every dictionary below that loads, so a real
-   word is only rejected if none of them knows it. Each dictionary has a backup
-   address, and if everything fails the built-in lists in words.js are used. */
+   Both files are built by tools/build-words.mjs from open word lists:
+   possible answers are about 1,900 everyday words (SCOWL), and accepted guesses are
+   every 5-letter English word (about 12,600). If they fail to load, the built-in
+   lists in words.js are used. */
 const WORD_SOURCES = {
-  answers: [
-    'https://cdn.jsdelivr.net/npm/wordles@1.0.0/wordles.json',
-    'https://raw.githubusercontent.com/stuartpb/wordles/main/wordles.json',
-  ],
+  answers: ['words/answers.txt'],
   // Public list of offensive words, added on top of the built-in BLOCKED_ANSWERS.
   blocked: [
     'https://cdn.jsdelivr.net/gh/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words@master/en',
     'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en',
   ],
-  dictionaries: [
-    // NYT Wordle: words accepted as guesses (about 10,600)
-    [
-      'https://cdn.jsdelivr.net/npm/wordles@1.0.0/nonwordles.json',
-      'https://raw.githubusercontent.com/stuartpb/wordles/main/nonwordles.json',
-    ],
-    // Community Wordle list (about 14,800, includes words NYT added later)
-    [
-      'https://cdn.jsdelivr.net/gh/tabatkins/wordle-list@main/words',
-      'https://raw.githubusercontent.com/tabatkins/wordle-list/main/words',
-    ],
-    // General English dictionary (about 275,000 words; the 5-letter ones are kept)
-    [
-      'https://cdn.jsdelivr.net/npm/an-array-of-english-words@2.0.0/index.json',
-      'https://raw.githubusercontent.com/words/an-array-of-english-words/master/index.json',
-    ],
-  ],
+  dictionaries: [['words/valid.txt']],
 };
 // Never picked as the secret word, though they can still be typed as guesses.
 const BLOCKED = new Set(BLOCKED_ANSWERS);
@@ -1284,7 +1265,7 @@ async function shareResult() {
   const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
   const roundLabel = v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
   const grid = m.patterns.map((p) => [...p].map((c) => squares[c]).join('')).join('\n');
-  const text = `Wordle Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
+  const text = `Lettuce Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
   try {
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       await navigator.share({ text });
@@ -1700,7 +1681,7 @@ function loadWords() {
       ...WORD_SOURCES.dictionaries.map((urls) => fetchWordList(urls)),
     ]);
     for (const w of blocked || []) BLOCKED.add(w);
-    WORDS.answers = [...new Set([...(answers || []), ...ANSWERS])].filter(notBlocked);
+    WORDS.answers = (answers || ANSWERS).filter(notBlocked);
     for (const list of [answers, ...dicts]) {
       for (const w of list || []) WORDS.valid.add(w);
     }

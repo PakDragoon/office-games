@@ -105,13 +105,14 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .home-inner { width: 100%; max-width: 560px; }
 
 .logo { display: grid; justify-items: start; gap: 0.2rem; margin-bottom: 1rem; }
-.logo-row { display: flex; gap: 6px; }
+.logo-row { display: flex; gap: clamp(4px, 1.2vw, 6px); }
+/* leaf-shaped tiles: two round corners, two sharp */
 .logo .t {
   font-style: normal;
   display: grid; place-items: center;
-  width: clamp(40px, 11vw, 58px); aspect-ratio: 1;
-  font-size: clamp(1.4rem, 5vw, 2rem); font-weight: 800;
-  color: var(--on-tile); border-radius: 6px;
+  width: clamp(36px, 10.5vw, 56px); aspect-ratio: 1;
+  font-size: clamp(1.3rem, 4.8vw, 1.95rem); font-weight: 800;
+  color: var(--on-tile); border-radius: 45% 6px 45% 6px;
   animation: logo-flip 0.5s ease both;
 }
 .logo .t:nth-child(2) { animation-delay: 0.08s; }
@@ -119,6 +120,7 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .logo .t:nth-child(4) { animation-delay: 0.24s; }
 .logo .t:nth-child(5) { animation-delay: 0.32s; }
 .logo .t:nth-child(6) { animation-delay: 0.40s; }
+.logo .t:nth-child(7) { animation-delay: 0.48s; }
 .logo-sub {
   font-size: clamp(2.6rem, 10vw, 4rem);
   font-weight: 800;
