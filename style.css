@@ -46,6 +46,8 @@
 }
 
 *, *::before, *::after { box-sizing: inherit; }
+/* The inside of <details> sits in a ::details-content box that the rule above can't reach */
+details * { box-sizing: border-box; }
 html, body { height: 100%; }
 body {
   margin: 0;
@@ -92,7 +94,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 #code-input::placeholder { letter-spacing: normal; text-transform: none; }
 .error { color: var(--danger); font-weight: 600; margin: 0; }
 .error:empty { display: none; }
-.select-field { display: grid; gap: 0.35rem; font-weight: 600; }
+.select-field { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.35rem; font-weight: 600; }
 .select-field select {
   font: 600 1rem var(--font); color: var(--ink); background: var(--surface);
   border: 1px solid var(--line); border-radius: 10px; padding: 0.65rem 0.75rem; width: 100%;
@@ -240,9 +242,9 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .more summary::-webkit-details-marker { display: none; }
 .more summary::before { content: ''; width: 7px; height: 7px; border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted); transform: rotate(-45deg); transition: transform 0.15s ease; }
 .more[open] summary::before { transform: rotate(45deg); }
-.select-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; padding: 0 0.9rem 0.9rem; }
-.select-grid .select-field { font-size: 0.88rem; }
-.select-grid select { font-size: 0.92rem; padding: 0.55rem 0.6rem; background: var(--bg); }
+.select-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; padding: 0 0.9rem 0.9rem; }
+.select-grid .select-field { font-size: 0.88rem; min-width: 0; }
+.select-grid select { font-size: 0.92rem; padding: 0.55rem 0.6rem; background: var(--bg); min-width: 0; max-width: 100%; }
 @media (max-width: 560px) { .select-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---------- Game ---------- */
