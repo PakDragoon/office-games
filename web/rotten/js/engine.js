@@ -214,6 +214,18 @@ export function pickPrompt(bands, band, promptLen, rnd, recent = []) {
   return from[Math.floor(rnd() * from.length)] || 'an';
 }
 
+// ---------- Computer players ----------
+
+// Everyday words that contain `prompt`, from words/bot.txt (one line per prompt, made by tools/build-words.mjs).
+// A plain text search, so a room never has to scan the whole word list on its tiny CPU budget.
+export function botCandidates(botText, prompt) {
+  if (!prompt || /[^a-z]/.test(prompt)) return [];
+  const at = botText.startsWith(`${prompt} `) ? 0 : botText.indexOf(`\n${prompt} `) + 1;
+  if (at <= 0 && !botText.startsWith(`${prompt} `)) return [];
+  const end = botText.indexOf('\n', at);
+  return botText.slice(at + prompt.length + 1, end < 0 ? undefined : end).split(' ').filter(Boolean);
+}
+
 // ---------- Turns ----------
 
 // The next player after `fromId` (in seat order) who can take the banana. If nobody else

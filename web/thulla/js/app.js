@@ -8,6 +8,7 @@ import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { deltaChip, myRatingHTML, ratingChip } from '../../shared/rating.js';
+import { addBotButton, botControls, botTag, levelName, wireBots } from '../../shared/bots.js';
 import { pickCritter, slapMe, slapSeat } from './slap.js';
 
 const MAX_PLAYERS = 8;
@@ -319,11 +320,13 @@ function renderLobby(v) {
     <li class="${p.online ? '' : 'offline'}">
       <span class="dot c${p.color}"></span>
       ${p.photo ? `<img class="avatar" src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer">` : ''}
-      <span>${esc(disp(p.name))}${ratingChip(p.rating, p.ratingProv)}</span>
-      <span class="tag">${[p.isHost && 'Host', p.id === v.you && 'You', !p.online && 'Offline'].filter(Boolean).join(', ')}</span>
+      <span class="nm">${esc(disp(p.name))}${botTag(p)}${ratingChip(p.rating, p.ratingProv)}</span>
+      ${p.bot ? (isHost ? botControls(p) : `<span class="tag">${levelName(p.botLevel)}</span>`)
+      : `<span class="tag">${[p.isHost && 'Host', p.id === v.you && 'You', !p.online && 'Offline'].filter(Boolean).join(', ')}</span>`}
     </li>`).join('') + (list.length < MAX_PLAYERS
     ? `<li class="empty">${list.length < 2 ? 'Waiting for at least one more player…' : `Room for ${MAX_PLAYERS - list.length} more`}</li>` : '');
 
+  $('#bot-add').hidden = !isHost || list.length >= MAX_PLAYERS;
   $('#host-settings').hidden = !isHost;
   $('#guest-settings').hidden = isHost;
   $('#start-btn').hidden = !isHost;
@@ -784,6 +787,7 @@ $('#set-early').addEventListener('change', (e) => hostSetSettings({ earlyPlay: e
 wirePublic(send);
 $('#crew-save').addEventListener('click', () => hostUseCrew($('#set-crew').value));
 $('#set-crew').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostUseCrew(e.target.value); });
+wireBots($('#lobby'), (m) => send(m), () => me.view?.you === me.view?.hostId);
 $('#start-btn').addEventListener('click', () => { $('#lobby-error').textContent = ''; hostStartRound(); });
 
 function confirmLeave() {

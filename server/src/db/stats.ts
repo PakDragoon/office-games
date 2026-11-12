@@ -93,7 +93,11 @@ export async function dailyStreakWrites(db: D1Database, id: string, game: string
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /** Write one finished game: player stats, crew totals and the match log, in one batch. */
-export async function recordGame(db: D1Database, r: GameReport): Promise<string> {
+export async function recordGame(db: D1Database, whole: GameReport): Promise<string> {
+  // Computer players are never written anywhere: no stats, no crew rows, not in the match log
+  const people = whole.players.filter((p) => !p.bot);
+  if (!people.length) return '';
+  const r: GameReport = { ...whole, players: people, winner: people.some((p) => p.name === whole.winner) ? whole.winner : null };
   const now = Date.now();
   const stmts: D1PreparedStatement[] = [];
   const upsertPlayer = db.prepare(

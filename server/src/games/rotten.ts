@@ -4,6 +4,8 @@
 import * as E from '../../../web/rotten/js/engine.js';
 import EN_TEXT from '../../../web/rotten/words/en.txt';
 import UR_TEXT from '../../../web/rotten/words/ur.txt';
+import BOT_TEXT from '../../../web/rotten/words/bot.txt';
+import { botDelay, botId, botName, type BotLevel, humanName, isBotLevel } from '../core/bots';
 import type { GameInstance, GameModule, Msg, RoomCtx } from '../core/game';
 import { cleanName, cleanPhoto } from '../core/util';
 import { SortedWords } from '../core/words';
@@ -36,6 +38,9 @@ interface Player {
   place: number;
   wins: number;
   matchWins: number;
+  /** A computer player: no connection, never host, never saved (see core/bots.ts). */
+  bot?: boolean;
+  botLevel?: BotLevel;
 }
 
 interface LogEntry {
@@ -73,6 +78,9 @@ interface Room {
   matchWinner: string | null;
   crew: { name: string } | null;
   crewStatus: string;
+  /** A computer player's turn is planned for this time (0: none), for this exact turn. */
+  botAt?: number;
+  botKey?: string;
 }
 
 type Snap = Omit<Room, 'used' | 'roomUsed'> & { used: string[]; roomUsed: string[]; usedIsRoom: boolean };
@@ -122,7 +130,7 @@ class RottenRoom implements GameInstance {
     const room = this.room;
     const host = room.players.find((p) => p.isHost);
     if (host && host.connected) return;
-    const next = room.players.find((p) => p.connected);
+    const next = room.players.find((p) => p.connected && !p.bot);
     if (!next) return;
     if (host) host.isHost = false;
     next.isHost = true;
@@ -130,12 +138,12 @@ class RottenRoom implements GameInstance {
 
   join(connId: string, msg: Msg): void {
     const room = this.room;
-    const name = cleanName(msg.name) || 'Player';
+    const name = humanName(cleanName(msg.name)) || 'Player';
     const ident = this.ctx.identity(connId);
     const clientId = typeof msg.client === 'string' ? msg.client.slice(0, 40) : '';
     const photo = ident.uid ? cleanPhoto(msg.photo) || cleanPhoto(ident.photo) : '';
     // Same tab (refresh), same account, or an offline seat with this name: take the seat back.
-    const old = room.players.find((p) => p.name.toLowerCase() === name.toLowerCase()
+    const old = room.players.find((p) => !p.bot && p.name.toLowerCase() === name.toLowerCase()
       && ((clientId && p.clientId === clientId) || (ident.uid && p.uid === ident.uid) || !p.connected));
     if (old) {
       const oldId = old.id;
@@ -156,6 +164,11 @@ class RottenRoom implements GameInstance {
       return;
     }
     if (room.players.length >= E.MAX_PLAYERS) room.players = room.players.filter((p) => p.connected);
+    // People come before computer players: in the lobby a newcomer takes the place of the latest bot
+    if (room.players.length >= E.MAX_PLAYERS && room.status === 'lobby') {
+      const bot = [...room.players].reverse().find((p) => p.bot);
+      if (bot) room.players = room.players.filter((p) => p !== bot);
+    }
     if (room.players.length >= E.MAX_PLAYERS) return this.reject(connId, `This room is full (${E.MAX_PLAYERS} players).`);
     let finalName = name;
     for (let n = 2; room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase()); n++) finalName = `${name} ${n}`;
@@ -197,6 +210,9 @@ class RottenRoom implements GameInstance {
       case 'start': return this.startGame(connId, msg);
       case 'lobby': return this.backToLobby();
       case 'crew': return this.setCrew(msg.name);
+      case 'addBot': return this.addBot(connId, msg.level);
+      case 'removeBot': return this.removeBot(msg.id);
+      case 'botLevel': return this.setBotLevel(msg.id, msg.level);
       case 'public':
         // Open to Quick Play or private: the host can flip it in the lobby only
         if (room.status === 'lobby' && typeof msg.on === 'boolean' && msg.on !== room.public) {
@@ -219,13 +235,94 @@ class RottenRoom implements GameInstance {
     this.broadcast();
   }
 
+  /** A room with only computer players left has nobody in it: it is cleaned up like an empty one. */
   occupied(): boolean {
-    return this.room.players.some((p) => p.connected);
+    return this.room.players.some((p) => p.connected && !p.bot);
+  }
+
+  /* ---------- Computer players ---------- */
+
+  private addBot(hostId: string, level: unknown): void {
+    const room = this.room;
+    if (room.status !== 'lobby') return;
+    if (room.players.length >= E.MAX_PLAYERS) {
+      this.ctx.send(hostId, { t: 'toast', text: 'The room is full' });
+      return;
+    }
+    const rnd = () => this.ctx.random();
+    const bot = this.newPlayer(botId(rnd), botName(room.players.map((p) => p.name), rnd), this.freeColor());
+    Object.assign(bot, { uid: null, guest: null, bot: true, botLevel: isBotLevel(level) ? level : 'normal' });
+    room.players.push(bot);
+    this.ctx.track('bot_added');
+    this.broadcast();
+  }
+
+  private botById(id: unknown): Player | undefined {
+    const p = typeof id === 'string' ? this.byId(id) : undefined;
+    return p && p.bot ? p : undefined;
+  }
+
+  private removeBot(id: unknown): void {
+    const bot = this.botById(id);
+    if (!bot || this.room.status !== 'lobby') return;
+    this.room.players = this.room.players.filter((p) => p !== bot);
+    this.broadcast();
+  }
+
+  private setBotLevel(id: unknown, level: unknown): void {
+    const bot = this.botById(id);
+    if (!bot || this.room.status !== 'lobby' || !isBotLevel(level)) return;
+    bot.botLevel = level;
+    this.broadcast();
+  }
+
+  /** After every update: when a computer player holds the banana, plan its answer (once per turn). */
+  private botCheck(): void {
+    const room = this.room;
+    if (room.status !== 'play') return;
+    const bot = this.botById(room.holder);
+    if (!bot || !bot.alive || !this.active(bot)) return;
+    if (!room.players.some((p) => p.connected && !p.bot)) return;   // nobody here to play with: wait
+    const key = `${room.game}:${room.wordSeq}:${room.splatSeq}:${bot.id}`;
+    const stale = Boolean(room.botAt) && this.ctx.now() > (room.botAt as number) + 4000;   // the timer got lost
+    if (room.botKey === key && !stale) return;
+    room.botKey = key;
+    // Thinking time starts when the banana can actually be answered (after the countdown or a splat)
+    const from = Math.max(this.ctx.now(), room.startAt, room.pausedUntil);
+    room.botAt = from + botDelay(bot.botLevel || 'normal', this.ctx.random, 2500, 8000);
+    this.ctx.setTimer('bot', room.botAt);
+  }
+
+  private botAnswer(): void {
+    const room = this.room;
+    room.botAt = 0;
+    if (room.status !== 'play') return;
+    const bot = this.botById(room.holder);
+    if (!bot || !bot.alive || room.botKey !== `${room.game}:${room.wordSeq}:${room.splatSeq}:${bot.id}`) return;
+    const level = bot.botLevel || 'normal';
+    // Sometimes it just can't think of anything and the banana splats on it
+    if (this.ctx.random() < (level === 'easy' ? 0.3 : 0.1)) return;
+    const st = room.settings;
+    let pool: string[] = [];
+    if (st.words !== 'ur') pool = E.botCandidates(BOT_TEXT, room.prompt);
+    if (!pool.length && st.words !== 'en') pool = (lexicon() as { urWords: string[] }).urWords.filter((w) => w.includes(room.prompt));
+    pool = pool.filter((w) => w.length >= st.minLen);
+    if (level === 'easy') pool = pool.slice(0, 8);   // an easy bot only knows the commonest words
+    // Same rules as a person: it only plays a word the room would accept (not used, long enough, in the list)
+    const lex = lexicon();
+    for (let tries = 0; tries < 12 && pool.length; tries++) {
+      const w = pool.splice(Math.floor(this.ctx.random() * pool.length), 1)[0];
+      if (E.checkWord(w, { prompt: room.prompt, minLen: st.minLen, list: st.words, forms: st.forms, used: room.used, lex }).ok) {
+        this.word(bot.id, w);
+        return;
+      }
+    }
   }
 
   timer(name: string): void {
     switch (name) {
       case 'fuse': return this.splat();
+      case 'bot': return this.botAnswer();
       case 'phase': return this.broadcast();
       case 'presence': return this.presence();
       default:
@@ -250,6 +347,7 @@ class RottenRoom implements GameInstance {
     const now = this.ctx.now();
     let changed = false;
     for (const p of room.players) {
+      if (p.bot) continue;
       if (p.connected) {
         const seen = this.ctx.lastSeen(p.id);
         if (!seen) {
@@ -359,7 +457,7 @@ class RottenRoom implements GameInstance {
     const room = this.room;
     if (room.status !== 'play' || room.holder !== pid) return;
     const msg = { t: 'type', pid, text: E.cleanWord(text) };
-    for (const p of room.players) if (p.connected && p.id !== pid) this.ctx.send(p.id, msg);
+    for (const p of room.players) if (p.connected && !p.bot && p.id !== pid) this.ctx.send(p.id, msg);
   }
 
   private word(pid: string, raw: unknown): void {
@@ -372,7 +470,7 @@ class RottenRoom implements GameInstance {
     const res = E.checkWord(raw, { prompt: room.prompt, minLen: st.minLen, list: st.words, forms: st.forms, used: room.used, lex: lexicon() });
     if (!res.ok) {
       const msg = { t: 'nope', pid, reason: res.reason, word: res.word || '' };
-      for (const q of room.players) if (q.connected) this.ctx.send(q.id, msg);
+      for (const q of room.players) if (q.connected && !q.bot) this.ctx.send(q.id, msg);
       return;
     }
     room.used.add(res.key as string);
@@ -475,7 +573,7 @@ class RottenRoom implements GameInstance {
       crew: room.crew ? room.crew.name : null,
       winner: winner ? winner.name : null,
       players: inGame.map((p) => ({
-        name: p.name, uid: p.uid, guest: p.guest, place: p.place, won: p.id === room.winner,
+        name: p.name, uid: p.uid, guest: p.guest, ...(p.bot ? { bot: true } : {}), place: p.place, won: p.id === room.winner,
         stats: { games: 1, plays: 1, wins: p.id === room.winner ? 1 : 0, words: p.words, splats: p.splats },
         max: { longest: p.longest.length },
       })),
@@ -539,6 +637,7 @@ class RottenRoom implements GameInstance {
       code: room.code, status: room.status, settings: st, game: room.game, public: room.public,
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
+        bot: Boolean(p.bot), botLevel: p.bot ? p.botLevel || 'normal' : null,
         connected: p.connected, away: p.away, inGame: p.inGame, alive: p.alive, lives: p.lives,
         letters: p.letters, words: p.words, longest: p.longest, splats: p.splats, place: p.place,
         wins: p.wins, matchWins: p.matchWins,
@@ -563,15 +662,17 @@ class RottenRoom implements GameInstance {
   private broadcast(): void {
     const room = this.room;
     const view = this.publicView();
-    for (const p of room.players) if (p.connected) this.ctx.send(p.id, view);
+    for (const p of room.players) if (p.connected && !p.bot) this.ctx.send(p.id, view);
     const host = room.players.find((p) => p.isHost);
-    this.ctx.listing({
+    // Bots take seats but are not people: with nobody real here the room is not offered at all
+    this.ctx.listing(room.players.some((p) => p.connected && !p.bot) ? {
       public: room.public,
       status: room.status,
       players: room.players.filter((p) => p.connected).length,
       max: E.MAX_PLAYERS,
       host: host ? host.name : '',
-    });
+    } : null);
+    this.botCheck();
     this.ctx.dirty();
   }
 
@@ -602,7 +703,7 @@ export const rotten: GameModule = {
     const room: Room = { ...rest, roomUsed, used: usedIsRoom ? roomUsed : new Set(snap.used) };
     // Seats whose socket didn't survive the restart are offline now
     const now = ctx.now();
-    for (const p of room.players) if (p.connected && !ctx.lastSeen(p.id)) Object.assign(p, { connected: false, offlineAt: now });
+    for (const p of room.players) if (!p.bot && p.connected && !ctx.lastSeen(p.id)) Object.assign(p, { connected: false, offlineAt: now });
     if (room.status === 'lobby') room.players = room.players.filter((p) => p.connected);
     return new RottenRoom(ctx, room);
   },

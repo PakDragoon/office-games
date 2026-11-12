@@ -25,6 +25,8 @@ export interface GameReport {
     name: string;
     uid: string | null;
     guest: string | null;
+    /** A computer player: never written anywhere (no stats, no crew rows). */
+    bot?: boolean;
     place: number;
     won: boolean;
     /** Game-specific numbers to add to the player's stats (words, splats, points...). */

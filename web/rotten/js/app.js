@@ -2,6 +2,7 @@ import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
+import { addBotButton, botControls, botTag, levelName, wireBots } from '../../shared/bots.js';
 import { createBanana, stageOf } from './banana.js';
 import { createKeyboard } from './keys.js';
 import { meltingLogo } from './logo.js';
@@ -811,11 +812,13 @@ function settingsLines(st) {
 function renderLobby(v) {
   $('lobby-code').textContent = v.code;
   const rows = v.players.map((p) => `
-    <li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}
-      <span class="tag">${p.isHost ? 'Host' : !active(p) ? 'Reconnecting' : ''}</span></li>`);
+    <li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${botTag(p)}</span>
+      ${p.bot ? (S.isHost ? botControls(p) : `<span class="tag">${levelName(p.botLevel)}</span>`)
+      : `<span class="tag">${p.isHost ? 'Host' : !active(p) ? 'Reconnecting' : ''}</span>`}</li>`);
   const missing = Math.max(0, E.MIN_PLAYERS - v.players.length);
   for (let i = 0; i < Math.max(missing, v.players.length < E.MAX_PLAYERS ? 1 : 0); i++) rows.push('<li class="empty">Waiting for a friend to join…</li>');
   $('lobby-players').innerHTML = rows.join('');
+  $('bot-add').hidden = !S.isHost || v.players.length >= E.MAX_PLAYERS;
   $('host-settings').hidden = !S.isHost;
   $('guest-settings').hidden = S.isHost;
   if (S.isHost) {
@@ -851,6 +854,7 @@ $('crew-save').addEventListener('click', () => hostSetCrew($('crew-input').value
 wirePublic(toHost);
 $('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostSetCrew($('crew-input').value); });
 $('start-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
+wireBots($('lobby'), (m) => toHost(m), () => S.isHost);
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });
 
 /* =========================================================

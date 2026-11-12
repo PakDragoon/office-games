@@ -4,6 +4,7 @@ import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { startReplay } from './replay.js';
 import { deltaChip, myRatingHTML, ratingChip, ratingLabel } from '../../shared/rating.js';
+import { addBotButton, botControls, botTag, levelName, wireBots } from '../../shared/bots.js';
 
 /* =========================================================
    Flipchip
@@ -885,6 +886,7 @@ function renderDuel(v) {
     if (turn) tag = isMe ? 'Your turn' : p?.isBot ? 'Thinking…' : mySide(v) ? 'Their turn' : 'To move';
     else if (p && !p.isBot && !p.connected) tag = 'Left · reconnecting';
     else if (p && p.away) tag = 'Away';
+    else if (p && p.isBot && !v.solo) tag = `Computer · ${levelName(p.botLevel)}`;
     if (v.status === 'over' && v.result) tag = !v.result.winner ? 'Draw' : v.result.winner === s ? 'Winner' : E.SIDE_NAME[s];
     if (p && p.rating != null && !v.solo) tag += ` · ${ratingLabel(p.rating, p.ratingProv)}`;
     const el = $(`card-${s}`);
@@ -994,7 +996,9 @@ function renderResult(v) {
   // My rating change, once the server has worked it out (only for the two players, never in solo)
   const mine = !v.solo && S.myId ? pOf(v, S.myId) : null;
   const rated = mine && mySide(v) && mine.ratingDelta != null;
-  $('result-rating').hidden = !rated;
+  const vsBot = !v.solo && [DARK, LIGHT].some((s) => seatPlayer(v, s)?.isBot);
+  $('result-rating').hidden = !rated && !vsBot;
+  if (vsBot && !rated) $('result-rating').textContent = 'Games with a computer player aren’t rated.';
   if (rated) $('result-rating').innerHTML = `Skill rating ${deltaChip(mine.ratingDelta)} <span class="muted">now ${esc(ratingLabel(mine.rating, mine.ratingProv))}</span>`;
 }
 
@@ -1215,7 +1219,7 @@ function renderLobby(v) {
   $('lobby-code').textContent = v.code;
   const rows = v.players.map((p) => {
     const seat = v.seats[DARK] === p.id ? 'Dark' : v.seats[LIGHT] === p.id ? 'Light' : 'Watching';
-    return `<li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${ratingChip(p.rating, p.ratingProv)}
+    return `<li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${botTag(p)}${ratingChip(p.rating, p.ratingProv)}
       <span class="tag">${!active(p) ? 'Reconnecting' : `<b>${seat}</b>${p.isHost ? ' · Host' : ''}`}</span></li>`;
   });
   if (v.players.length < 2) rows.push('<li class="empty">Waiting for someone to join…</li>');
@@ -1226,11 +1230,14 @@ function renderLobby(v) {
     const p = seatPlayer(v, s);
     const isMe = p && p.id === S.myId;
     const free = !p || !p.connected;
-    const btn = isMe ? `<button class="btn ghost" type="button" data-stand>Stand up and watch</button>`
+    const bot = p && p.isBot;
+    const btn = bot ? (S.isHost ? botControls(p) : `<span class="muted">${levelName(p.botLevel)} computer</span>`)
+      : !p && S.isHost && v.players.length < E.MAX_PLAYERS ? `${addBotButton()}<button class="btn ${mine ? 'ghost' : 'primary'}" type="button" data-sit="${s}">${mine ? 'Switch to this seat' : 'Sit here'}</button>`
+      : isMe ? `<button class="btn ghost" type="button" data-stand>Stand up and watch</button>`
       : free ? `<button class="btn ${mine ? 'ghost' : 'primary'}" type="button" data-sit="${s}">${mine ? 'Switch to this seat' : 'Sit here'}</button>` : '';
     return `<div class="seat-card${free ? ' empty' : ''}${isMe ? ' me' : ''}">
       <span class="seat-side">${miniChip(s)}${E.SIDE_NAME[s]}${s === DARK ? ' · goes first' : ''}</span>
-      <span class="seat-name">${p && p.connected ? esc(p.name) + (isMe ? ' (you)' : '') + ratingChip(p.rating, p.ratingProv) : 'Empty seat'}</span>${btn}</div>`;
+      <span class="seat-name">${p && p.connected ? esc(p.name) + (isMe ? ' (you)' : '') + botTag(p) + ratingChip(p.rating, p.ratingProv) : 'Empty seat'}</span>${btn}</div>`;
   }).join('') + (S.isHost && (v.seats[DARK] || v.seats[LIGHT]) ? '<button class="btn link seat-swap" type="button" data-swap>Swap colours</button>' : '');
 
   $('host-settings').hidden = !S.isHost;
@@ -1251,6 +1258,7 @@ function renderLobby(v) {
   }
 }
 
+wireBots($('seat-cards'), (m) => toHost(m), () => S.isHost);
 $('seat-cards').addEventListener('click', (e) => {
   const sit = e.target.closest('[data-sit]');
   if (sit) toHost({ t: 'sit', side: Number(sit.dataset.sit) });

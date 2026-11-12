@@ -307,3 +307,27 @@ export function giveUp(st, id) {
   st.turn = null;
   return { ok: true, events: [{ type: 'finish', id: other, pos: st.out.length }, { type: 'roundOver', loser: id, gaveUp: true }] };
 }
+
+// ---------- Computer players ----------
+
+/**
+ * The card a computer player plays. It only ever picks from legalCards(), so the server's own checks
+ * pass it like anyone else. easy: any legal card. normal: while following suit it dumps its highest card that
+ * can't take the trick (so it never ends up holding the pile), else its lowest; leading it leads low;
+ * with a thulla it throws its highest card. One time in ten it plays loosely, like a person not paying attention.
+ */
+export function botCard(st, id, level = 'normal', rnd = Math.random) {
+  const legal = legalCards(st, id);
+  if (!legal.length) return null;
+  if (legal.length === 1) return legal[0];
+  const pickAny = () => legal[Math.floor(rnd() * legal.length)];
+  if (level === 'easy' || rnd() < 0.1) return pickAny();
+  const rank = (c) => rankOf(c) + rnd() * 0.01;       // random tie-break between suits
+  const lowest = (cards) => cards.reduce((a, c) => (rank(c) < rank(a) ? c : a));
+  const highest = (cards) => cards.reduce((a, c) => (rank(c) > rank(a) ? c : a));
+  if (st.trick.length === 0) return lowest(legal);
+  if (!legal.some((c) => suitOf(c) === st.ledSuit)) return highest(legal);   // can't follow: a thulla
+  const top = highestOfLed(st);
+  const under = legal.filter((c) => rankOf(c) < rankOf(top.card));
+  return under.length ? highest(under) : lowest(legal);
+}

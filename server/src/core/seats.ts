@@ -1,6 +1,7 @@
 // What every room game shares: seats, taking a seat back after a refresh, the host role
 // passing on when the host leaves, Away detection, crews, and sending everyone the view.
 // A game extends SeatRoom and supplies its own rules, view and messages.
+import { botId, botName, type BotLevel, humanName, isBotLevel } from './bots';
 import type { GameInstance, GameReport, Msg, RoomCtx } from './game';
 import { cleanName, cleanPhoto } from './util';
 
@@ -20,6 +21,9 @@ export interface Seat {
   away: boolean;
   offlineAt: number;
   inGame: boolean;
+  /** A computer player: no connection, never host, never saved (see core/bots.ts). */
+  bot?: boolean;
+  botLevel?: BotLevel;
 }
 
 export interface BaseRoom<P extends Seat> {
@@ -72,6 +76,12 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
   protected listingRating(): number | null {
     return null;
   }
+  /** Games that can seat computer players turn this on (the host gets "addBot" / "removeBot" / "botLevel"). */
+  protected botSupport = false;
+  /** A bot was created: give it its place in the game (a seat, ...). False refuses it (nowhere to sit). */
+  protected seatBot(_p: P): boolean {
+    return true;
+  }
   /** Whether each player gets their own view (secrets in the view itself). */
   protected perPlayerView = false;
   /** Statuses in which presence is checked every few seconds. */
@@ -92,7 +102,7 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
   protected ensureHost(): void {
     const host = this.room.players.find((p) => p.isHost);
     if (host && host.connected) return;
-    const next = this.room.players.find((p) => p.connected);
+    const next = this.room.players.find((p) => p.connected && !p.bot);
     if (!next) return;
     if (host) host.isHost = false;
     next.isHost = true;
@@ -102,12 +112,12 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
 
   join(connId: string, msg: Msg): void {
     const room = this.room;
-    const name = cleanName(msg.name) || 'Player';
+    const name = humanName(cleanName(msg.name)) || 'Player';
     const ident = this.ctx.identity(connId);
     const clientId = typeof msg.client === 'string' ? msg.client.slice(0, 40) : '';
     const photo = ident.uid ? cleanPhoto(msg.photo) || cleanPhoto(ident.photo) : '';
     // Same tab (refresh), same account, or an offline seat with this name: take the seat back.
-    const old = room.players.find((p) => p.name.toLowerCase() === name.toLowerCase()
+    const old = room.players.find((p) => !p.bot && p.name.toLowerCase() === name.toLowerCase()
       && ((clientId && p.clientId === clientId) || (ident.uid && p.uid === ident.uid) || !p.connected));
     if (old) {
       const oldId = old.id;
@@ -127,6 +137,11 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
       return;
     }
     if (room.players.length >= this.maxPlayers) room.players = room.players.filter((p) => p.connected);
+    // People come before computer players: in the lobby a newcomer takes the place of the latest bot
+    if (room.players.length >= this.maxPlayers && room.status === 'lobby') {
+      const bot = [...room.players].reverse().find((p) => p.bot);
+      if (bot) this.dropBot(bot);
+    }
     if (room.players.length >= this.maxPlayers) return this.reject(connId, `This room is full (${this.maxPlayers} players).`);
     let finalName = name;
     for (let n = 2; room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase()); n++) finalName = `${name} ${n}`;
@@ -162,6 +177,7 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
         }
         return;
       }
+      if (this.botSupport && this.botMessage(p, msg)) return;
       if (this.hostMessage(p, msg)) return;
     }
     this.playerMessage(p, msg);
@@ -178,8 +194,54 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
     this.broadcast();
   }
 
+  /** A room with only computer players left has nobody in it: it is cleaned up like an empty one. */
   occupied(): boolean {
-    return this.room.players.some((p) => p.connected);
+    return this.room.players.some((p) => p.connected && !p.bot);
+  }
+
+  /* ---------- Computer players ---------- */
+
+  /** Host-only: add / remove a bot, change its level. Lobby only. True when the message was one of these. */
+  private botMessage(host: P, msg: Msg): boolean {
+    const room = this.room;
+    if (msg.t !== 'addBot' && msg.t !== 'removeBot' && msg.t !== 'botLevel') return false;
+    if (room.status !== 'lobby') return true;
+    if (msg.t === 'addBot') {
+      const level: BotLevel = isBotLevel(msg.level) ? msg.level : 'normal';
+      if (room.players.length >= this.maxPlayers) {
+        this.tell(host.id, { t: 'toast', text: 'The room is full' });
+        return true;
+      }
+      const base = { ...baseSeat(this.ctx, '', botName(room.players.map((q) => q.name), () => this.ctx.random()), this.freeColor()) };
+      const id = botId(() => this.ctx.random());
+      const seat = this.newSeat({ ...base, id, uid: null, guest: null, bot: true, botLevel: level });
+      if (!this.seatBot(seat)) {
+        this.tell(host.id, { t: 'toast', text: 'There is no free seat for a bot' });
+        return true;
+      }
+      room.players.push(seat);
+      this.ctx.track('bot_added');
+      this.afterPresence(seat);
+      this.broadcast();
+      return true;
+    }
+    const bot = this.byId(typeof msg.id === 'string' ? msg.id : null);
+    if (!bot || !bot.bot) return true;
+    if (msg.t === 'botLevel') {
+      if (isBotLevel(msg.level)) {
+        bot.botLevel = msg.level;
+        this.broadcast();
+      }
+      return true;
+    }
+    this.dropBot(bot);
+    this.broadcast();
+    return true;
+  }
+
+  protected dropBot(bot: P): void {
+    this.room.players = this.room.players.filter((q) => q !== bot);
+    this.afterPresence(bot);
   }
 
   timer(name: string): void {
@@ -201,6 +263,7 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
     let changed = false;
     const outMs = this.offlineOutMs();
     for (const p of this.room.players) {
+      if (p.bot) continue;
       if (p.connected) {
         const seen = this.ctx.lastSeen(p.id);
         if (!seen) {
@@ -250,17 +313,22 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
       for (const p of room.players) if (p.connected) this.ctx.send(p.id, v);
     }
     const host = room.players.find((p) => p.isHost);
-    this.ctx.listing({
+    // Bots take seats but are not people: with nobody real here the room is not offered at all
+    this.ctx.listing(room.players.some((p) => p.connected && !p.bot) ? {
       public: room.public,
       status: room.status,
       players: room.players.filter((p) => p.connected).length,
       max: this.maxPlayers,
       host: host ? host.name : '',
       rating: this.listingRating(),
-    });
+    } : null);
+    this.afterBroadcast();
     this.watchPresence();
     this.ctx.dirty();
   }
+
+  /** After every update has gone out: a game with computer players plans their next move here. */
+  protected afterBroadcast(): void {}
 
   /* ---------- Crews and saving ---------- */
 
@@ -342,7 +410,7 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
 /** Seats whose socket didn't survive a restart are offline now; in the lobby they're gone. */
 export function restoreSeats<P extends Seat>(ctx: RoomCtx, room: BaseRoom<P>): void {
   const now = ctx.now();
-  for (const p of room.players) if (p.connected && !ctx.lastSeen(p.id)) Object.assign(p, { connected: false, offlineAt: now });
+  for (const p of room.players) if (!p.bot && p.connected && !ctx.lastSeen(p.id)) Object.assign(p, { connected: false, offlineAt: now });
   if (room.status === 'lobby') room.players = room.players.filter((p) => p.connected);
 }
 
@@ -350,5 +418,5 @@ export const reportPlayer = (
   p: Seat, place: number, won: boolean, stats: Record<string, number>, max?: Record<string, number>,
   extra?: { streaks?: Record<string, boolean>; tally?: Record<string, string> },
 ) => ({
-  name: p.name, uid: p.uid, guest: p.guest, place, won, stats: { games: 1, plays: 1, wins: won ? 1 : 0, ...stats }, ...(max ? { max } : {}), ...(extra || {}),
+  name: p.name, uid: p.uid, guest: p.guest, ...(p.bot ? { bot: true } : {}), place, won, stats: { games: 1, plays: 1, wins: won ? 1 : 0, ...stats }, ...(max ? { max } : {}), ...(extra || {}),
 });
