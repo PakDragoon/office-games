@@ -157,7 +157,7 @@ function hostCreate(attempt = 0) {
       players: [newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || '')],
       used: new Set(store.get('seen', [])),
       liar: null, word: '', category: '', order: [], round: 0, turn: 0,
-      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {},
+      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {}, started: {},
       votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
       crew: null, crewStatus: '',
     };
@@ -220,6 +220,7 @@ function hostOnMessage(conn, msg) {
     case 'votenow': return hostVoteNow(conn.peer, msg.on === true);
     case 'done': return hostDone(conn.peer);
     case 'clue': return hostClue(conn.peer, msg.text);
+    case 'start': return hostTimeStart(conn.peer);
     case 'stop': return hostStop(conn.peer, msg.secs);
     case 'vote': return hostVote(conn.peer, msg.target);
     case 'guess': return hostGuess(conn.peer, msg.word);
@@ -246,6 +247,7 @@ function hostJoin(conn, rawName, uid, photo, client) {
     for (const s of room.strokes) if (s.pid === old.id) s.pid = conn.peer;
     for (const c of room.clues) if (c.pid === old.id) c.pid = conn.peer;
     if (old.id in room.stops) { room.stops[conn.peer] = room.stops[old.id]; delete room.stops[old.id]; }
+    if (old.id in room.started) { room.started[conn.peer] = true; delete room.started[old.id]; }
     if (room.votes[old.id]) { room.votes[conn.peer] = room.votes[old.id]; delete room.votes[old.id]; }
     for (const [v, t] of Object.entries(room.votes)) if (t === old.id) room.votes[v] = conn.peer;
     if (room.accused === old.id) room.accused = conn.peer;
@@ -385,7 +387,7 @@ function hostStartGame() {
   }
   room.order = E.turnOrder(ids, room.liar, rnd);
   Object.assign(room, {
-    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], stops: {}, strokeSid: null, turnStrokes: 0,
+    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], stops: {}, started: {}, strokeSid: null, turnStrokes: 0,
     votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
     deadline: Date.now() + E.TIMES.roleMs,
   });
@@ -527,8 +529,17 @@ function hostAdvance() {
 function hostStartTiming() {
   const room = H.room;
   const limit = E.timeLimitMs(room.time.hi);
-  Object.assign(room, { status: 'time', stops: {}, deadline: Date.now() + limit });
+  Object.assign(room, { status: 'time', stops: {}, started: {}, deadline: Date.now() + limit });
   H.phaseTimer = setTimeout(hostStartDiscuss, limit + 300);
+  hostBroadcast();
+}
+
+// Someone pressed Start: everyone sees they're counting (never when they stop, see publicView)
+function hostTimeStart(pid) {
+  const room = H.room;
+  const p = byId(pid);
+  if (!room || room.status !== 'time' || !p || !p.inGame || room.started[pid] || pid in room.stops) return;
+  room.started[pid] = true;
   hostBroadcast();
 }
 
@@ -744,7 +755,7 @@ function publicView() {
     players: room.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
       connected: p.connected, away: p.away, inGame: p.inGame, ready: p.ready, voteNow: p.voteNow,
-      voted: Boolean(room.votes[p.id]), stopped: p.id in room.stops, score: p.score,
+      voted: Boolean(room.votes[p.id]), started: Boolean(room.started[p.id]) || p.id in room.stops, stopped: p.id in room.stops, score: p.score,
     })),
     accused: room.status === 'guess' || reveal ? room.accused : null,
     options: room.status === 'guess' || reveal ? room.options : [],
@@ -1308,6 +1319,7 @@ function renderTime(v) {
   const playing = v.status === 'time';
   $('time-play').hidden = !playing;
   $('time-results').hidden = playing;
+  $('time-board').classList.toggle('results', !playing);
   if (playing) {
     const stopped = mine.stopped || S.myStop !== null;
     const players = v.players.filter((p) => p.inGame);
@@ -1319,42 +1331,92 @@ function renderTime(v) {
     btn.disabled = stopped;
     btn.textContent = stopped ? 'Stopped' : S.timeStart !== null ? 'Stop' : 'Start';
     $('time-k').textContent = mine.inGame ? 'Stop the clock at the time on your card' : 'The others are stopping their clocks';
-    // Who has stopped only shows once you have, so nobody can time themselves off the others
     $('time-status').textContent = !mine.inGame ? `${done} of ${players.length} done`
-      : stopped ? `${S.myStop !== null ? `You stopped at ${E.fmtSecs(S.myStop)}. ` : ''}${done} of ${players.length} done`
+      : stopped ? `${S.myStop !== null ? `You stopped at ${E.fmtSecs(S.myStop)}. ` : 'Stopped. '}Waiting for ${plural(players.length - done, 'player')}…`
         : S.timeStart !== null ? 'Counting… press Stop when you think it’s time' : 'Press Start, then count in your head. No clock is shown.';
+    renderTimeRoster(v, !mine.inGame || stopped);
     return;
   }
   renderTimeResults(v);
 }
 
-// Everyone's stop as a bar. At the result the target and the liar's range go on top.
+// Who's counting and who's done. Until you've stopped yourself you only see who has started,
+// never who has stopped, so nobody (the liar especially) can stop when the others do.
+function renderTimeRoster(v, seeDone) {
+  const players = v.players.filter((p) => p.inGame);
+  const rows = players.map((p) => {
+    const state = !active(p) ? ['off', 'Away'] : p.stopped && (seeDone || p.id === S.myId) ? ['done', 'Done ✓']
+      : p.started || (p.id === S.myId && S.timeStart !== null) ? ['going', 'Counting…'] : ['wait', 'Not started'];
+    return `<li class="pc${p.color} ${state[0]}"><i class="pen-dot"></i><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span><span class="st">${state[1]}</span></li>`;
+  }).join('');
+  $('time-roster').innerHTML = rows;
+  $('time-roster-note').textContent = seeDone ? '' : 'You’ll see who’s done once you stop.';
+}
+
+const VERDICTS = [[0.2, 'Spot on'], [0.5, 'Close'], [1.5, 'A bit off'], [Infinity, 'Way off']];
+const verdict = (miss) => VERDICTS.find(([d]) => miss <= d)[1];
+
+// Everyone's stop as a pin on one timeline (a ruler of seconds). At the result the target and
+// the liar's range go on the same ruler, and a list ranks everyone by how close they got.
 function renderTimeResults(v) {
   const players = v.players.filter((p) => p.inGame);
   const stops = v.stops || {};
   const t = v.time;
-  const values = Object.values(stops);
-  const max = Math.max(1, ...values, ...(t ? [t.target, t.hi] : [])) * 1.08;
-  const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(2)}%`;
-  const order = [...players].sort((a, b) => (stops[a.id] ?? Infinity) - (stops[b.id] ?? Infinity));
-  // At the result every track carries the liar's range and the target line
-  const marks = t ? `<i class="tr-range" style="left:${pct(t.lo)};width:calc(${pct(t.hi)} - ${pct(t.lo)})"></i><i class="tr-target" style="left:${pct(t.target)}"></i>` : '';
-  const rows = order.map((p) => {
-    const st = stops[p.id];
-    const has = typeof st === 'number';
-    const diff = t && has ? st - t.target : null;
-    const off = diff === null ? '' : `<span class="tr-off">${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(2)}</span>`;
-    return `<li class="pc${p.color}" data-pid="${esc(p.id)}">
-      <span class="tr-name"><i class="pen-dot"></i><span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
-      <span class="tr-track">${marks}${has ? `<i class="tr-bar" style="width:${pct(st)}"></i>` : ''}</span>
-      <span class="tr-val">${has ? esc(E.fmtSecs(st)) : '<em>no stop</em>'}${off}</span></li>`;
+  const has = (p) => typeof stops[p.id] === 'number';
+  const pinned = players.filter(has).sort((a, b) => stops[a.id] - stops[b.id]);
+  const missing = players.filter((p) => !has(p));
+  const top = Math.max(2, ...pinned.map((p) => stops[p.id]), ...(t ? [t.target, t.hi] : []));
+  const step = top > 14 ? 2 : 1;
+  const max = Math.ceil((top * 1.05) / step) * step;
+  const x = (n) => Math.max(0, Math.min(100, (n / max) * 100));
+  // Stack pins into lanes so labels never overlap: a lane is free once its last pin is far enough left
+  const width = $('time-board').clientWidth || 600;
+  const gap = Math.min(48, (100 * 96) / width);
+  const lanes = [];
+  const lane = new Map();
+  for (const p of pinned) {
+    const px = x(stops[p.id]);
+    let i = lanes.findIndex((last) => px - last >= gap);
+    if (i < 0) { i = lanes.length; lanes.push(px); } else lanes[i] = px;
+    lane.set(p.id, i);
+  }
+  const LANE = 46;
+  const n = Math.max(1, lanes.length);
+  const pins = pinned.map((p) => {
+    const px = x(stops[p.id]);
+    const top = (n - 1 - lane.get(p.id)) * LANE;
+    const liar = t && p.id === v.liar;
+    return `<div class="tl-pin pc${p.color}${liar ? ' liar' : ''}" data-pid="${esc(p.id)}">
+        <i class="tl-stem" style="left:${px}%;top:${top + 38}px"></i>
+        <span class="tl-chip" style="left:${px}%;top:${top}px;transform:translateX(-${px}%)"><b>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${liar ? ' <em>liar</em>' : ''}</b><span>${esc(E.fmtSecs(stops[p.id]))}</span></span>
+        <i class="tl-dot" style="left:${px}%"></i></div>`;
   }).join('');
-  const head = t ? `<li class="tr-head" aria-hidden="true"><span></span><span class="tr-track bare">
-      <span class="tr-chip range" style="left:clamp(4.5rem, ${pct((t.lo + t.hi) / 2)}, calc(100% - 4.5rem))">Liar’s range ${t.lo}–${t.hi} s</span></span><span></span></li>
-    <li class="tr-head" aria-hidden="true"><span></span><span class="tr-track bare">
-      <span class="tr-chip target" style="left:clamp(3rem, ${pct(t.target)}, calc(100% - 3rem))">target ${esc(E.fmtSecs(t.target))}</span></span><span></span></li>` : '';
-  $('time-results').innerHTML = `<p class="time-k">${t ? 'The times' : 'Everyone’s stop. Who doesn’t fit?'}</p>
-    <ul class="tr-list">${head}${rows}</ul>`;
+  const ticks = [];
+  const every = max / step > 12 ? 2 : 1;
+  for (let i = 0; i * step <= max; i++) ticks.push(`<i class="tl-tick${i % every ? ' minor' : ''}" style="left:${x(i * step)}%">${i % every ? '' : `<span>${i * step}</span>`}</i>`);
+  const marks = t ? `<i class="tl-range" style="left:${x(t.lo)}%;width:${x(t.hi) - x(t.lo)}%"><span>Liar’s range ${t.lo}–${t.hi} s</span></i>
+      <i class="tl-target" style="left:${x(t.target)}%"><span style="transform:translateX(-${x(t.target)}%)">Target ${esc(E.fmtSecs(t.target))}</span></i>` : '';
+  const timeline = `<div class="tl${t ? ' with-target' : ''}">
+      <div class="tl-lanes" style="height:${n * LANE}px">${marks}${pins}</div>
+      <div class="tl-axis">${ticks.join('')}<span class="tl-unit">seconds</span></div></div>`;
+  const noStop = missing.length ? `<p class="tl-missing">No stop: ${missing.map((p) => `<span class="pc${p.color}">${esc(p.name)}</span>`).join(', ')}</p>` : '';
+  let list = '';
+  if (t) {
+    // Closest first; nobody who missed the stop is ranked
+    const ranked = pinned.map((p) => ({ p, d: stops[p.id] - t.target })).sort((a, b) => Math.abs(a.d) - Math.abs(b.d));
+    list = `<ol class="tl-rank">${ranked.map(({ p, d }, i) => {
+      const liar = p.id === v.liar;
+      const miss = Math.abs(d);
+      return `<li class="pc${p.color}${liar ? ' liar' : ''}" data-pid="${esc(p.id)}">
+        <span class="rk">${i + 1}</span><i class="pen-dot"></i>
+        <span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${liar ? ` <em>liar · knew ${t.lo}–${t.hi} s</em>` : ''}</span>
+        <span class="tm">${esc(E.fmtSecs(stops[p.id]))}</span>
+        <span class="off">${miss < 0.005 ? 'exact!' : `${miss.toFixed(2)} s ${d > 0 ? 'late' : 'early'}`}</span>
+        <span class="vd v${VERDICTS.findIndex(([m]) => miss <= m)}">${verdict(miss)}</span></li>`;
+    }).join('')}</ol>`;
+  }
+  $('time-results').innerHTML = `<p class="time-k">${t ? `The time was ${esc(E.fmtSecs(t.target))}` : 'Everyone’s stop. Who doesn’t fit?'}</p>
+    ${timeline}${noStop}${list}`;
   highlight(litId);
 }
 
@@ -1387,7 +1449,10 @@ function timePress(ts) {
     S.myStop = Math.round((ts - S.timeStart) / 10) / 100;
     toHost({ t: 'stop', secs: S.myStop });
   }
-  renderTime(v);
+  if (S.timeStart === ts) toHost({ t: 'start' });
+  // The host handles its own message straight away and may already have moved on to the
+  // discussion, so redraw from the latest view, never the one this press started with
+  renderTime(S.view);
 }
 $('time-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); timePress(e.timeStamp); });
 $('time-btn').addEventListener('keydown', (e) => {
@@ -1400,6 +1465,12 @@ $('time-btn').addEventListener('keydown', (e) => {
   if (li && S.view && ['vote', 'result'].includes(S.view.status)) highlight(li.dataset.pid);
 }));
 $('time-results').addEventListener('pointerleave', () => highlight(null));
+// Label lanes depend on the board's width: redraw when it changes (phone turned, window resized)
+let timeResize = 0;
+window.addEventListener('resize', () => {
+  clearTimeout(timeResize);
+  timeResize = setTimeout(() => { if (S.view && timeGame(S.view.settings) && !$('time-results').hidden) renderTimeResults(S.view); }, 150);
+});
 
 /* ---------- Voting ---------- */
 function renderVote(v) {

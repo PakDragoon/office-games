@@ -308,40 +308,92 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .time-btn.running { background: var(--pc, var(--ink)); color: var(--surface); }
 .time-btn:disabled { opacity: 0.55; cursor: default; }
 .time-status { margin: 0; min-height: 1.5rem; color: var(--muted); font-weight: 600; }
-.time-results { display: grid; gap: 0.9rem; align-content: center; }
-.tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
-.tr-list li {
-  display: grid; grid-template-columns: minmax(5rem, 8rem) minmax(0, 1fr) auto; align-items: center; gap: 0.6rem;
-  transition: opacity 0.2s ease;
+.time-results { display: grid; gap: 0.9rem; align-content: center; width: 100%; }
+.time-board.results { aspect-ratio: auto; min-height: 22rem; }
+
+/* Who's counting while the clock runs */
+.time-roster { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.4rem; }
+.time-roster li {
+  display: flex; align-items: center; gap: 0.4rem; padding: 0.3rem 0.7rem 0.3rem 0.55rem; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--surface); font-size: 0.88rem;
 }
-.tr-list li.dim { opacity: 0.18; }
-.tr-name { display: flex; align-items: center; gap: 0.45rem; font-weight: 800; color: var(--pc); min-width: 0; }
-.tr-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tr-track { position: relative; height: 1.5rem; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.tr-bar {
-  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px;
-  background: color-mix(in srgb, var(--pc) 70%, transparent); animation: tr-grow 0.6s ease both;
+.time-roster .nm { font-weight: 800; color: var(--pc); }
+.time-roster .st { color: var(--muted); font-weight: 600; }
+.time-roster li.going .st { color: var(--ink); animation: counting 1.4s ease-in-out infinite; }
+.time-roster li.done { border-color: color-mix(in srgb, var(--hit) 55%, transparent); background: color-mix(in srgb, var(--hit) 9%, var(--surface)); }
+.time-roster li.done .st { color: var(--hit); }
+.time-roster li.off { opacity: 0.5; }
+@keyframes counting { 50% { opacity: 0.45; } }
+#time-roster-note { margin: 0; min-height: 1.2rem; }
+
+/* The timeline: one ruler of seconds with a pin per player */
+.tl { position: relative; padding: 0 0.4rem; }
+.tl.with-target { padding-top: 1.7rem; }
+.tl-lanes { position: relative; }
+.tl-pin { transition: opacity 0.2s ease; }
+.tl-pin.dim { opacity: 0.15; }
+.tl-chip {
+  position: absolute; display: grid; justify-items: center; padding: 0.2rem 0.55rem; border-radius: 9px; white-space: nowrap;
+  background: color-mix(in srgb, var(--pc) 14%, var(--surface)); border: 1.5px solid var(--pc); line-height: 1.15;
+  animation: tl-in 0.35s ease both; z-index: 2;
 }
-@keyframes tr-grow { from { width: 0 !important; } }
-.tr-val { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 4.6rem; text-align: right; display: grid; justify-items: end; line-height: 1.15; }
-.tr-val em { font-style: italic; font-weight: 600; color: var(--muted); }
-.tr-off { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
-.tr-range {
-  position: absolute; top: -0.25rem; bottom: -0.25rem; background: color-mix(in srgb, var(--liar) 10%, transparent);
-  border-left: 1px dashed color-mix(in srgb, var(--liar) 60%, transparent);
-  border-right: 1px dashed color-mix(in srgb, var(--liar) 60%, transparent);
+@keyframes tl-in { from { opacity: 0; } }
+.tl-chip b { font-size: 0.8rem; font-weight: 800; color: var(--pc); }
+.tl-chip b em { font-style: normal; color: var(--liar); text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.04em; }
+.tl-chip > span { font-size: 0.92rem; font-weight: 800; font-variant-numeric: tabular-nums; }
+.tl-pin.liar .tl-chip { box-shadow: 0 0 0 3px color-mix(in srgb, var(--liar) 35%, transparent); }
+.tl-stem { position: absolute; bottom: 0; width: 0; border-left: 1.5px solid var(--pc); transform: translateX(-0.75px); z-index: 1; }
+.tl-dot {
+  position: absolute; bottom: -6px; width: 12px; height: 12px; border-radius: 50%; transform: translateX(-50%);
+  background: var(--pc); box-shadow: 0 0 0 3px var(--paper); z-index: 3;
 }
-.tr-target { position: absolute; top: -0.25rem; bottom: -0.25rem; border-left: 2px solid var(--ink); z-index: 1; }
-.tr-head .tr-track.bare { background: none; height: 1.3rem; }
-.tr-chip {
-  position: absolute; top: 0; transform: translateX(-50%); font-size: 0.75rem; font-weight: 800; white-space: nowrap;
-  border-radius: 999px; padding: 0 0.5rem; line-height: 1.3rem;
+.tl-axis { position: relative; height: 2.1rem; border-top: 2px solid var(--ink); }
+.tl-tick { position: absolute; top: 0; height: 7px; border-left: 1.5px solid var(--ink); transform: translateX(-0.75px); }
+.tl-tick.minor { height: 4px; opacity: 0.6; }
+.tl-tick span { position: absolute; top: 8px; left: 0; transform: translateX(-50%); font-size: 0.72rem; font-weight: 700; color: var(--muted); font-variant-numeric: tabular-nums; }
+.tl.with-target .tl-axis { height: 3.5rem; }
+.tl-unit { position: absolute; right: 0; top: 1.15rem; font-size: 0.68rem; color: var(--muted); }
+.tl-range {
+  position: absolute; top: 0; bottom: -3.5rem; background: color-mix(in srgb, var(--liar) 10%, transparent);
+  border-left: 1.5px dashed color-mix(in srgb, var(--liar) 60%, transparent);
+  border-right: 1.5px dashed color-mix(in srgb, var(--liar) 60%, transparent);
 }
-.tr-chip.target { background: var(--ink); color: var(--paper); }
-.tr-chip.range { color: var(--liar); }
+.tl-range span {
+  position: absolute; bottom: 0.15rem; left: 50%; transform: translateX(-50%); white-space: nowrap;
+  font-size: 0.7rem; font-weight: 800; color: var(--liar); background: var(--paper); padding: 0 0.3rem; border-radius: 4px; z-index: 4;
+}
+.tl-target { position: absolute; top: -1.7rem; bottom: -0.35rem; border-left: 2.5px solid var(--ink); transform: translateX(-1.25px); z-index: 1; }
+.tl-target span {
+  position: absolute; top: 0; left: 0; white-space: nowrap; font-size: 0.78rem; font-weight: 800;
+  background: var(--ink); color: var(--paper); border-radius: 999px; padding: 0.05rem 0.55rem;
+}
+.tl-missing { margin: 0; font-size: 0.88rem; color: var(--muted); }
+.tl-missing span { color: var(--pc); font-weight: 800; }
+
+/* The result: closest first */
+.tl-rank { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
+.tl-rank li {
+  display: grid; grid-template-columns: 1.4rem auto minmax(0, 1fr) auto auto auto; align-items: center; gap: 0.55rem;
+  padding: 0.35rem 0.6rem; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); transition: opacity 0.2s ease;
+}
+.tl-rank li.dim { opacity: 0.18; }
+.tl-rank li.liar { border-color: color-mix(in srgb, var(--liar) 55%, transparent); background: color-mix(in srgb, var(--liar) 7%, var(--surface)); }
+.tl-rank .rk { font-weight: 800; color: var(--muted); text-align: center; }
+.tl-rank .nm { font-weight: 800; color: var(--pc); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tl-rank .nm em { font-style: normal; font-weight: 700; font-size: 0.78rem; color: var(--liar); }
+.tl-rank .tm { font-weight: 800; font-variant-numeric: tabular-nums; }
+.tl-rank .off { font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 6.3rem; text-align: right; }
+.tl-rank .vd { font-size: 0.72rem; font-weight: 800; padding: 0.1rem 0.5rem; border-radius: 999px; text-align: center; min-width: 4.6rem; }
+.tl-rank .vd.v0 { background: color-mix(in srgb, var(--hit) 18%, transparent); color: var(--hit); }
+.tl-rank .vd.v1 { background: color-mix(in srgb, var(--p6) 20%, transparent); color: var(--p6); }
+.tl-rank .vd.v2 { background: color-mix(in srgb, var(--p4) 18%, transparent); color: var(--p4); }
+.tl-rank .vd.v3 { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger); }
 @media (max-width: 560px) {
   .time-board { aspect-ratio: auto; min-height: 17rem; }
-  .tr-list li { grid-template-columns: minmax(4rem, 6rem) minmax(0, 1fr) auto; gap: 0.4rem; }
+  .tl-rank li { grid-template-columns: 1.1rem auto minmax(0, 1fr) auto auto; gap: 0.4rem; padding: 0.35rem 0.45rem; }
+  .tl-rank .vd { display: none; }
+  .tl-rank .off { min-width: 0; font-size: 0.78rem; }
+  .tl-chip { padding: 0.15rem 0.4rem; }
 }
 
 .handoff {
