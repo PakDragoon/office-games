@@ -1,6 +1,7 @@
 import * as R from './rounds.js';
 import { TESTS, icon, blank } from './play.js';
 import * as cloud from './cloud.js';
+import { createRoomLink, quickPlay } from '../../shared/net.js';
 
 /* =========================================================
    Guesstimate
@@ -8,17 +9,11 @@ import * as cloud from './cloud.js';
    Rooms: one player hosts and their browser is the "server". It picks a seed,
    and every browser builds the same puzzles from it, so only the seed travels.
    Players send their guesses to the host, who checks and scores them; nobody
-   sees anyone else's guess until the reveal. Connections use PeerJS (WebRTC).
+   sees anyone else's guess until the reveal. This page draws the view it sends and passes on what you do.
    ========================================================= */
 
-const PREFIX = 'guesstimate-v1-';     // namespaces our room ids on the PeerJS server
 const MAX_PLAYERS = 8;
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I or O, easy to read out loud
-const PEER_OPTIONS = { debug: 1 };
 const COUNTDOWN_MS = 3000;
-const PING_MS = 2000;       // players ping the host, and the host pings back
-const AWAY_MS = 9000;       // no ping for this long: the round stops waiting for that player
-const LOST_MS = 12000;      // a player who hears nothing from the host this long reconnects
 const LEVEL = { easy: 'Easy', normal: 'Normal', hard: 'Hard' };
 
 const $ = (id) => document.getElementById(id);
@@ -41,16 +36,6 @@ const PREFS = { difficulty: 'normal', kinds: [...R.KINDS], analytics: true, ...s
 const ROOM_PREFS = { difficulty: 'normal', kinds: [...R.KINDS], laps: 1, timer: 30, ...store.get('room', {}) };
 const savePrefs = () => store.set('prefs', PREFS);
 
-// Identifies this tab to the host. It survives a refresh (so you get your seat back) but is
-// different for every person, so a colleague with the same name can't take your seat.
-const CLIENT_ID = (() => {
-  const fresh = () => Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  try {
-    let id = sessionStorage.getItem('guesstimate.client');
-    if (!id) { id = fresh(); sessionStorage.setItem('guesstimate.client', id); }
-    return id;
-  } catch { return fresh(); }
-})();
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 // Settings saved before Timing existed: switch the new test on once
 for (const [prefs, save] of [[PREFS, savePrefs], [ROOM_PREFS, saveRoomPrefs]]) {
@@ -275,11 +260,39 @@ function showResultHead(pz, guess, points) {
    ========================================================= */
 let G = null;   // { mode, rounds, index, results, day }
 
-function startSolo(mode) {
+// The daily changes at 00:00 UTC for everyone, so there is one global leaderboard
+const utcDay = () => new Date().toISOString().slice(0, 10);
+const dailyApi = (action, body = {}) => cloud.api(`/api/guesstimate/daily/${action}`, { method: 'POST', body: { name: cleanName($('name-input').value) || store.get('name', '') || 'Player', ...body } });
+
+async function startSolo(mode) {
   closeRoom();
-  const day = R.dayKey();
-  const rounds = mode === 'daily' ? R.dailySet(day) : R.makeSet(R.randomSeed(), PREFS.kinds, 1, PREFS.difficulty);
-  G = { mode, rounds, index: 0, results: [], day, ref: mode === 'daily' ? `Day ${R.dayNumber(day)}` : `#${rounds[0].seed.toString(16).slice(0, 4).toUpperCase()}` };
+  let day = utcDay();
+  let rounds;
+  let results = [];
+  let index = 0;
+  if (mode === 'daily') {
+    // The server holds today's seed (secret until the day comes) and scores each guess
+    let d;
+    try {
+      d = await dailyApi('state');
+    } catch (err) {
+      toast(cloud.errorText(err));
+      return;
+    }
+    day = d.day;
+    rounds = R.makeSet(d.seed, d.kinds, R.DAILY.laps, R.DAILY.difficulty);
+    results = d.results.map((r) => ({ ...r, guess: null }));
+    index = d.idx;
+    if (d.done) {
+      const avg = Math.round(sum(results.map((r) => r.points)) / results.length);
+      store.set(`daily.${day}`, { day, results, avg });
+      showSummary({ mode: 'daily', results, avg, day });
+      return;
+    }
+  } else {
+    rounds = R.makeSet(R.randomSeed(), PREFS.kinds, 1, PREFS.difficulty);
+  }
+  G = { mode, rounds, index, results, day, ref: mode === 'daily' ? `Day ${R.dayNumber(day)}` : `#${rounds[0].seed.toString(16).slice(0, 4).toUpperCase()}` };
   $('arena').classList.remove('with-scores');
   $('scoreboard').hidden = true;
   stopClock();
@@ -304,6 +317,11 @@ $('go-btn').addEventListener('click', () => {
 
 function soloReveal(pz, guess) {
   const points = R.score(pz, guess);
+  if (G.mode === 'daily') {
+    // The server scores it again for the leaderboard (same rules, same puzzle)
+    const index = G.index;
+    dailyApi('answer', { index, guess }).catch((err) => toast(`This guess didn’t reach the server. ${cloud.errorText(err)}`));
+  }
   G.results.push({ kind: pz.kind, guess, points });
   $('stage').replaceChildren();
   $('controls').replaceChildren();
@@ -339,11 +357,6 @@ function soloFinish() {
     const saved = { day: G.day, results: G.results.map(({ kind, points }) => ({ kind, points })), avg };
     store.set(`daily.${G.day}`, saved);
     cloud.track('daily_finished', { avg });
-    if (cloud.getUser()) {
-      const y = new Date(); y.setDate(y.getDate() - 1);
-      cloud.saveMyPlay({ type: 'daily', rounds: saved.results, day: G.day, yesterday: R.dayKey(y) })
-        .catch((err) => toast(`Your stats weren’t saved. ${cloud.errorText(err)}`));
-    }
     showSummary({ mode: 'daily', results: saved.results, avg, day: G.day, fresh: true });
   } else {
     const best = store.get('best', {});
@@ -365,7 +378,9 @@ function showSummary({ mode, results, avg, day, note }) {
     $('dial-fill').style.strokeDashoffset = String(dash - (dash * avg) / 100);
   }));
   $('sum-verdict').textContent = R.verdict(avg);
-  $('sum-note').textContent = mode === 'daily' ? `A new puzzle arrives at midnight.` : note;
+  $('sum-note').textContent = mode === 'daily' ? 'A new puzzle arrives at 00:00 UTC.' : note;
+  $('sum-board').innerHTML = '';
+  if (mode === 'daily') renderDailyBoard();
   $('sum-rounds').innerHTML = results.map((r) => `
     <li class="k-${r.kind}">${icon(r.kind)}<span>${TESTS[r.kind].name}</span>
       <span class="bar-meter ${band(r.points)}"><i style="--w:${r.points}%"></i></span><b>${r.points}</b></li>`).join('');
@@ -400,473 +415,79 @@ function goHome() {
 /* =========================================================
    Rooms: hosting
    ========================================================= */
-const S = { myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false, roundKey: '', revealKey: '', locked: false, savedGame: '', heard: 0, reconnecting: false, pending: null };
-const H = { room: null, conns: new Map(), deadline: 0, seen: new Map() };
-const sets = new Map();
+const S = {
+ myName: '', myId: null, isHost: false, code: '', view: null,  roundKey: '', revealKey: '', locked: false, reconnecting: false, pending: null, creating: false,
+};
 
-// Every browser builds the round list from the seed and settings.
-function roundsFor(seed, st) {
-  const key = `${seed}:${st.difficulty}:${st.kinds.join(',')}:${st.laps}`;
-  if (!sets.has(key)) sets.set(key, R.makeSet(seed, st.kinds, st.laps, st.difficulty));
-  return sets.get(key);
-}
-
-function randomCode() {
-  let c = '';
-  for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return c;
-}
-
-function hostCreate(attempt = 0) {
-  const code = randomCode();
-  const peer = new Peer(PREFIX + code, PEER_OPTIONS);
-  let opened = false;
-  peer.on('open', (id) => {
-    opened = true;
-    Object.assign(S, { peer, myId: id, isHost: true, code, leaving: false, roundKey: '', revealKey: '', savedGame: '' });
-    H.conns.clear();
+/* =========================================================
+   The room on the server
+   ========================================================= */
+const link = createRoomLink('guesstimate', {
+  hello: () => {
     const u = cloud.getUser();
-    H.room = {
-      code,
-      status: 'lobby',
-      settings: { difficulty: ROOM_PREFS.difficulty, kinds: [...ROOM_PREFS.kinds], laps: ROOM_PREFS.laps, timer: ROOM_PREFS.timer },
-      gameSeed: 0, index: 0, total: 0, startAt: 0, deadline: 0,
-      players: [newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || '')],
-      crew: null, crewStatus: '', allTime: null,
-    };
-    peer.on('connection', hostOnConnection);
-    cloud.track('room_created');
+    return { name: S.myName, photo: u?.photo || '' };
+  },
+  message: onMessage,
+  reconnecting: () => {
+    S.reconnecting = true;
+    toast('Connection lost. Reconnecting…');
+  },
+  gone: (reason) => {
+    closeRoom();
+    goHome();
+    showNotice('The room closed', reason || 'Everyone left, so the room was closed. Host a new one.');
+  },
+  failed: (text) => {
+    closeRoom();
     setBusy(false);
-    hostBroadcast();
-    const savedCrew = store.get('crew', '');
-    if (savedCrew) hostSetCrew(savedCrew);
-  });
-  peer.on('error', (err) => {
-    if (!opened && err.type === 'unavailable-id' && attempt < 5) {
-      peer.destroy();
-      hostCreate(attempt + 1);
-      return;
-    }
-    if (!opened) {
-      setBusy(false);
-      homeError(peerErrorText(err));
-      peer.destroy();
-    } else {
-      console.warn('PeerJS error', err);
-    }
-  });
-  peer.on('disconnected', () => {
-    // Lost the PeerJS server (not the players). Reconnect so new people can still join.
-    if (!S.leaving && !peer.destroyed) peer.reconnect();
-  });
+    showScreen('home');
+    homeError(text);
+  },
+});
+
+const active = (p) => p.connected && !p.away;
+
+function toHost(msg) {
+  link.send(msg);
 }
 
-function newPlayer(id, name, isHost, color, uid = null, photo = '') {
-  return { id, name, isHost, color, uid, photo, connected: true, away: false, guesses: {}, points: {} };
+function closeRoom() {
+  link.close();
+  stopLive();
+  stopClock();
+  Object.assign(S, { view: null, isHost: false, code: '', roundKey: '', revealKey: '', reconnecting: false, pending: null, creating: false });
 }
 
-function cleanPhoto(url) {
-  const s = String(url || '');
-  return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(s) ? s.slice(0, 500) : '';
-}
-
-function freeColor() {
-  const used = new Set(H.room.players.map((p) => p.color));
-  for (let c = 0; c < MAX_PLAYERS; c++) if (!used.has(c)) return c;
-  return 0;
-}
-
-function hostOnConnection(conn) {
-  conn.on('data', (msg) => hostOnMessage(conn, msg));
-  conn.on('close', () => hostOnClose(conn));
-  conn.on('error', () => hostOnClose(conn));
-}
-
-function hostOnMessage(conn, msg) {
-  if (!msg || typeof msg !== 'object') return;
-  H.seen.set(conn.peer, Date.now());
-  const back = H.room && H.room.players.find((p) => p.id === conn.peer && p.away);
-  if (back) {
-    back.away = false;
-    hostBroadcast();
-  }
-  if (msg.t === 'ping') return;
-  if (msg.t === 'join') hostJoin(conn, msg.name, msg.uid, msg.photo, msg.client);
-  if (msg.t === 'guess') hostGuess(conn.peer, msg.index, msg.guess);
-}
-
-function hostJoin(conn, rawName, uid, photo, client) {
-  const room = H.room;
-  const name = cleanName(rawName) || 'Player';
-  const cleanUid = typeof uid === 'string' ? uid.slice(0, 128) : null;
-  const clientId = typeof client === 'string' ? client.slice(0, 40) : '';
-
-  // Someone who refreshed or dropped out and comes back with the same name gets their seat
-  // (and their scores) back: the same tab (after a refresh) or the same Google account may take
-  // the seat over at once; anyone else only once that seat has gone offline. A colleague who
-  // happens to have the same name while the first is still playing gets "Name 2" instead.
-  const old = room.players.find((p) => !p.isHost && p.name.toLowerCase() === name.toLowerCase()
-    && ((clientId && p.clientId === clientId) || (cleanUid && p.uid === cleanUid) || !p.connected));
-  if (old) {
-    old.clientId = clientId || old.clientId;
-    const oldConn = H.conns.get(old.id);
-    H.conns.delete(old.id);
-    if (oldConn && oldConn !== conn) oldConn.close();
-    old.id = conn.peer;
-    old.connected = true;
-    old.away = false;
-    H.seen.set(conn.peer, Date.now());
-    old.uid = cleanUid || old.uid;
-    old.photo = cleanPhoto(photo) || old.photo;
-    H.conns.set(conn.peer, conn);
-    send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-    hostBroadcast();
-    return;
-  }
-  if (room.players.length >= MAX_PLAYERS) room.players = room.players.filter((p) => p.connected);
-  if (room.players.length >= MAX_PLAYERS) return reject(conn, `This room is full (${MAX_PLAYERS} players).`);
-
-  let finalName = name;
-  for (let n = 2; room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase()); n++) finalName = `${name} ${n}`;
-  const seat = newPlayer(conn.peer, finalName, false, freeColor(), cleanUid, cleanPhoto(photo));
-  seat.clientId = clientId;
-  room.players.push(seat);
-  H.seen.set(conn.peer, Date.now());
-  H.conns.set(conn.peer, conn);
-  send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-  hostBroadcast();
-}
-
-function reject(conn, reason) {
-  send(conn, { t: 'reject', reason });
-  setTimeout(() => conn.close(), 500);
-}
-
-function hostOnClose(conn) {
-  if (!H.room) return;
-  const p = H.room.players.find((x) => x.id === conn.peer);
-  H.conns.delete(conn.peer);
-  if (!p) return;
-  if (H.room.status === 'lobby') H.room.players = H.room.players.filter((x) => x !== p);
-  else p.connected = false;
-  hostCheckRound();
-  hostBroadcast();
-}
-
-const hostRounds = () => roundsFor(H.room.gameSeed, H.room.settings);
-
+// The host's buttons. The server only acts on these from whoever is host right now.
 function hostStartGame() {
-  const room = H.room;
-  const typedCrew = $('crew-input').value.replace(/\s+/g, ' ').trim();
-  if (typedCrew !== (room.crew ? room.crew.name : '')) hostSetCrew(typedCrew);
-  room.settings = { difficulty: ROOM_PREFS.difficulty, kinds: [...ROOM_PREFS.kinds], laps: ROOM_PREFS.laps, timer: ROOM_PREFS.timer };
-  room.gameSeed = R.randomSeed();
-  room.total = room.settings.kinds.length * room.settings.laps;
-  room.index = 0;
-  room.players = room.players.filter((p) => p.connected);
-  for (const p of room.players) { p.guesses = {}; p.points = {}; }
-  cloud.track('game_started', { players: room.players.length, rounds: room.total, difficulty: room.settings.difficulty, timer: room.settings.timer, crew: room.crew ? 1 : 0 });
-  hostStartRound();
-}
-
-function hostStartRound() {
-  const room = H.room;
-  clearTimeout(H.deadline);
-  room.status = 'playing';
-  room.startAt = Date.now() + COUNTDOWN_MS;
-  // Timing rounds get extra room so a long target can still be counted out
-  const limit = R.answerSeconds(hostRounds()[room.index], room.settings.timer);
-  room.deadline = limit ? room.startAt + limit * 1000 : 0;
-  if (room.deadline) H.deadline = setTimeout(hostReveal, room.deadline - Date.now() + 900);
-  hostBroadcast();
-}
-
-function hostGuess(pid, index, guess) {
-  const room = H.room;
-  if (!room || room.status !== 'playing' || index !== room.index) return;
-  const p = room.players.find((x) => x.id === pid);
-  if (!p || p.guesses[index] !== undefined) return;
-  if (!R.validGuess(hostRounds()[index], guess)) return;
-  p.guesses[index] = guess;
-  hostCheckRound();
-  hostBroadcast();
-}
-
-// The round ends as soon as every connected player has locked in.
-function hostCheckRound() {
-  const room = H.room;
-  if (room.status !== 'playing') return;
-  const waiting = room.players.filter((p) => p.connected && !p.away && p.guesses[room.index] === undefined);
-  if (!waiting.length) hostReveal();
-}
-
-function hostReveal() {
-  const room = H.room;
-  if (!room || room.status !== 'playing') return;
-  clearTimeout(H.deadline);
-  const pz = hostRounds()[room.index];
-  for (const p of room.players) p.points[room.index] = R.score(pz, p.guesses[room.index] ?? null);
-  room.status = 'reveal';
-  cloud.track('round_finished', { kind: pz.kind, round: room.index + 1, players: room.players.length });
-  hostBroadcast();
-}
-
-function hostNext() {
-  const room = H.room;
-  if (room.status !== 'reveal') return;
-  if (room.index < room.total - 1) {
-    room.index++;
-    hostStartRound();
-  } else {
-    hostFinish();
-  }
-}
-
-function standings(players) {
-  return [...players].sort((a, b) => b.total - a.total || Math.max(...b.points, 0) - Math.max(...a.points, 0));
-}
-
-function hostFinish() {
-  const room = H.room;
-  room.status = 'over';
-  const view = publicView();
-  const order = standings(view.players);
-  const winner = order[0] && (order.length === 1 || order[0].total > order[1].total) ? order[0].name : '';
-  cloud.track('game_finished', { rounds: room.total, players: order.length });
-  if (room.crew && !cloud.getUser()) {
-    room.crewStatus = 'This game wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
-  } else if (room.crew) {
-    const crew = room.crew;
-    room.crewStatus = 'Saving this game…';
-    cloud.saveCrewGame(crew.name, {
-      room: room.code,
-      difficulty: room.settings.difficulty,
-      winner,
-      players: order.map((p) => ({ name: p.name, points: p.total, rounds: room.total })),
-    }).then((saved) => {
-      if (H.room !== room || room.crew?.name !== crew.name) return;
-      room.allTime = saved;
-      room.crewStatus = `Saved to ${saved.name}. ${plural(saved.games, 'game')} played as this crew.`;
-      hostBroadcast();
-    }).catch((err) => {
-      console.warn('Saving to crew failed', err);
-      if (H.room !== room) return;
-      room.crewStatus = `This game wasn’t saved. ${cloud.errorText(err)}`;
-      hostBroadcast();
-    });
-  }
-  hostBroadcast();
+  toHost({ t: 'start', settings: { difficulty: ROOM_PREFS.difficulty, kinds: [...ROOM_PREFS.kinds], laps: ROOM_PREFS.laps, timer: ROOM_PREFS.timer }, crew: $('crew-input') ? $('crew-input').value.replace(/\s+/g, ' ').trim() : undefined });
 }
 
 function hostBackToLobby() {
-  const room = H.room;
-  clearTimeout(H.deadline);
-  room.status = 'lobby';
-  room.players = room.players.filter((p) => p.connected);
-  hostBroadcast();
+  toHost({ t: 'lobby' });
 }
 
-// Crews: all-time scores saved in Firebase by the host.
-async function hostSetCrew(rawName) {
-  const room = H.room;
-  if (!room) return;
+function hostSetCrew(rawName) {
   const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (name && name.toLowerCase().replace(/[^a-z0-9]/g, '').length < 3) return toast('Crew names need at least 3 letters or numbers');
   store.set('crew', name);
-  if (!name) {
-    Object.assign(room, { crew: null, allTime: null, crewStatus: '' });
-    hostBroadcast();
-    return;
-  }
-  if (cloud.crewId(name).length < 3) return toast('Crew names need at least 3 letters or numbers');
-  room.crew = { name };
-  room.allTime = null;
-  if (!cloud.getUser()) {
-    room.crewStatus = 'Sign in with Google (gear icon) to save crew scores.';
-    hostBroadcast();
-    return;
-  }
-  room.crewStatus = 'Connecting to saved scores…';
-  hostBroadcast();
-  try {
-    const data = await cloud.getCrew(name);
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.allTime = data;
-    room.crewStatus = data && data.games ? `${plural(data.games, 'game')} played as this crew so far.` : 'New crew. Scores save after the first game.';
-  } catch (err) {
-    console.warn('Loading crew failed', err);
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.crewStatus = cloud.errorText(err);
-  }
-  hostBroadcast();
-}
-
-// What every player is allowed to see. Guesses stay hidden until the reveal.
-function publicView() {
-  const room = H.room;
-  const now = Date.now();
-  const shown = room.status === 'lobby' ? 0 : room.status === 'playing' ? room.index : room.index + 1;
-  const players = room.players.map((p) => {
-    const points = Array.from({ length: shown }, (_, i) => p.points[i] ?? 0);
-    return {
-      id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo, connected: p.connected,
-      away: p.away,
-      locked: p.guesses[room.index] !== undefined,
-      guess: room.status === 'reveal' || room.status === 'over' ? p.guesses[room.index] ?? null : undefined,
-      points,
-      total: sum(points),
-    };
-  });
-  return {
-    t: 'state',
-    code: room.code, status: room.status, settings: room.settings,
-    gameSeed: room.gameSeed, index: room.index, total: room.total,
-    startsIn: room.status === 'playing' ? room.startAt - now : 0,
-    endsIn: room.status === 'playing' && room.deadline ? room.deadline - now : 0,
-    players,
-    crewName: room.crew ? room.crew.name : '',
-    crewStatus: room.crewStatus,
-  };
-}
-
-// Every couple of seconds: ping everyone, and mark players we haven't heard from as away.
-// Away players don't hold up a round, but keep their seat and can still answer.
-function hostHeartbeat() {
-  const room = H.room;
-  if (!room || !S.isHost) return;
-  for (const conn of H.conns.values()) send(conn, { t: 'hb' });
-  const now = Date.now();
-  let changed = false;
-  for (const p of room.players) {
-    if (p.isHost || !p.connected) continue;
-    const away = now - (H.seen.get(p.id) || 0) > AWAY_MS;
-    if (away !== p.away) { p.away = away; changed = true; }
-  }
-  if (changed) {
-    hostCheckRound();
-    hostBroadcast();
-  }
-}
-
-function hostBroadcast() {
-  const view = publicView();
-  for (const conn of H.conns.values()) send(conn, view);
-  onMessage(view);
-}
-
-/* =========================================================
-   Rooms: joining
-   ========================================================= */
-function joinRoom(code, { quiet = false } = {}) {
-  const peer = new Peer(PEER_OPTIONS);
-  let connected = false;
-  let failed = false;
-  const fail = (text) => {
-    if (failed || connected) return;
-    failed = true;
-    clearTimeout(timer);
-    peer.destroy();
-    if (quiet) {
-      // Reconnecting after a drop didn't work: the host has gone
-      S.reconnecting = false;
-      closeRoom();
-      goHome();
-      showNotice('The room closed', 'The host left or lost their connection. Ask them to host a new room.');
-      return;
-    }
-    setBusy(false);
-    homeError(text);
-  };
-  const timer = setTimeout(() => fail('Could not reach that room. Check the code, or ask the host to keep their tab open.'), 15000);
-  peer.on('open', (id) => {
-    Object.assign(S, { peer, myId: id, isHost: false, leaving: false });
-    // A fresh join starts clean; a reconnect keeps the round where it was (no second look at the dots)
-    if (!quiet) Object.assign(S, { roundKey: '', revealKey: '', savedGame: '', pending: null });
-    const conn = peer.connect(PREFIX + code, { reliable: true });
-    conn.on('open', () => {
-      connected = true;
-      clearTimeout(timer);
-      S.hostConn = conn;
-      S.code = code;
-      S.heard = Date.now();
-      const u = cloud.getUser();
-      send(conn, { t: 'join', name: S.myName, uid: u?.uid || null, photo: u?.photo || '', client: CLIENT_ID });
-    });
-    conn.on('data', (msg) => { S.heard = Date.now(); onMessage(msg); });
-    conn.on('close', () => {
-      if (S.leaving || !connected || S.hostConn !== conn) return;
-      reconnect();
-    });
-  });
-  peer.on('error', (err) => {
-    if (err.type === 'peer-unavailable') fail(`There’s no room ${code} right now. Check the code with your host.`);
-    else if (!connected) fail(peerErrorText(err));
-    else console.warn('PeerJS error', err);
-  });
-}
-
-// Lost the host (Wi-Fi blip, laptop asleep): rejoin quietly with the same name and tab id,
-// which gets the same seat back. If the host has really gone, joinRoom shows a notice.
-function reconnect() {
-  if (S.isHost || !S.code || S.reconnecting) return;
-  S.reconnecting = true;
-  toast('Connection lost. Reconnecting…');
-  const code = S.code;
-  S.leaving = true;
-  S.hostConn = null;
-  S.peer?.destroy();
-  S.leaving = false;
-  joinRoom(code, { quiet: true });
-}
-
-setInterval(() => {
-  if (S.isHost) { hostHeartbeat(); return; }
-  if (!S.hostConn || S.reconnecting) return;
-  send(S.hostConn, { t: 'ping' });
-  // A lock-in the host hasn't confirmed yet (lost in a blip) is sent again
-  const v = S.view, mine = v && me(v);
-  if (S.pending && S.locked && v && v.status === 'playing' && mine && !mine.locked && S.pending.key === `${v.gameSeed}:${v.index}`) {
-    send(S.hostConn, { t: 'guess', index: S.pending.index, guess: S.pending.guess });
-  }
-  if (!document.hidden && Date.now() - S.heard > LOST_MS) reconnect();
-}, PING_MS);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && !S.isHost && S.hostConn && !S.reconnecting && Date.now() - S.heard > LOST_MS) reconnect();
-});
-// Closing the tab leaves the room straight away, instead of the host noticing much later
-window.addEventListener('pagehide', () => {
-  if (!S.peer) return;
-  S.leaving = true;
-  S.peer.destroy();
-});
-
-function peerErrorText(err) {
-  if (err.type === 'browser-incompatible') return 'This browser can’t do live connections. Try Chrome, Firefox, Edge or Safari.';
-  if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error')
-    return 'Couldn’t reach the connection server. Check your internet and try again.';
-  return `Connection failed (${err.type || 'unknown error'}). Try again.`;
-}
-
-function send(conn, msg) {
-  if (conn && conn.open) conn.send(msg);
+  toHost({ t: 'crew', name });
 }
 
 function sendGuess(index, guess) {
   S.pending = { key: S.roundKey, index, guess };
-  if (S.isHost) hostGuess(S.myId, index, guess);
-  else send(S.hostConn, { t: 'guess', index, guess });
+  toHost({ t: 'guess', index, guess });
 }
 
-function closeRoom() {
-  if (!S.peer) return;
-  S.leaving = true;
-  clearTimeout(H.deadline);
-  stopLive();
-  stopClock();
-  S.peer.destroy();
-  Object.assign(S, { peer: null, hostConn: null, view: null, isHost: false, code: '', roundKey: '', revealKey: '', reconnecting: false, pending: null });
-  H.seen.clear();
-  H.room = null;
-  H.conns.clear();
+function sendSettings() {
+  if (S.isHost && S.view && S.view.status === 'lobby') toHost({ t: 'settings', settings: { difficulty: ROOM_PREFS.difficulty, kinds: [...ROOM_PREFS.kinds], laps: ROOM_PREFS.laps, timer: ROOM_PREFS.timer } });
+}
+
+const sets = new Map();
+function roundsFor(seed, st) {
+  const key = `${seed}:${st.difficulty}:${st.kinds.join(',')}:${st.laps}`;
+  if (!sets.has(key)) sets.set(key, R.makeSet(seed, st.kinds, st.laps, st.difficulty));
+  return sets.get(key);
 }
 
 /* =========================================================
@@ -878,7 +499,7 @@ function onMessage(msg) {
     S.myId = msg.id;
     S.code = msg.code;
     if (S.reconnecting) toast('Reconnected');
-    else if (!S.isHost) cloud.track('room_joined');
+    else cloud.track('room_joined');
     S.reconnecting = false;
     setBusy(false);
   } else if (msg.t === 'reject') {
@@ -886,6 +507,8 @@ function onMessage(msg) {
     setBusy(false);
     showScreen('home');
     homeError(msg.reason);
+  } else if (msg.t === 'toast') {
+    toast(String(msg.text || ''));
   } else if (msg.t === 'state') {
     applyState(msg);
   }
@@ -895,7 +518,17 @@ const me = (v) => v.players.find((p) => p.id === S.myId);
 
 function applyState(v) {
   S.view = v;
-  if (!me(v)) return;   // not seated yet
+  const mine = me(v);
+  if (!mine) return;   // not seated yet
+  S.isHost = Boolean(mine.isHost);
+  S.code = v.code;
+  if (S.creating && S.isHost) {
+    // A room we just opened: bring this browser's saved settings and crew
+    S.creating = false;
+    sendSettings();
+    const savedCrew = store.get('crew', '');
+    if (savedCrew) hostSetCrew(savedCrew);
+  }
   if (v.status === 'lobby') {
     stopLive();
     stopClock();
@@ -920,9 +553,7 @@ $('set-timer').addEventListener('change', (e) => { ROOM_PREFS.timer = Number(e.t
 
 function roomSettingsChanged() {
   saveRoomPrefs();
-  if (!S.isHost || !H.room || H.room.status !== 'lobby') return;
-  H.room.settings = { difficulty: ROOM_PREFS.difficulty, kinds: [...ROOM_PREFS.kinds], laps: ROOM_PREFS.laps, timer: ROOM_PREFS.timer };
-  hostBroadcast();
+  sendSettings();
 }
 
 function settingsLines(st) {
@@ -1015,14 +646,14 @@ function renderRoomRound(v) {
     }
   }
   // A lock-in that got lost in a dropped connection is sent again
-  if (S.locked && !mine.locked && S.pending && S.pending.key === key && !S.isHost) {
-    send(S.hostConn, { t: 'guess', index: S.pending.index, guess: S.pending.guess });
+  if (S.locked && !mine.locked && S.pending && S.pending.key === key) {
+    toHost({ t: 'guess', index: S.pending.index, guess: S.pending.guess });
   }
   $('waiting').textContent = S.locked ? waitingLine(v) : '';
   $('end-round-btn').hidden = !S.isHost;
 }
 
-$('end-round-btn').addEventListener('click', () => { if (S.isHost) hostReveal(); });
+$('end-round-btn').addEventListener('click', () => { if (S.isHost) toHost({ t: 'reveal' }); });
 
 function renderRoomReveal(v) {
   const rounds = roundsFor(v.gameSeed, v.settings);
@@ -1067,7 +698,7 @@ function renderRoomReveal(v) {
 
 $('next-btn').addEventListener('click', () => {
   if (G) soloNext();
-  else if (S.isHost && H.room) hostNext();
+  else if (S.isHost) toHost({ t: 'next' });
 });
 
 /* ---------- Final standings ---------- */
@@ -1094,16 +725,6 @@ function renderOver(v) {
   $('over-guest').hidden = S.isHost;
   if ($('over').hidden) showScreen('over');
 
-  // Each player saves their own stats once per game
-  const mine = me(v);
-  if (S.savedGame !== String(v.gameSeed) && cloud.getUser()) {
-    S.savedGame = String(v.gameSeed);
-    cloud.saveMyPlay({
-      type: 'room',
-      rounds: rounds.map((pz, i) => ({ kind: pz.kind, points: mine.points[i] ?? 0 })),
-      won: !tie && order[0].id === mine.id && order.length > 1,
-    }).catch((err) => toast(`Your stats weren’t saved. ${cloud.errorText(err)}`));
-  }
 }
 
 $('rematch-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
@@ -1131,6 +752,7 @@ function readName() {
 
 function setBusy(busy) {
   $('host-btn').disabled = busy;
+  $('quick-btn').disabled = busy;
   $('join-btn').disabled = busy;
   $('join-btn').textContent = busy ? 'Connecting…' : 'Join room';
 }
@@ -1139,11 +761,11 @@ $('host-btn').addEventListener('click', () => {
   const name = readName();
   if (!name) return;
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   G = null;
   setBusy(true);
-  hostCreate();
+  S.creating = true;
+  link.host(false);
 });
 
 function join() {
@@ -1156,35 +778,58 @@ function join() {
     return;
   }
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   G = null;
   setBusy(true);
-  joinRoom(code);
+  link.join(code);
 }
 $('join-btn').addEventListener('click', join);
+
+// Quick Play: a public room that's waiting for players, or a new public one
+$('quick-btn').addEventListener('click', async () => {
+  const name = readName();
+  if (!name) return;
+  homeError('');
+  S.myName = name;
+  setBusy(true);
+  try {
+    const code = await quickPlay('guesstimate');
+    if (code) link.join(code);
+    else { S.creating = true; link.host(true); }
+  } catch (err) {
+    setBusy(false);
+    homeError(err.message);
+  }
+});
 $('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 
+async function renderDailyBoard() {
+  try {
+    const b = await cloud.api('/api/guesstimate/daily/board');
+    const mine = b.me ? `You’re <b>#${b.me.rank}</b> of ${plural(b.players, 'player')} today.` : '';
+    $('sum-board').innerHTML = (mine ? `<p class="board-me">${mine}</p>` : '')
+      + `<ol class="board">${b.top.slice(0, 10).map((r) => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>`
+      + `<span class="nm">${esc(r.name)}</span><span class="sq">${esc(r.detail)}</span><span class="t">${r.score}</span></li>`).join('')}</ol>`;
+  } catch {
+    $('sum-board').innerHTML = '<p class="muted small">Couldn’t load today’s leaderboard.</p>';
+  }
+}
+
 function renderDailyCard() {
-  const day = R.dayKey();
+  const day = utcDay();
   $('day-no').textContent = `#${R.dayNumber(day)}`;
   const done = store.get(`daily.${day}`, null);
   if (done) {
-    $('daily-status').innerHTML = `You scored <span class="daily-score">${done.avg}</span> today. A new puzzle arrives at midnight.`;
+    $('daily-status').innerHTML = `You scored <span class="daily-score">${done.avg}</span> today. A new puzzle arrives at 00:00 UTC.`;
     $('daily-btn').textContent = 'See today’s result';
   } else {
-    const n = ['', 'one', 'two', 'three', 'four', 'five', 'six'][R.dailySet(day).length] || String(R.dailySet(day).length);
+    const n = ['', 'one', 'two', 'three', 'four', 'five', 'six'][R.DAILY.kinds.length] || String(R.DAILY.kinds.length);
     $('daily-status').textContent = `The same ${n} puzzles for everyone today. One go each.`;
     $('daily-btn').textContent = 'Play today’s puzzle';
   }
 }
 
-$('daily-btn').addEventListener('click', () => {
-  const day = R.dayKey();
-  const done = store.get(`daily.${day}`, null);
-  if (done) showSummary({ mode: 'daily', results: done.results, avg: done.avg, day });
-  else startSolo('daily');
-});
+$('daily-btn').addEventListener('click', () => startSolo('daily'));
 $('practice-btn').addEventListener('click', () => startSolo('practice'));
 segment($('difficulty'), () => PREFS.difficulty, (v) => { PREFS.difficulty = v; savePrefs(); });
 kindPicks($('practice-kinds'), () => PREFS.kinds, (k) => { PREFS.kinds = k; savePrefs(); });
@@ -1219,17 +864,15 @@ async function renderSettings() {
   const u = cloud.getUser();
   $('account-box').innerHTML = u
     ? `${u.photo ? `<img class="avatar" src="${esc(u.photo)}" alt="">` : ''}<span class="who"><b>${esc(u.name)}</b><span>${esc(u.email)}</span></span><button class="btn ghost" id="sign-out" type="button">Sign out</button>`
-    : '<span class="who"><b>Playing as a guest</b><span>Sign in to keep your stats and save crew scores.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
+    : '<span class="who"><b>Playing as a guest</b><span>Your stats are kept in this browser. Sign in to keep them on any device.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
   $('sign-in')?.addEventListener('click', signIn);
   $('sign-out')?.addEventListener('click', () => cloud.signOutUser());
   $('analytics-row').hidden = !cloud.analyticsConfigured();
   $('analytics-toggle').checked = PREFS.analytics !== false;
-  $('my-stats').innerHTML = '';
-  if (!u) return;
   $('my-stats').innerHTML = '<p class="muted">Loading your stats…</p>';
   try {
     const st = await cloud.getMyStats();
-    if (cloud.getUser()?.uid !== u.uid) return;
+    if ((cloud.getUser()?.uid || null) !== (u?.uid || null)) return;
     const avg = (pts, n) => (n ? Math.round(pts / n) : '–');
     $('my-stats').innerHTML = `
       <div class="stat-grid">
@@ -1256,7 +899,7 @@ $('analytics-toggle').addEventListener('change', (e) => {
 });
 
 // Test hook: with ?debug in the address, automated tests can inspect the connection state.
-if (new URLSearchParams(location.search).has('debug')) window.__guesstimate = { S, H };
+if (new URLSearchParams(location.search).has('debug')) window.__guesstimate = { S, link };
 
 /* =========================================================
    Start
@@ -1276,7 +919,6 @@ if (new URLSearchParams(location.search).has('debug')) window.__guesstimate = { 
   cloud.onUser((u) => {
     renderAccount(u);
     // A host who signs in mid-room starts saving to their crew straight away.
-    if (S.isHost && H.room && H.room.crew && !H.room.allTime) hostSetCrew(H.room.crew.name);
   });
   cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();

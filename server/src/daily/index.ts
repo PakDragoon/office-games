@@ -1,5 +1,6 @@
 import type { Env } from '../env';
 import { hmac } from '../auth';
+import { guesstimateDaily } from './guesstimate';
 import { rottenDaily } from './rotten';
 
 /**
@@ -24,6 +25,7 @@ export interface DailyGame<S = unknown> {
 
 export const DAILIES: Record<string, DailyGame> = {
   rotten: rottenDaily as DailyGame,
+  guesstimate: guesstimateDaily as DailyGame,
 };
 
 export const utcDay = (d = new Date()) => d.toISOString().slice(0, 10);
