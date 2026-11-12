@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A two-player chip-flipping board game for colleagues. Trap a line of your opponent's chips to flip them to your colour.">
+  <title>Flipchip</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232e7a55'/><circle cx='12' cy='13' r='8' fill='%2322253f' stroke='%23f4efe3' stroke-width='2' stroke-dasharray='3 2.3'/><circle cx='20' cy='19' r='8' fill='%23f4efe3' stroke='%2322253f' stroke-width='2' stroke-dasharray='3 2.3'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Flipchip">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-sub" aria-hidden="true">trap a line, flip it to your colour</span>
+      </h1>
+      <p class="lede">Two players, one board. Put a chip down so it traps a line of your opponent’s chips between two of yours, and they all flip to your colour. Most chips when the board fills up wins.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Two play, everyone else can watch.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice cpu-card">
+        <div class="solo-head">
+          <h2>Play the computer</h2>
+          <span class="record" id="cpu-record"></span>
+        </div>
+        <div class="cpu-grid">
+          <div class="setting">
+            <span class="setting-label">Computer</span>
+            <div class="seg" id="cpu-level" role="group" aria-label="Computer">
+              <button type="button" data-value="easy"><b>Easy</b></button>
+              <button type="button" data-value="normal"><b>Normal</b></button>
+              <button type="button" data-value="hard"><b>Hard</b></button>
+            </div>
+          </div>
+          <div class="setting">
+            <span class="setting-label">You play</span>
+            <div class="seg" id="cpu-side" role="group" aria-label="You play">
+              <button type="button" data-value="1"><b><span class="mini-chip sm"><span class="chip"><i class="f d"></i><i class="f l"></i></span></span>Dark</b><small>goes first</small></button>
+              <button type="button" data-value="2"><b><span class="mini-chip sm"><span class="chip is-l"><i class="f d"></i><i class="f l"></i></span></span>Light</b><small>goes second</small></button>
+              <button type="button" data-value="random"><b>Random</b></button>
+            </div>
+          </div>
+          <div class="setting">
+            <span class="setting-label">Board</span>
+            <div class="seg" id="cpu-size" role="group" aria-label="Board">
+              <button type="button" data-value="6"><b>6 × 6</b><small>quick</small></button>
+              <button type="button" data-value="8"><b>8 × 8</b><small>classic</small></button>
+              <button type="button" data-value="10"><b>10 × 10</b><small>long</small></button>
+            </div>
+          </div>
+        </div>
+        <div class="solo-buttons">
+          <button class="btn primary" id="cpu-btn" type="button">Play</button>
+          <button class="btn ghost" id="cpu-continue" type="button" hidden>Continue last game</button>
+        </div>
+      </section>
+      <section class="choice steps">
+        <h2>How a game goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="9"/><circle cx="16" cy="16" r="4.5"/></svg><b>Place a chip</b><span>On any square that traps a line.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="6.5" cy="16" r="4"/><circle cx="16" cy="16" r="4" class="alt"/><circle cx="25.5" cy="16" r="4"/></svg><b>Trap a line</b><span>Their chips sandwiched between two of yours.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="3.6" ry="9"/><path d="M6 9a12 12 0 0 1 6-4M26 23a12 12 0 0 1-6 4"/><path d="M11 4l1 1.2-1.4.9M21 28l-1-1.2 1.4-.9"/></svg><b>Flip them</b><span>In every direction at once: across, down, diagonal.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 7h14v5a7 7 0 0 1-14 0z"/><path d="M9 9H5.5a3.5 3.5 0 0 0 3.8 4.2M23 9h3.5a3.5 3.5 0 0 1-3.8 4.2M16 19v4M11 26h10"/></svg><b>Most chips wins</b><span>When neither of you can move, count up.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div class="seat-cards" id="seat-cards"></div>
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Board</span>
+          <div class="seg" id="set-size" role="group" aria-label="Board">
+            <button type="button" data-value="6"><b>6 × 6</b><small>quick</small></button>
+            <button type="button" data-value="8"><b>8 × 8</b><small>classic</small></button>
+            <button type="button" data-value="10"><b>10 × 10</b><small>long</small></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Time per move</span>
+          <div class="seg four" id="set-timer" role="group" aria-label="Time per move">
+            <button type="button" data-value="off"><b>No limit</b></button>
+            <button type="button" data-value="15"><b>15 s</b></button>
+            <button type="button" data-value="30"><b>30 s</b></button>
+            <button type="button" data-value="60"><b>60 s</b></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Show where you can go</span>
+          <div class="seg two" id="set-hints" role="group" aria-label="Show where you can go">
+            <button type="button" data-value="on"><b>On</b><small>dots on the board</small></button>
+            <button type="button" data-value="off"><b>Off</b><small>find them yourself</small></button>
+          </div>
+        </div>
+        <details class="more" id="more-settings">
+          <summary>More settings</summary>
+          <div class="select-grid">
+            <label class="select-field">Colours after each game
+              <select id="set-colours"><option value="swap">Swap</option><option value="random">Random</option><option value="keep">Keep</option></select>
+            </label>
+            <label class="select-field">Games
+              <select id="set-match"><option value="open">Play until we stop</option><option value="3">Best of 3</option><option value="5">Best of 5</option></select>
+            </label>
+          </div>
+        </details>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start game</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game (rooms and the computer) ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="play">
+      <div class="duel" id="duel">
+        <div class="player-card s1" id="card-1"></div>
+        <div class="score-bar" id="score-bar" aria-hidden="true"><span class="bar-d" id="bar-d"></span><span class="bar-l" id="bar-l"></span></div>
+        <div class="player-card s2" id="card-2"></div>
+      </div>
+      <p class="turn-line" id="turn-line" aria-live="polite"></p>
+      <div class="board-wrap" id="board-wrap">
+        <div class="board-frame" id="board-frame">
+          <div class="cols" id="cols" aria-hidden="true"></div>
+          <div class="rows" id="rows" aria-hidden="true"></div>
+          <div class="board" id="board" role="grid" aria-label="Board"></div>
+          <div class="flash" id="flash" aria-live="polite"></div>
+          <div class="reaction-layer" id="reaction-layer" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" id="result-panel" hidden>
+        <div class="result-head" id="result-head">
+          <h2 id="result-title"></h2>
+          <p id="result-sub"></p>
+        </div>
+        <div class="result-actions">
+          <button class="btn primary" id="next-game" type="button">Rematch</button>
+          <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+        </div>
+        <p class="muted small-note" id="result-wait"></p>
+        <p class="muted small-note" id="crew-line"></p>
+      </section>
+
+      <section class="panel actions" id="actions">
+        <div class="action-row" id="cpu-actions" hidden>
+          <button class="btn ghost" id="undo-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M4 12h10a6 6 0 0 1 0 12h-2" transform="translate(0 -6)"/></svg>Undo</button>
+          <button class="btn ghost" id="hint-btn" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2.1h5c0-.9.4-1.6 1-2.1A6 6 0 0 0 12 3z"/></svg>Hint</button>
+          <button class="btn ghost" id="new-cpu" type="button">New game</button>
+        </div>
+        <div class="action-row">
+          <button class="btn ghost danger-text" id="resign-btn" type="button" hidden>Resign</button>
+          <button class="btn ghost danger-text" id="end-btn" type="button" hidden>End game for everyone</button>
+          <button class="btn primary" id="claim-btn" type="button" hidden>Claim the win</button>
+        </div>
+        <p class="small-note muted" id="action-note"></p>
+      </section>
+
+      <section class="panel" id="reactions-panel">
+        <div class="panel-head"><h2>React</h2></div>
+        <div class="reactions" id="reactions"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Moves</h2><span class="muted small-note" id="move-count"></span></div>
+        <ol class="move-log" id="move-log"></ol>
+      </section>
+
+      <section class="scores" id="scores">
+        <h2 id="scores-title">Wins in this room</h2>
+        <ol class="score-list" id="score-list"></ol>
+        <p class="small-note muted" id="watching"></p>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound (chips, flips, your turn)</label>
+  <label class="toggle"><input type="checkbox" id="vibrate-toggle"> Vibrate on your turn (phones)</label>
+  <label class="toggle"><input type="checkbox" id="react-toggle"> Show reactions from others</label>
+  <label class="select-field">Placing a chip
+    <select id="confirm-select"><option value="auto">Automatic (phones tap twice)</option><option value="always">Always tap twice</option><option value="never">One tap or click</option></select>
+  </label>
+  <label class="select-field">Flip animation
+    <select id="anim-select"><option value="on">On</option><option value="reduced">Reduced</option><option value="off">Off</option></select>
+  </label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>Two players, Dark and Light. Every chip is dark on one side and light on the other. The board starts with two of each in the middle, and <b>Dark goes first</b>.</p>
+  <div class="rule-demo" aria-hidden="true">
+    <span class="demo-chip d"></span><span class="demo-chip l flip"></span><span class="demo-chip l flip f2"></span><span class="demo-chip d drop"></span>
+  </div>
+  <h3>Your move</h3>
+  <p>Put a chip on an empty square so that one or more of your opponent’s chips are trapped in a straight line between your new chip and another of yours. The line can go across, up and down, or diagonally. Every trapped chip flips to your colour, in every direction at once.</p>
+  <p>You can only go where you trap at least one chip. The faint dots show those squares (if the room has them on). Hover over a dot, or tap it on a phone, to see which chips would flip.</p>
+  <h3>No move? You pass</h3>
+  <p>If you can’t trap anything anywhere, your turn is skipped and your opponent goes again. That happens by itself.</p>
+  <h3>The end</h3>
+  <p>The game ends when neither player can move, usually when the board is full. Whoever has more chips wins.</p>
+  <h3>Tips</h3>
+  <ul class="rule-points">
+    <li><b>Corners are gold:</b> a chip in a corner can never be flipped back.</li>
+    <li><b>Careful next to an empty corner:</b> it often hands that corner to your opponent.</li>
+    <li><b>More chips isn’t always better</b> early on. Having more places to move usually is.</li>
+  </ul>
+  <h3>Rooms</h3>
+  <ul class="rule-points">
+    <li>Two people play; anyone else in the room watches and can react. Take or swap seats in the lobby.</li>
+    <li>With a time limit, a random move is played for you when your time runs out.</li>
+    <li>If your opponent leaves and doesn’t come back for 45 seconds, you can claim the win.</li>
+  </ul>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
