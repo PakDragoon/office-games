@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A word game for colleagues. Type a word with the letters to pass the banana before it goes rotten.">
+  <title>Rotten</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><path d='M6 11c3 12 16 14 21 3-2 1-3 1-4 2-4 6-11 5-14-6z' fill='%23f2c84b'/><path d='M6 11l-1-3' stroke='%2378502a' stroke-width='2.4' stroke-linecap='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Rotten">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-sub" aria-hidden="true">pass the banana before it goes off</span>
+      </h1>
+      <p class="lede">You get a few letters. Type a word that has them to pass the banana on. Nobody knows when it will splat, so be quick, and don’t be holding it when it does.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Keep this tab open while you play.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice solo-card">
+        <div class="solo-head">
+          <h2>On your own</h2>
+          <span class="daily-tag" id="daily-tag"></span>
+        </div>
+        <p id="daily-note">The same 10 letter sets for everyone today, against the clock.</p>
+        <div class="solo-buttons">
+          <button class="btn primary" id="daily-btn" type="button">Daily puzzle</button>
+          <button class="btn ghost" id="practice-btn" type="button">Practice</button>
+        </div>
+      </section>
+      <section class="choice steps">
+        <h2>How a game goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="9" width="10" height="14" rx="2.5"/><rect x="17" y="9" width="10" height="14" rx="2.5"/></svg><b>Get letters</b><span>Like <b class="mini-prompt">AN</b> or <b class="mini-prompt">TRI</b>.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 22h22"/><path d="M8 17l3-6 3 6M9.2 14.6h3.6M17 11v6M17 11h2.5a2 2 0 010 4H17M20.5 17l-1.8-2"/></svg><b>Type a word</b><span>Any word with those letters in it.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 13c2 9 13 10 18 2-1.5.6-2.5.9-3.4 1.6C18.5 21 11 20 9.4 12.8z"/><path d="M7 13l-1-3"/></svg><b>Pass the banana</b><span>It goes to the next player with new letters.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 19c-2-4 2-6 4-4 0-4 6-5 7-1 3-2 7 1 5 4 3 1 2 5-1 5H10c-3 0-4-3-2-4z"/><circle cx="6" cy="10" r="1.2"/><circle cx="25" cy="9" r="1.2"/><circle cx="16" cy="7" r="1"/></svg><b>Splat!</b><span>Holding it when it goes off costs a life. Last one standing wins.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Lives</span>
+          <div class="seg four" id="set-lives" role="group" aria-label="Lives">
+            <button type="button" data-value="1"><b>1</b></button>
+            <button type="button" data-value="2"><b>2</b></button>
+            <button type="button" data-value="3"><b>3</b></button>
+            <button type="button" data-value="5"><b>5</b></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">The banana lasts</span>
+          <div class="seg" id="set-fuse" role="group" aria-label="The banana lasts">
+            <button type="button" data-value="fast"><b>Fast</b><small>5 to 15 s</small></button>
+            <button type="button" data-value="normal"><b>Normal</b><small>10 to 30 s</small></button>
+            <button type="button" data-value="relaxed"><b>Relaxed</b><small>20 to 45 s</small></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Letters</span>
+          <div class="seg four" id="set-difficulty" role="group" aria-label="Letters">
+            <button type="button" data-value="easy"><b>Easy</b></button>
+            <button type="button" data-value="normal"><b>Normal</b></button>
+            <button type="button" data-value="hard"><b>Hard</b></button>
+            <button type="button" data-value="ramp"><b>Ramp up</b></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Words</span>
+          <div class="seg" id="set-words" role="group" aria-label="Words">
+            <button type="button" data-value="en"><b>English</b></button>
+            <button type="button" data-value="mix"><b>+ Roman Urdu</b></button>
+            <button type="button" data-value="ur"><b>Roman Urdu</b></button>
+          </div>
+        </div>
+        <details class="more" id="more-settings">
+          <summary>More settings</summary>
+          <div class="select-grid">
+            <label class="select-field">Show the timer
+              <select id="set-showTimer"><option value="hidden">Hidden (the colour is the clue)</option><option value="shown">Show the countdown</option></select>
+            </label>
+            <label class="select-field">Shortest word
+              <select id="set-minLen"><option value="3">3 letters</option><option value="4">4 letters</option><option value="5">5 letters</option></select>
+            </label>
+            <label class="select-field">Bonus life for using every letter
+              <select id="set-bonus"><option value="az">A to Z</option><option value="easy">A to Z without Q, X, Z</option><option value="off">Off</option></select>
+            </label>
+            <label class="select-field">Most lives
+              <select id="set-maxLives"><option value="plus1">Start + 1</option><option value="start">Same as start</option><option value="none">No limit</option></select>
+            </label>
+            <label class="select-field">Games
+              <select id="set-match"><option value="open">Play until we stop</option><option value="3">Best of 3</option><option value="5">Best of 5</option></select>
+            </label>
+            <label class="select-field">Letter length
+              <select id="set-promptLen"><option value="mix">2 or 3 letters</option><option value="2">2 letters</option><option value="3">3 letters</option></select>
+            </label>
+            <label class="select-field">After a splat
+              <select id="set-afterSplat"><option value="keep">Keep the same letters</option><option value="new">New letters</option></select>
+            </label>
+            <label class="select-field">Shortest turn
+              <select id="set-minTurn"><option value="5">5 seconds</option><option value="3">3 seconds</option><option value="8">8 seconds</option><option value="off">Off</option></select>
+            </label>
+            <label class="select-field">No repeated words
+              <select id="set-noRepeat"><option value="game">Within a game</option><option value="room">For the whole room</option></select>
+            </label>
+            <label class="select-field">Plurals and -ing forms
+              <select id="set-forms"><option value="block">Count as a repeat</option><option value="allow">Count as new words</option></select>
+            </label>
+            <label class="select-field">Typing hints
+              <select id="set-hints"><option value="on">Say “not a word” while typing</option><option value="off">Off (find out when you send)</option></select>
+            </label>
+          </div>
+        </details>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start game</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game (rooms) ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="play">
+      <div class="table" id="table">
+        <div class="seats" id="seats"></div>
+        <div class="banana-spot" id="banana-spot" hidden>
+          <div class="banana-host" id="banana-host"></div>
+          <span class="banana-age" id="banana-age"></span>
+        </div>
+        <div class="centre">
+          <div class="turn-label" id="turn-label" aria-live="polite"></div>
+          <div class="prompt" id="prompt" aria-live="polite"></div>
+          <div class="timer" id="timer" hidden></div>
+          <div class="flash" id="flash" aria-live="polite"></div>
+        </div>
+        <div class="countdown" id="countdown" hidden></div>
+      </div>
+      <div class="answer" id="answer-box">
+        <p class="answer-status" id="answer-status"></p>
+        <form class="answer-row" id="answer-form" autocomplete="off">
+          <input class="answer-input" id="answer" maxlength="30" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Your word">
+          <button class="btn primary" id="answer-send" type="submit">Send</button>
+        </form>
+        <p class="hint" id="hint"></p>
+        <div class="kbd" id="kbd" hidden></div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="panel" id="result-panel" hidden>
+        <div class="result-head" id="result-head">
+          <h2 id="result-title"></h2>
+          <p id="result-sub"></p>
+        </div>
+        <ol class="places" id="places"></ol>
+        <div class="result-actions">
+          <button class="btn primary" id="next-game" type="button">Next game</button>
+          <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+        </div>
+        <p class="muted small-note" id="result-wait">The host starts the next game.</p>
+        <p class="muted small-note" id="crew-line"></p>
+      </section>
+
+      <section class="panel me-panel" id="me-panel">
+        <div class="panel-head"><h2>You</h2><span class="lives big" id="my-lives"></span></div>
+        <div id="letters-box">
+          <p class="small-note muted" id="letters-note"></p>
+          <div class="letters" id="letters"></div>
+        </div>
+        <p class="spectator-note" id="spectator-note" hidden>You joined mid-game. You’ll play from the next game.</p>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head"><h2>Words</h2><span class="muted small-note" id="word-count"></span></div>
+        <ol class="word-log" id="word-log"></ol>
+      </section>
+
+      <section class="scores">
+        <h2 id="scores-title">Wins</h2>
+        <ol class="score-list" id="score-list"></ol>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Daily and practice ============ -->
+<main id="solo" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="solo-title"></span>
+    <span class="bar-phase" id="solo-phase"></span>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+    <button class="icon-btn" id="solo-quit" type="button" aria-label="Back to home">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="play">
+      <div class="table solo-table">
+        <div class="centre">
+          <div class="banana-host" id="solo-banana"></div>
+          <span class="banana-age" id="solo-age"></span>
+          <div class="prompt" id="solo-prompt" aria-live="polite"></div>
+          <div class="timer" id="solo-timer"></div>
+          <div class="flash" id="solo-flash" aria-live="polite"></div>
+        </div>
+        <div class="countdown" id="solo-countdown" hidden></div>
+      </div>
+      <div class="answer" id="solo-answer-box">
+        <form class="answer-row" id="solo-form" autocomplete="off">
+          <input class="answer-input" id="solo-answer" maxlength="30" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" aria-label="Your word">
+          <button class="btn primary" type="submit">Send</button>
+        </form>
+        <p class="hint" id="solo-hint"></p>
+        <button class="btn link" id="solo-skip" type="button">Skip (+10 s)</button>
+        <div class="kbd" id="solo-kbd" hidden></div>
+      </div>
+    </section>
+    <aside class="side">
+      <section class="panel" id="practice-setup" hidden>
+        <h2>Practice</h2>
+        <div class="setting">
+          <span class="setting-label">Letters</span>
+          <div class="seg four" id="pr-difficulty" role="group" aria-label="Letters">
+            <button type="button" data-value="easy"><b>Easy</b></button>
+            <button type="button" data-value="normal"><b>Normal</b></button>
+            <button type="button" data-value="hard"><b>Hard</b></button>
+            <button type="button" data-value="ramp"><b>Ramp</b></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Words</span>
+          <div class="seg" id="pr-words" role="group" aria-label="Words">
+            <button type="button" data-value="en"><b>English</b></button>
+            <button type="button" data-value="mix"><b>+ Urdu</b></button>
+            <button type="button" data-value="ur"><b>Urdu</b></button>
+          </div>
+        </div>
+        <div class="stat-grid two">
+          <div><b id="pr-streak">0</b><span>Streak</span></div>
+          <div><b id="pr-best">0</b><span>Best streak</span></div>
+        </div>
+        <p class="small-note muted">No lives here. A splat ends your streak; keep going as long as you like.</p>
+      </section>
+      <section class="panel" id="daily-panel" hidden>
+        <div class="panel-head"><h2 id="daily-title">Daily</h2><span class="muted small-note" id="daily-total"></span></div>
+        <ol class="daily-list" id="daily-list"></ol>
+        <div id="daily-done" hidden>
+          <div class="result-head won"><h2 id="daily-score"></h2><p id="daily-sub"></p></div>
+          <div class="result-actions">
+            <button class="btn primary" id="daily-share" type="button">Share result</button>
+            <button class="btn ghost" id="daily-home" type="button">Back to home</button>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound (ticking, splats, your turn)</label>
+  <label class="toggle"><input type="checkbox" id="vibrate-toggle"> Vibrate on your turn (phones)</label>
+  <label class="toggle"><input type="checkbox" id="typing-toggle"> Show what others are typing</label>
+  <label class="select-field">Splat animation
+    <select id="anim-select"><option value="on">On</option><option value="reduced">Reduced</option><option value="off">Off</option></select>
+  </label>
+  <label class="select-field">Keyboard
+    <select id="kbd-select"><option value="auto">Automatic (built-in on phones)</option><option value="device">My device’s keyboard</option><option value="builtin">Built-in keyboard</option></select>
+  </label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>2 to 8 players sit round a table. One of you is holding a banana that’s going off.</p>
+  <h3>Your turn</h3>
+  <p>When the banana comes to you, you get 2 or 3 letters, like <b>AN</b>. Type any word that has those letters together, like <b>bANana</b> or <b>plANet</b>, and press Enter. The banana passes to the next player with new letters.</p>
+  <p>A word can only be played once (plurals and <i>-ing</i> forms count as the same word unless the host changes it).</p>
+  <h3>Splat</h3>
+  <p>The banana splats at a random moment the room can’t see. It browns as it ages, which is a clue, not a clock. Whoever is holding it loses a life, and the banana moves on. At 0 lives you’re out and watch the rest. The last player standing wins.</p>
+  <h3>Bonus life</h3>
+  <p>Use every letter of the alphabet across your words (the letters panel shows what you still need) and you get a life back.</p>
+  <h3>On your own</h3>
+  <ul class="rule-points">
+    <li><b>Daily puzzle:</b> the same 10 letter sets for everyone today. Your score is your total time; each skip adds 10 seconds.</li>
+    <li><b>Practice:</b> endless letters with a banana, no lives. Keep your streak going.</li>
+  </ul>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>

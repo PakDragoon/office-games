@@ -1,0 +1,138 @@
+# Roman Urdu words for Rotten. One word per line, lowercase a-z only.
+# Spelling variants are matched loosely (see normalUrdu in js/engine.js), so "khaana",
+# "khana" and "kana" all count; list the most common spelling and any very different ones.
+# Lines starting with "@verb" list verb roots: tools/build-words.mjs adds common forms
+# (root+na, ne, ni, ta, te, ti, o, ein, ega, egi, enge, unga, ungi, kar, ke).
+
+# ---------- Verb roots ----------
+@verb kha pee ja aa kar de le so uth baith chal bol sun dekh likh parh khel bhaag daud
+@verb ro hans muskura gaa naach soch samajh maan pooch bata sikha seekh padha bula
+@verb jaag nahaa dho pak bana toot tor jor khol band rakh utha gira pakar chhor chhu
+@verb bech khareed gin mil bhool yaad jeet haar lar maar kaat seel bun likha bhej
+@verb pahunch nikal ghus ruk thehar bach bacha chupa dhoond kho pa sambhal jala bujha
+@verb gar ubal bhig sukha suk phenk lapet cheer khinch dhakel ghuma phir mur
+@verb chadh utar tair ur jhool kood ghoom tehal sambhaal saja sanwar sudhaar
+@verb kama bacha uda gaa bajaa sajaa bichha samet chun bo kaat seench
+@verb ghabra dar chillaa cheekh roo maang chaah sah jhel nibha ugal nigal chaba
+@verb soonga choom gale lipat thaam chhup jhuk tik lag laga hila hil kaanp
+@verb dhal bhar khaali ugaa mehek chamak jagmaga bik tal talaa phail sikur
+@verb ghol pees chhaan tal bhoon sek ubaal beel kat
+
+# ---------- Common verb forms that don't follow the pattern ----------
+gaya gayi gaye kiya kiye ki diya diye di liya liye li aaya aayi aaye
+khaya khayi khaye piya piyi piye hua hui hue tha thi the hai hain ho hon hoon
+raha rahi rahe sakta sakti sakte chuka chuki chuke paya payi paye
+lena dena jana aana karna hona rehna sona khana peena dekhna sunna bolna
+chahiye chahye chahta chahti chahte milega milegi milenge karenge jayenge aayenge
+jaiye aaiye kijiye lijiye dijiye baithiye suniye dekhiye boliye chaliye rukiye
+jao aao karo khao piyo baitho utho chalo suno dekho bolo likho parho khelo bhaago
+jaon aaon karun khaun piyun dekhun bolun likhun suno lun dun
+
+# ---------- People and family ----------
+ammi abbu ammaan abba amma baba maa baap walid walida bhai behen bahan beta beti
+dada dadi nana nani chacha chachi taya tayi mamu mama mami khala khalu phupho phuphi
+phupha sasur saas bahu damaad dulha dulhan shohar biwi mian beghum begum bachay bacha
+bachi baccha bachcha larka larki larkay larkiyan aadmi aurat insaan log loag dost yaar
+saheli padosi mehmaan mehman naukar malik maalik sahab sahib janab ustaad ustad
+shagird talib mureed pir bhabhi devar nand jeth bhanja bhanji bhateeja bhateeji
+pota poti nawasa nawasi rishtedaar khandaan ghar walay jawan buzurg budha budhi
+doctor hakeem darzi nai mochi dhobi mali chowkidar driver halwai qasai kisan mazdoor
+dukandaar sipahi fauji police thanedaar munshi babu afsar wazir badshah rani raja
+shehzada shehzadi nawab sardar chaudhry chaudhri maulvi imam qazi
+
+# ---------- Body ----------
+sar sir baal aankh aankhen naak kaan munh moonh daant zubaan honth gaal gala gardan
+kandha baazu haath ungli anguthi nakhun seena pet kamar taang paon pair ghutna
+edi talwa jism badan dil jigar khoon haddi chamra dimagh dimaag maatha mathaa palak
+bhaven moonchh daarhi daadhi chehra chehray awaaz saans pasina aansu thook
+
+# ---------- Food and drink ----------
+khana roti chawal daal dal sabzi gosht murgh murghi machli anda andey dahi doodh
+makhan ghee cheeni chini namak mirch haldi masala pyaz piyaz lehsan adrak tamatar
+aloo alu gobhi bhindi karela palak matar baingan kaddu lauki tori shaljam gajar
+mooli kheera kakri saag methi dhaniya podina nimbu nimboo aam kela seb santra
+angoor tarbooz kharbooza amrood anaar aloo bukhara khajoor kishmish badam akhrot
+pista kaju moongphali chai chaye qehwa kahwa lassi sharbat paani pani juice
+biryani pulao qorma korma nihari haleem karahi kabab kebab tikka seekh chapli
+samosa pakora pakoray jalebi gulab jamun barfi ladoo laddu halwa kheer zarda
+firni sheer khurma rasmalai gajrela paratha puri naan kulcha chapati phulka
+haleem paye siri aalu qeema keema kofta koftay raita salad achar chatni chutney
+dahi bhalla chaat gol gappay golgappa paan supari mithai meetha namkeen chips
+nashta dopehar raat khana iftari sehri daawat dawat
+
+# ---------- Home and things ----------
+ghar makaan makan kamra kamre darwaza khirki khidki chhat deewar diwar farsh
+seedhi seerhi bawarchikhana rasoi ghusalkhana bistar chadar takiya rajai kambal
+kursi mez almari sandooq sanduq parda pardey chiragh batti pankha bijli naal
+nalka balti lota glass gilaas pyala pyali plate thaali chamach churi chaaku
+handi degchi tawa patila chulha chulah aag dhuan jharoo jhadu pocha kapray kapde
+kameez shalwar dupatta chadar topi pagri joota jootay chappal moze jooti
+angoothi kangan choorian baali haar ghadi ainak chashma batua thaila bori
+kitaab kitab kaghaz kagaz qalam kalam pencil copy basta takhti chaabi chabi tala
+taala zanjeer rassi dhaaga sui qainchi kanghi sabun tolia shesha aaina sheesha
+bartan dabba botal jug matka surahi charpai peerhi moorha dari qaleen
+
+# ---------- Places ----------
+shehar shahar gaon gaaon qasba mohalla gali sarak sadak bazaar bazar dukaan dukan
+masjid mandir girja madrasa school college idara daftar dafter hospital haspatal
+thana adalat jail station adda hotel dhaba maidan bagh baagh park nehar darya
+samandar pahaar pahar jungle jangal registan khet khalyan kuan talab pul
+qila mahal maqbara mazaar mazar darbar bandargah hawaiadda safar watan mulk
+pakistan lahore karachi islamabad peshawar quetta multan faisalabad
+rawalpindi sialkot hyderabad sukkur murree swat hunza gilgit kashmir punjab
+sindh balochistan
+
+# ---------- Nature, time, weather ----------
+suraj sooraj chand chaand sitara sitaray taray aasman asmaan zameen dharti
+baadal badal barish baarish bijli toofan aandhi hawa dhoop chhaon saya garmi
+sardi thand mausam mosam bahar khizan pani barf ole ped darakht patta pattay
+phool phal beej jarr shakh ghaas mitti pathar ret pahaar nadi jheel samundar
+lehar subah shaam dopahar raat din hafta mahina saal sadi lamha pal ghanta minute
+waqt waqat kal aaj parson abhi jaldi der dair pehle baad hamesha kabhi aksar
+roz rozana somwar mangal budh jumeraat jumma jummah hafta itwaar itwar
+
+# ---------- Animals and birds ----------
+janwar jaanwar kutta kutti billi bili gaaye gaye bhains bakri bakra bhed oont
+ghora ghori gadha khachar haathi sher cheetah bhaalu bhalu bandar hiran khargosh
+chooha chuha gilehri saanp sanp machhli mendak kachhua magarmach chheepkali
+makhi machhar keera keeray cheenti titli bhanwra shehad makri parinda chiriya
+chirya kawwa kauwa tota kabootar murgha murghi batakh bater mor bulbul koyal
+cheel baaz ullu laila maina gidh lomri bheriya gaida
+
+# ---------- Feelings and qualities ----------
+khush khushi udaas gham ghussa gussa pyaar pyar mohabbat ishq nafrat dar khauf
+sharam haya fakhr ummeed umeed yaqeen bharosa shak fikar fikr pareshan pareshani
+sukoon aaram thakan thaka bhook bhookh pyaas pyas neend khwab khwaab sapna
+accha acha achha bura bara bada chota chhota lamba chhota mota patla khoobsurat
+khubsurat pyara pyari sundar badsoorat ameer gareeb ghareeb sasta mehnga mehenga
+naya purana purani garam thanda meetha karwa namkeen teekha khatta saaf ganda
+seedha ulta tez aahista dheere jaldi mushkil asaan aasan sach jhoot sahi ghalat
+galat zaroori zaruri khaas aam taaza tazaa basi pakka kaccha kacha bhari halka
+gehra unchi ooncha neecha nicha andar bahar upar neeche aage peeche saath door
+paas qareeb nazdeek bilkul zara thora thoda zyada ziyada bohat bahut kam sab
+kuch kuchh koi kaun kya kyun kahan kab kaise kitna kitni kitne jitna utna
+bas phir dobara sirf bhi nahin nahi haan han ji jee shukriya meherbani maaf
+mubarak salam salaam khuda hafiz allah inshallah mashallah alhamdulillah
+yaar oye arey arre wah waah uff haaye hai bilkul shayad zaroor theek thik
+sahi bas chalo khair
+
+# ---------- Pronouns and little words ----------
+main mein mai hum ham tum aap woh wo yeh ye ve unka unki unke iska iski iske
+uska uski uske mera meri mere tera teri tere hamara hamari hamare tumhara
+tumhari tumhare aapka aapki aapke apna apni apne inka inki inke kisi kisko
+kisne jisko jisne usko isko mujhe mujhko tujhe hume humein tumhein unhein
+inhein ke ka ki ko se par pe mein tak liye wala wali walay waale aur ya lekin
+magar agar to tou jab tab jaise waise kyunke kyunki isliye halaanke balke
+
+# ---------- Work, school, everyday ----------
+kaam naukri tankhwa tankhah paisa paise rupay rupaye qeemat keemat hisaab
+hisab bill udhaar qarz faisla mashwara meeting chhutti chutti chhuttiyan
+imtehaan imtihan sabaq sawaal sawal jawab jawaab kahani qissa khat chitthi
+khabar akhbaar akhbar film gana gaana dhun saaz tabla dhol sitar khel
+cricket hockey football kabaddi gulli danda patang kanche luddo ludo carrom
+shatranj taash jeet haar inaam inam tohfa sauda safar gaari gari bus rickshaw
+cycle motor jahaz kashti rail tren tikat ticket raasta rasta naqsha pata
+sheher mulaqat baat baatein guftagu jhagra larai sulah dosti dushmani
+izzat ghairat aadat adat shauq shoq hunar mehnat kamyabi nakami qismat naseeb
+dua namaz roza zakat hajj eid shaadi shadi mehndi baraat barat walima rukhsati
+janaza duaa sadqa khairat
