@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "play",
+  "main": "server/src/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./web",
+    "binding": "ASSETS",
+    "run_worker_first": ["/*/ws", "/api/*"]
+  },
+  // Word lists are bundled as plain strings and searched in place (see server/src/core/words.ts)
+  "rules": [{ "type": "Text", "globs": ["**/*.txt"], "fallthrough": true }],
+  "durable_objects": {
+    "bindings": [
+      { "name": "ROOMS", "class_name": "GameRoom" },
+      { "name": "LOBBY", "class_name": "Lobby" }
+    ]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom", "Lobby"] }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "office-games",
+      "database_id": "7b743791-f8bd-439c-b4c9-f7f6ccd1ac28",
+      "migrations_dir": "migrations"
+    }
+  ],
+  // Turn on Analytics Engine in the dashboard first, then add:
+  // "analytics_engine_datasets": [{ "binding": "EVENTS", "dataset": "office_games_events" }],
+  "triggers": { "crons": ["5 0 * * *"] },
+  "vars": { "FIREBASE_PROJECT": "wordle-party-81870" },
+  "observability": { "enabled": true }
+}

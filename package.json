@@ -1,0 +1,37 @@
+{
+  "name": "office-games",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:engines && npm run test:server",
+    "test:engines": "node scripts/test-engines.mjs",
+    "test:server": "vitest run",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.4",
+    "jose": "^6.2.17"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.8.0",
+    "@cloudflare/workers-types": "^5.20261112.1",
+    "drizzle-kit": "^0.31.11",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.12",
+    "wrangler": "^4.160.1"
+  },
+  "allowScripts": {
+    "workerd@1.20261110.1": true,
+    "esbuild@0.18.20": true,
+    "esbuild@0.25.12": true,
+    "esbuild@0.28.2": true,
+    "sharp@0.35.2": true,
+    "sharp@0.35.5": true
+  }
+}

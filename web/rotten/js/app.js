@@ -1,5 +1,6 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
+import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { createBanana, stageOf } from './banana.js';
 import { createKeyboard } from './keys.js';
 import { meltingLogo } from './logo.js';
@@ -9,16 +10,10 @@ import { meltingLogo } from './logo.js';
    Players sit round a table and pass a banana that's going off. The holder gets 2 or 3
    letters and must type a word containing them to pass it on. The banana splats at a
    random moment nobody can see: whoever holds it loses a life. Last one standing wins.
-   One player hosts: their browser is the "server". It holds the hidden timer, checks
-   every word and broadcasts a public view. Connections use PeerJS (WebRTC).
+   The game runs on the server (server/src/games/rotten.ts): it holds the hidden timer, checks
+   every word and sends everyone the public view. This page draws it and sends what you type.
    ========================================================= */
 
-const PREFIX = 'rotten-v1-';
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const PEER_OPTIONS = { debug: 1 };
-const PING_MS = 2000;
-const AWAY_MS = 9000;
-const LOST_MS = 12000;
 const TICK_MS = 520;
 
 const $ = (id) => document.getElementById(id);
@@ -40,15 +35,6 @@ const PRACTICE = { difficulty: 'normal', words: 'en', ...store.get('practice', {
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
-// Identifies this tab to the host: survives a refresh, different for every person
-const CLIENT_ID = (() => {
-  const fresh = () => Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  try {
-    let id = sessionStorage.getItem('rotten.client');
-    if (!id) { id = fresh(); sessionStorage.setItem('rotten.client', id); }
-    return id;
-  } catch { return fresh(); }
-})();
 
 /* ---------- Word lists (everyone loads them: the host checks words, players get hints) ---------- */
 const WORDS = { lex: E.makeLexicon(), ready: false, failed: false, promise: null };
@@ -177,580 +163,64 @@ const SOUND = {
    Hosting
    ========================================================= */
 const S = {
-  myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false,
-  heard: 0, reconnecting: false, gameShown: -1, wordSeen: -1, splatSeen: -1, holderSeen: null, bananaSeat: -1, savedGame: -1,
+  myName: '', myId: null, isHost: false, code: '', view: null, creating: false, reconnecting: false,
+  gameShown: -1, wordSeen: -1, splatSeen: -1, holderSeen: null, bananaSeat: -1,
   typing: '', typingFor: null, sentTyping: '', pending: '', viewAt: 0, refreshTimer: 0,
 };
-const H = { room: null, conns: new Map(), seen: new Map(), fuseTimer: 0, phaseTimer: 0, rnd: Math.random };
-
-function randomCode() {
-  let c = '';
-  for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return c;
-}
-
-function hostCreate(attempt = 0) {
-  const code = randomCode();
-  const peer = new Peer(PREFIX + code, PEER_OPTIONS);
-  let opened = false;
-  peer.on('open', (id) => {
-    opened = true;
-    Object.assign(S, { peer, myId: id, isHost: true, code, leaving: false, gameShown: -1 });
-    H.conns.clear();
-    H.rnd = E.mulberry32(E.randomSeed());
-    const u = cloud.getUser();
-    H.room = {
-      code, status: 'lobby', settings: { ...ROOM_PREFS }, game: 0,
-      players: [newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || '')],
-      order: [], holder: null, prompt: '', promptSplats: 0, recent: [], bands: null,
-      startAt: 0, fuseStart: 0, fuseEnd: 0, pausedUntil: 0,
-      wordsPlayed: 0, used: new Set(), roomUsed: new Set(), log: [], wordSeq: 0,
-      lastSplat: null, splatSeq: 0, winner: null, matchWinner: null,
-      crew: null, crewStatus: '',
-    };
-    peer.on('connection', hostOnConnection);
-    cloud.track('room_created');
-    setBusy(false);
-    hostBroadcast();
-    const savedCrew = store.get('crew', '');
-    if (savedCrew) hostSetCrew(savedCrew);
-  });
-  peer.on('error', (err) => {
-    if (!opened && err.type === 'unavailable-id' && attempt < 5) {
-      peer.destroy();
-      hostCreate(attempt + 1);
-      return;
-    }
-    if (!opened) {
-      setBusy(false);
-      homeError(peerErrorText(err));
-      peer.destroy();
-    } else {
-      console.warn('PeerJS error', err);
-    }
-  });
-  peer.on('disconnected', () => { if (!S.leaving && !peer.destroyed) peer.reconnect(); });
-}
-
-function newPlayer(id, name, isHost, color, uid = null, photo = '') {
-  return {
-    id, name, isHost, color, uid, photo, clientId: '', connected: true, away: false, offlineAt: 0,
-    inGame: false, alive: false, lives: 0, letters: '', words: 0, splats: 0, longest: '', place: 0, wins: 0, matchWins: 0,
-  };
-}
-
-function cleanPhoto(url) {
-  const s = String(url || '');
-  return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(s) ? s.slice(0, 500) : '';
-}
-
-function freeColor() {
-  const used = new Set(H.room.players.map((p) => p.color));
-  for (let c = 0; c < E.MAX_PLAYERS; c++) if (!used.has(c)) return c;
-  return 0;
-}
-
-function hostOnConnection(conn) {
-  conn.on('data', (msg) => hostOnMessage(conn, msg));
-  conn.on('close', () => hostOnClose(conn));
-  conn.on('error', () => hostOnClose(conn));
-}
-
-function hostOnMessage(conn, msg) {
-  if (!msg || typeof msg !== 'object') return;
-  H.seen.set(conn.peer, Date.now());
-  const room = H.room;
-  if (!room) return;
-  const back = room.players.find((p) => p.id === conn.peer && p.away);
-  if (back) { back.away = false; hostBroadcast(); }
-  switch (msg.t) {
-    case 'join': return hostJoin(conn, msg.name, msg.uid, msg.photo, msg.client);
-    case 'word': return hostWord(conn.peer, msg.word);
-    case 'type': return hostType(conn.peer, msg.text);
-    default: return undefined;
-  }
-}
-
-function hostJoin(conn, rawName, uid, photo, client) {
-  const room = H.room;
-  const name = cleanName(rawName) || 'Player';
-  const cleanUid = typeof uid === 'string' ? uid.slice(0, 128) : null;
-  const clientId = typeof client === 'string' ? client.slice(0, 40) : '';
-  // Same tab (refresh), same Google account, or an offline seat: take the seat back.
-  // A colleague with the same name while the first is still here gets "Name 2".
-  const old = room.players.find((p) => !p.isHost && p.name.toLowerCase() === name.toLowerCase()
-    && ((clientId && p.clientId === clientId) || (cleanUid && p.uid === cleanUid) || !p.connected));
-  if (old) {
-    const oldConn = H.conns.get(old.id);
-    H.conns.delete(old.id);
-    if (oldConn && oldConn !== conn) oldConn.close();
-    room.order = room.order.map((x) => (x === old.id ? conn.peer : x));
-    if (room.holder === old.id) room.holder = conn.peer;
-    if (room.winner === old.id) room.winner = conn.peer;
-    if (room.matchWinner === old.id) room.matchWinner = conn.peer;
-    for (const w of room.log) if (w.pid === old.id) w.pid = conn.peer;
-    if (room.lastSplat && room.lastSplat.pid === old.id) room.lastSplat.pid = conn.peer;
-    old.id = conn.peer;
-    Object.assign(old, { connected: true, away: false, offlineAt: 0, clientId: clientId || old.clientId, uid: cleanUid || old.uid, photo: cleanPhoto(photo) || old.photo });
-    H.conns.set(conn.peer, conn);
-    H.seen.set(conn.peer, Date.now());
-    send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-    hostBroadcast();
-    return;
-  }
-  if (room.players.length >= E.MAX_PLAYERS) room.players = room.players.filter((p) => p.connected);
-  if (room.players.length >= E.MAX_PLAYERS) return reject(conn, `This room is full (${E.MAX_PLAYERS} players).`);
-  let finalName = name;
-  for (let n = 2; room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase()); n++) finalName = `${name} ${n}`;
-  const seat = newPlayer(conn.peer, finalName, false, freeColor(), cleanUid, cleanPhoto(photo));
-  seat.clientId = clientId;
-  room.players.push(seat);   // joined mid-game: watches until the next game
-  H.conns.set(conn.peer, conn);
-  H.seen.set(conn.peer, Date.now());
-  send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-  hostBroadcast();
-}
-
-function reject(conn, reason) {
-  send(conn, { t: 'reject', reason });
-  setTimeout(() => conn.close(), 500);
-}
-
-function hostOnClose(conn) {
-  const room = H.room;
-  if (!room) return;
-  const p = room.players.find((x) => x.id === conn.peer);
-  H.conns.delete(conn.peer);
-  if (!p) return;
-  if (room.status === 'lobby') room.players = room.players.filter((x) => x !== p);
-  else { p.connected = false; p.offlineAt = Date.now(); }
-  hostAfterPresence(p);
-  hostBroadcast();
-}
-
-const active = (p) => p.connected && !p.away;
-const byId = (id) => H.room.players.find((p) => p.id === id);
-const canHold = (id) => { const p = byId(id); return Boolean(p && p.inGame && p.alive && active(p)); };
-
-// Someone left or went quiet: if they're holding the banana, it moves on (no life lost)
-function hostAfterPresence(p) {
-  const room = H.room;
-  if (room.status !== 'play' || room.holder !== p.id || active(p)) return;
-  const next = E.nextHolder(room.order, p.id, canHold);
-  if (next && next !== p.id) {
-    room.holder = next;
-    hostMinTurn();
-  }
-}
-
-function hostHeartbeat() {
-  const room = H.room;
-  if (!room || !S.isHost) return;
-  for (const conn of H.conns.values()) send(conn, { t: 'hb' });
-  const now = Date.now();
-  let changed = false;
-  for (const p of room.players) {
-    if (p.isHost) continue;
-    if (p.connected) {
-      const away = now - (H.seen.get(p.id) || 0) > AWAY_MS;
-      if (away !== p.away) { p.away = away; changed = true; hostAfterPresence(p); }
-    } else if (room.status === 'play' && p.inGame && p.alive && p.offlineAt && now - p.offlineAt > E.TIMES.offlineOutMs) {
-      // Gone for good: out of this game, so the others can finish
-      eliminate(p);
-      changed = true;
-      if (hostCheckWinner()) return;
-      hostAfterPresence(p);
-    }
-  }
-  if (changed) hostBroadcast();
-}
-
-/* ---------- A game ---------- */
-
-function clearTimers() {
-  clearTimeout(H.fuseTimer);
-  clearTimeout(H.phaseTimer);
-}
-
-function hostNewPrompt() {
-  const room = H.room;
-  const band = E.bandFor(room.settings.difficulty, room.wordsPlayed);
-  room.prompt = E.pickPrompt(room.bands, band, room.settings.promptLen, H.rnd, room.recent);
-  room.recent = [room.prompt, ...room.recent].slice(0, 40);
-  room.promptSplats = 0;
-}
-
-function hostScheduleFuse() {
-  const room = H.room;
-  clearTimeout(H.fuseTimer);
-  H.fuseTimer = setTimeout(hostSplat, Math.max(0, room.fuseEnd - Date.now()) + 30);
-}
-
-// Everyone's screen changes when a countdown or splat pause ends, so tell them
-function hostWakeAt(at) {
-  clearTimeout(H.phaseTimer);
-  const wait = at - Date.now();
-  if (wait > 0) H.phaseTimer = setTimeout(hostBroadcast, wait + 20);
-}
-
-// Whoever just got the banana has at least a moment to answer
-function hostMinTurn() {
-  const room = H.room;
-  const min = E.minTurnMs(room.settings);
-  if (!min) return;
-  const now = Math.max(Date.now(), room.pausedUntil, room.startAt);
-  if (room.fuseEnd - now < min) {
-    room.fuseEnd = now + min;
-    hostScheduleFuse();
-  }
-}
-
-async function hostStartGame() {
-  const room = H.room;
-  const players = room.players.filter((p) => p.connected);
-  if (players.length < E.MIN_PLAYERS) return toast(`You need at least ${E.MIN_PLAYERS} players`);
-  if (!WORDS.ready) {
-    toast('Loading the word lists…');
-    await loadWords();
-    if (!WORDS.ready) return toast('Couldn’t load the word lists. Check your internet and try again.');
-    if (H.room !== room) return;
-  }
-  const typedCrew = $('crew-input').value.replace(/\s+/g, ' ').trim();
-  if (room.status === 'lobby' && typedCrew !== (room.crew ? room.crew.name : '')) hostSetCrew(typedCrew);
-  clearTimers();
-  const st = { ...ROOM_PREFS };
-  if (room.matchWinner || st.match !== room.settings.match) {
-    for (const p of room.players) p.matchWins = 0;
-    room.matchWinner = null;
-  }
-  room.settings = st;
-  room.players = players;
-  for (const p of room.players) {
-    Object.assign(p, { inGame: true, alive: true, lives: st.lives, letters: '', words: 0, splats: 0, longest: '', place: 0, offlineAt: 0 });
-  }
-  const ids = room.players.map((p) => p.id);
-  room.order = E.shuffle(ids, H.rnd);
-  room.holder = room.order[Math.floor(H.rnd() * room.order.length)];
-  room.bands = E.promptBands(st.words, WORDS.lex);
-  room.used = st.noRepeat === 'room' ? room.roomUsed : new Set();
-  Object.assign(room, { log: [], wordsPlayed: 0, recent: [], lastSplat: null, winner: null, pausedUntil: 0 });
-  hostNewPrompt();
-  const now = Date.now();
-  room.status = 'play';
-  room.game++;
-  room.startAt = now + E.TIMES.countdownMs;
-  room.fuseStart = room.startAt;
-  room.fuseEnd = room.startAt + E.fuseMs(st, H.rnd);
-  hostScheduleFuse();
-  hostWakeAt(room.startAt);
-  cloud.track('game_started', { players: ids.length, words: st.words, difficulty: st.difficulty, fuse: st.fuse });
-  hostBroadcast();
-}
-
-function hostType(pid, text) {
-  const room = H.room;
-  if (room.status !== 'play' || room.holder !== pid) return;
-  const clean = E.cleanWord(text);
-  const msg = { t: 'type', pid, text: clean };
-  for (const [id, conn] of H.conns) if (id !== pid) send(conn, msg);
-  if (pid !== S.myId) onMessage(msg);
-}
-
-function hostWord(pid, raw) {
-  const room = H.room;
-  const now = Date.now();
-  if (room.status !== 'play' || room.holder !== pid || now < room.startAt || now < room.pausedUntil) return;
-  const p = byId(pid);
-  if (!p || !p.alive) return;
-  const st = room.settings;
-  const res = E.checkWord(raw, { prompt: room.prompt, minLen: st.minLen, list: st.words, forms: st.forms, used: room.used, lex: WORDS.lex });
-  if (!res.ok) {
-    const msg = { t: 'nope', pid, reason: res.reason, word: res.word || '' };
-    for (const conn of H.conns.values()) send(conn, msg);
-    onMessage(msg);
-    return;
-  }
-  room.used.add(res.key);
-  p.words++;
-  if (res.word.length > p.longest.length) p.longest = res.word;
-  const got = E.addLetters(p.letters, res.word, st.bonus);
-  p.letters = got.letters;
-  const bonus = got.complete && p.lives < E.maxLivesFor(st);
-  if (bonus) p.lives++;
-  room.log = [{ pid, word: res.word, prompt: room.prompt, bonus, full: got.complete && !bonus }, ...room.log].slice(0, 40);
-  room.wordsPlayed++;
-  room.wordSeq++;
-  room.holder = E.nextHolder(room.order, pid, canHold) || pid;
-  hostNewPrompt();
-  hostMinTurn();
-  hostBroadcast();
-}
-
-function eliminate(p) {
-  const room = H.room;
-  p.lives = 0;
-  p.alive = false;
-  p.place = room.players.filter((x) => x.inGame && x.alive).length + 1;
-}
-
-// The game ends when one player (or nobody) is left
-function hostCheckWinner() {
-  const room = H.room;
-  const alive = room.players.filter((p) => p.inGame && p.alive);
-  if (alive.length > 1) return false;
-  hostGameOver(alive[0] || null);
-  return true;
-}
-
-function hostSplat() {
-  const room = H.room;
-  if (!room || room.status !== 'play') return;
-  const now = Date.now();
-  if (now < room.fuseEnd - 5) { hostScheduleFuse(); return; }   // the fuse was extended
-  const p = byId(room.holder);
-  if (!p) return;
-  p.lives--;
-  p.splats++;
-  room.promptSplats++;
-  const out = p.lives <= 0;
-  if (out) eliminate(p);
-  room.splatSeq++;
-  room.lastSplat = { pid: p.id, out, seq: room.splatSeq, lives: p.lives };
-  if (hostCheckWinner()) return;
-  // Next holder: the next player who's here; if everyone else is away, the next one alive
-  room.holder = E.nextHolder(room.order, p.id, canHold)
-    || E.nextHolder(room.order, p.id, (id) => { const q = byId(id); return Boolean(q && q.inGame && q.alive); });
-  if (room.settings.afterSplat === 'new' || room.promptSplats >= E.PROMPT_MAX_SPLATS) hostNewPrompt();
-  room.pausedUntil = now + E.TIMES.splatMs;
-  room.fuseStart = room.pausedUntil;
-  room.fuseEnd = room.pausedUntil + E.fuseMs(room.settings, H.rnd);
-  hostScheduleFuse();
-  hostWakeAt(room.pausedUntil);
-  hostBroadcast();
-}
-
-function hostGameOver(winner) {
-  const room = H.room;
-  clearTimers();
-  room.status = 'over';
-  room.winner = winner ? winner.id : null;
-  if (winner) {
-    winner.place = 1;
-    winner.wins++;
-    winner.matchWins++;
-    const target = E.matchTarget(room.settings);
-    if (target && winner.matchWins >= target) room.matchWinner = winner.id;
-  }
-  cloud.track('game_finished', { players: room.players.filter((p) => p.inGame).length, words: room.wordsPlayed });
-  hostSaveCrew();
-  hostBroadcast();
-}
-
-function hostBackToLobby() {
-  const room = H.room;
-  clearTimers();
-  room.status = 'lobby';
-  room.players = room.players.filter((p) => p.connected);
-  for (const p of room.players) Object.assign(p, { inGame: false, alive: false });
-  hostBroadcast();
-}
-
-function hostSaveCrew() {
-  const room = H.room;
-  if (!room.crew) return;
-  if (!cloud.getUser()) {
-    room.crewStatus = 'This game wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
-    return;
-  }
-  room.crewStatus = 'Saving this game…';
-  const winner = room.winner ? byId(room.winner) : null;
-  cloud.saveCrewGame(room.crew.name, {
-    room: room.code, winner: winner ? winner.name : '',
-    players: room.players.filter((p) => p.inGame).map((p) => ({ name: p.name, place: p.place, words: p.words, longest: p.longest.length })),
-  }).then((saved) => {
-    if (H.room !== room) return;
-    room.crewStatus = `Saved to ${saved.name}. ${plural(saved.games, 'game')} played as this crew.`;
-    hostBroadcast();
-  }).catch((err) => {
-    console.warn('Saving to crew failed', err);
-    if (H.room !== room) return;
-    room.crewStatus = `This game wasn’t saved. ${cloud.errorText(err)}`;
-    hostBroadcast();
-  });
-}
-
-async function hostSetCrew(rawName) {
-  const room = H.room;
-  if (!room) return;
-  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-  store.set('crew', name);
-  if (!name) {
-    Object.assign(room, { crew: null, crewStatus: '' });
-    hostBroadcast();
-    return;
-  }
-  if (cloud.crewId(name).length < 3) return toast('Crew names need at least 3 letters or numbers');
-  room.crew = { name };
-  if (!cloud.getUser()) {
-    room.crewStatus = 'Sign in with Google (gear icon) to save crew scores.';
-    hostBroadcast();
-    return;
-  }
-  room.crewStatus = 'Connecting to saved scores…';
-  hostBroadcast();
-  try {
-    const data = await cloud.getCrew(name);
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.crewStatus = data && data.games ? `${plural(data.games, 'game')} played as this crew so far.` : 'New crew. Scores save after the first game.';
-  } catch (err) {
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.crewStatus = cloud.errorText(err);
-  }
-  hostBroadcast();
-}
-
-// What everyone may see. The moment the banana splats stays hidden unless the room shows the timer.
-function publicView() {
-  const room = H.room;
-  const now = Date.now();
-  const playing = room.status === 'play';
-  const st = room.settings;
-  return {
-    t: 'state',
-    code: room.code, status: room.status, settings: st, game: room.game,
-    players: room.players.map((p) => ({
-      id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
-      connected: p.connected, away: p.away, inGame: p.inGame, alive: p.alive, lives: p.lives,
-      letters: p.letters, words: p.words, longest: p.longest, splats: p.splats, place: p.place,
-      wins: p.wins, matchWins: p.matchWins,
-    })),
-    order: room.order,
-    holder: playing ? room.holder : null,
-    prompt: playing && now >= room.startAt ? room.prompt : '',
-    startsIn: playing ? room.startAt - now : 0,
-    pausedFor: playing ? Math.max(0, room.pausedUntil - now) : 0,
-    fuseAge: playing ? now - room.fuseStart : 0,
-    fuseLeft: playing && st.showTimer === 'shown' ? room.fuseEnd - now : null,
-    log: room.log.slice(0, 14),
-    wordsPlayed: room.wordsPlayed, wordSeq: room.wordSeq,
-    lastSplat: room.lastSplat,
-    used: playing && st.hints === 'on' ? [...room.used] : null,
-    winner: room.winner, matchWinner: room.matchWinner,
-    crewName: room.crew ? room.crew.name : '',
-    crewStatus: room.crewStatus,
-  };
-}
-
-function hostBroadcast() {
-  if (!H.room) return;
-  const view = publicView();
-  for (const conn of H.conns.values()) send(conn, view);
-  onMessage(view);
-}
 
 /* =========================================================
-   Joining and staying connected
+   The room on the server
    ========================================================= */
-function joinRoom(code, { quiet = false } = {}) {
-  const peer = new Peer(PEER_OPTIONS);
-  let connected = false;
-  let failed = false;
-  const fail = (text) => {
-    if (failed || connected) return;
-    failed = true;
-    clearTimeout(timer);
-    peer.destroy();
-    if (quiet) {
-      S.reconnecting = false;
-      closeRoom();
-      goHome();
-      showNotice('The room closed', 'The host left or lost their connection. Ask them to host a new room.');
-      return;
-    }
+const link = createRoomLink('rotten', {
+  hello: () => {
+    const u = cloud.getUser();
+    return { name: S.myName, photo: u?.photo || '' };
+  },
+  message: onMessage,
+  reconnecting: () => {
+    S.reconnecting = true;
+    toast('Connection lost. Reconnecting…');
+  },
+  gone: (reason) => {
+    closeRoom();
+    goHome();
+    showNotice('The room closed', reason || 'Everyone left, so the room was closed. Host a new one.');
+  },
+  failed: (text) => {
+    closeRoom();
     setBusy(false);
+    showScreen('home');
     homeError(text);
-  };
-  const timer = setTimeout(() => fail('Could not reach that room. Check the code, or ask the host to keep their tab open.'), 15000);
-  peer.on('open', (id) => {
-    Object.assign(S, { peer, myId: id, isHost: false, leaving: false });
-    if (!quiet) Object.assign(S, { gameShown: -1, savedGame: -1 });
-    const conn = peer.connect(PREFIX + code, { reliable: true });
-    conn.on('open', () => {
-      connected = true;
-      clearTimeout(timer);
-      S.hostConn = conn;
-      S.code = code;
-      S.heard = Date.now();
-      const u = cloud.getUser();
-      send(conn, { t: 'join', name: S.myName, uid: u?.uid || null, photo: u?.photo || '', client: CLIENT_ID });
-    });
-    conn.on('data', (msg) => { S.heard = Date.now(); onMessage(msg); });
-    conn.on('close', () => {
-      if (S.leaving || !connected || S.hostConn !== conn) return;
-      reconnect();
-    });
-  });
-  peer.on('error', (err) => {
-    if (err.type === 'peer-unavailable') fail(`There’s no room ${code} right now. Check the code with your host.`);
-    else if (!connected) fail(peerErrorText(err));
-    else console.warn('PeerJS error', err);
-  });
-}
-
-function reconnect() {
-  if (S.isHost || !S.code || S.reconnecting) return;
-  S.reconnecting = true;
-  toast('Connection lost. Reconnecting…');
-  const code = S.code;
-  S.leaving = true;
-  S.hostConn = null;
-  S.peer?.destroy();
-  S.leaving = false;
-  joinRoom(code, { quiet: true });
-}
-
-setInterval(() => {
-  if (S.isHost) { hostHeartbeat(); return; }
-  if (!S.hostConn || S.reconnecting) return;
-  send(S.hostConn, { t: 'ping' });
-  if (!document.hidden && Date.now() - S.heard > LOST_MS) reconnect();
-}, PING_MS);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && !S.isHost && S.hostConn && !S.reconnecting && Date.now() - S.heard > LOST_MS) reconnect();
-});
-window.addEventListener('pagehide', () => {
-  if (!S.peer) return;
-  S.leaving = true;
-  S.peer.destroy();
+  },
 });
 
-function peerErrorText(err) {
-  if (err.type === 'browser-incompatible') return 'This browser can’t do live connections. Try Chrome, Firefox, Edge or Safari.';
-  if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error')
-    return 'Couldn’t reach the connection server. Check your internet and try again.';
-  return `Connection failed (${err.type || 'unknown error'}). Try again.`;
-}
+const active = (p) => p.connected && !p.away;
 
-function send(conn, msg) {
-  if (conn && conn.open) conn.send(msg);
-}
-
-// Messages from this player to the host (the host handles its own directly)
 function toHost(msg) {
-  if (S.isHost) hostOnMessage({ peer: S.myId }, msg);
-  else send(S.hostConn, msg);
+  link.send(msg);
 }
 
 function closeRoom() {
-  if (!S.peer) return;
-  S.leaving = true;
-  clearTimers();
-  S.peer.destroy();
-  Object.assign(S, { peer: null, hostConn: null, view: null, isHost: false, code: '', reconnecting: false, gameShown: -1 });
-  H.room = null;
-  H.conns.clear();
-  H.seen.clear();
+  link.close();
+  clearTimeout(S.refreshTimer);
+  Object.assign(S, { view: null, isHost: false, code: '', reconnecting: false, creating: false, gameShown: -1 });
   stopLoop();
+}
+
+// The host's buttons. The server only acts on these from whoever is host right now.
+function hostStartGame() {
+  toHost({ t: 'start', settings: { ...ROOM_PREFS }, crew: $('crew-input').value.replace(/\s+/g, ' ').trim() });
+}
+
+function hostBackToLobby() {
+  toHost({ t: 'lobby' });
+}
+
+function hostSetCrew(rawName) {
+  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (name && name.toLowerCase().replace(/[^a-z0-9]/g, '').length < 3) return toast('Crew names need at least 3 letters or numbers');
+  store.set('crew', name);
+  toHost({ t: 'crew', name });
 }
 
 /* =========================================================
@@ -763,7 +233,7 @@ function onMessage(msg) {
       S.myId = msg.id;
       S.code = msg.code;
       if (S.reconnecting) toast('Reconnected');
-      else if (!S.isHost) cloud.track('room_joined');
+      else cloud.track('room_joined');
       S.reconnecting = false;
       setBusy(false);
       break;
@@ -783,6 +253,9 @@ function onMessage(msg) {
     case 'nope':
       onNope(msg);
       break;
+    case 'toast':
+      toast(String(msg.text || ''));
+      break;
     case 'state':
       applyState(msg);
       break;
@@ -799,6 +272,15 @@ function applyState(v) {
   S.viewAt = performance.now();
   const mine = me(v);
   if (!mine) return;
+  S.isHost = Boolean(mine.isHost);
+  S.code = v.code;
+  if (S.creating && S.isHost) {
+    // A room we just opened: bring this browser's saved settings and crew
+    S.creating = false;
+    toHost({ t: 'settings', settings: { ...ROOM_PREFS } });
+    const savedCrew = store.get('crew', '');
+    if (savedCrew) hostSetCrew(savedCrew);
+  }
   if (v.status === 'lobby') {
     stopLoop();
     S.gameShown = -1;
@@ -1126,7 +608,7 @@ function onAnswerInput() {
   renderTyping();
   if (v && isMyTurn(v) && clean !== S.sentTyping) {
     S.sentTyping = clean;
-    toHost({ t: 'type', text: clean });
+    link.sendLatest('type', { t: 'type', text: clean }, 150);
   }
 }
 $('answer').addEventListener('input', onAnswerInput);
@@ -1222,12 +704,6 @@ function renderResult(v) {
   $('result-wait').hidden = S.isHost;
   $('crew-line').textContent = v.crewName ? v.crewStatus : '';
 
-  // Each signed-in player saves their own stats once per game
-  if (S.savedGame !== v.game && mine.inGame && cloud.getUser()) {
-    S.savedGame = v.game;
-    cloud.saveMyGame({ won: Boolean(iWon), words: mine.words, splats: mine.splats, longest: mine.longest.length })
-      .catch((err) => toast(`Your stats weren’t saved. ${cloud.errorText(err)}`));
-  }
 }
 
 $('next-game').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
@@ -1303,9 +779,8 @@ function roomSettingsChanged() {
   ROOM_PREFS = E.cleanSettings(ROOM_PREFS);
   saveRoomPrefs();
   paintRoomSettings();
-  if (!S.isHost || !H.room || H.room.status !== 'lobby') return;
-  H.room.settings = { ...ROOM_PREFS };
-  hostBroadcast();
+  if (!S.isHost || !S.view || S.view.status !== 'lobby') return;
+  toHost({ t: 'settings', settings: { ...ROOM_PREFS } });
 }
 
 function paintRoomSettings() {
@@ -1391,8 +866,11 @@ const dailyState = (day) => {
   return s && s.day === day ? s : null;
 };
 
+// The daily changes at 00:00 UTC for everyone, so there is one global leaderboard
+const utcDay = () => new Date().toISOString().slice(0, 10);
+
 function renderDailyCard() {
-  const day = E.dateKey();
+  const day = utcDay();
   const s = dailyState(day);
   $('daily-tag').textContent = `#${E.dailyNumber(day)}`;
   if (s && s.done) {
@@ -1508,45 +986,99 @@ $('solo-form').addEventListener('submit', (e) => { e.preventDefault(); soloSubmi
 $('solo-skip').addEventListener('click', () => soloSkip());
 
 /* ---------- Daily ---------- */
-function startDaily() {
-  const day = E.dateKey();
-  SOLO.day = day;
-  SOLO.prompts = E.dailyPrompts(day);
-  const saved = dailyState(day);
-  SOLO.times = saved ? saved.times.slice(0, E.DAILY_COUNT) : [];
-  SOLO.words = saved && saved.words ? saved.words : [];
-  SOLO.idx = SOLO.times.length;
-  $('solo-title').textContent = `Daily #${E.dailyNumber(day)}`;
-  $('daily-title').textContent = `Daily #${E.dailyNumber(day)}`;
+// The server runs the daily: it shows one prompt at a time and times every answer itself,
+// so results on the leaderboard are real. This page keeps the word hints instant.
+const dailyApi = (action, body = {}) => cloud.api(`/api/rotten/daily/${action}`, { method: 'POST', body: { name: cleanName($('name-input').value) || store.get('name', '') || 'Player', ...body } });
+
+function applyDaily(d) {
+  SOLO.day = d.day;
+  SOLO.number = d.number;
+  SOLO.prompts = d.prompts || [];
+  SOLO.times = d.times || [];
+  SOLO.words = (d.words || []).map((w) => w || '');
+  SOLO.idx = d.idx;
+  SOLO.used = new Set(d.used || []);
+  if (d.prompt) SOLO.promptStart = performance.now() - (d.elapsed || 0);
+  store.set('daily', { day: d.day, times: SOLO.times, words: SOLO.words, done: Boolean(d.done) });
+}
+
+async function startDaily() {
+  const token = SOLO.token;
+  $('solo-prompt').innerHTML = '<span class="muted small">Loading today’s puzzle…</span>';
+  soloEnable(false);
+  let d;
+  try {
+    d = await dailyApi('state');
+  } catch (err) {
+    if (token !== SOLO.token) return;
+    $('solo-prompt').innerHTML = `<span class="muted small">${esc(cloud.errorText(err))}</span>`;
+    return;
+  }
+  if (token !== SOLO.token || $('solo').hidden) return;
+  applyDaily(d);
+  $('solo-title').textContent = `Daily #${d.number}`;
+  $('daily-title').textContent = `Daily #${d.number}`;
   renderDailyList();
-  if (SOLO.idx >= E.DAILY_COUNT) { dailyDone(false); return; }
-  if (!saved) cloud.track('daily_started');
+  if (d.done) { dailyDone(false); return; }
+  if (d.prompt) { showDailyPrompt(); return; }   // came back mid-prompt: its clock kept running
+  if (!d.idx) cloud.track('daily_started');
   soloCountdown(dailyNext);
 }
 
-function dailyNext() {
-  if (SOLO.idx >= E.DAILY_COUNT) { dailyDone(true); return; }
-  SOLO.promptStart = performance.now();
+async function dailyNext() {
+  const token = SOLO.token;
+  try {
+    const d = await dailyApi('next');
+    if (token !== SOLO.token) return;
+    applyDaily(d);
+    if (d.done) { dailyDone(true); return; }
+    showDailyPrompt();
+  } catch (err) {
+    if (token === SOLO.token) toast(cloud.errorText(err));
+  }
+}
+
+function showDailyPrompt() {
   soloBanana.reset();
   soloShowPrompt(SOLO.prompts[SOLO.idx]);
   renderDailyList();
   soloLoop();
 }
 
-function saveDaily(done = false) {
-  store.set('daily', { day: SOLO.day, times: SOLO.times, words: SOLO.words, done });
+let dailyBusy = false;
+async function dailySend(action, body = {}) {
+  if (dailyBusy) return;
+  dailyBusy = true;
+  const token = SOLO.token;
+  const prompt = SOLO.prompts[SOLO.idx];
+  try {
+    const d = await dailyApi(action, body);
+    if (token !== SOLO.token) return;
+    if (d.error && !d.done) {
+      SOUND.nope();
+      $('solo-hint').className = 'hint bad';
+      $('solo-hint').textContent = E.REASON_TEXT[d.error] || 'Try another word';
+      shake($('solo-answer'));
+      return;
+    }
+    if (d.solved) {
+      SOUND.ok();
+      soloFlash(`${highlight(d.solved.word, prompt)} <span class="muted">${d.solved.time == null ? '' : E.formatMs(d.solved.time)}</span>`);
+      soloBanana.hop();
+    }
+    applyDaily(d);
+    if (d.done) { dailyDone(true); return; }
+    showDailyPrompt();
+  } catch (err) {
+    if (token === SOLO.token) toast(cloud.errorText(err));
+  } finally {
+    dailyBusy = false;
+  }
 }
 
 function soloSolved(word) {
   if (SOLO.mode === 'practice') return practiceSolved(word);
-  const ms = Math.round(performance.now() - SOLO.promptStart);
-  SOLO.times.push(ms);
-  SOLO.words.push(word);
-  soloFlash(`${highlight(word, SOLO.prompts[SOLO.idx])} <span class="muted">${E.formatMs(ms)}</span>`);
-  SOLO.idx++;
-  saveDaily();
-  soloBanana.hop();
-  dailyNext();
+  dailySend('answer', { word });
 }
 
 function soloSkip() {
@@ -1557,22 +1089,19 @@ function soloSkip() {
     practiceNext();
     return;
   }
-  SOLO.times.push(null);
-  SOLO.words.push('');
-  SOLO.idx++;
-  saveDaily();
-  dailyNext();
+  dailySend('skip');
 }
 
 function renderDailyList() {
   const now = SOLO.idx;
-  $('daily-list').innerHTML = SOLO.prompts.map((p, i) => {
+  const rows = Array.from({ length: E.DAILY_COUNT }, (_, i) => SOLO.prompts[i] || '');
+  $('daily-list').innerHTML = rows.map((p, i) => {
     const t = SOLO.times[i];
     const state = i < SOLO.times.length ? (t == null ? 'skipped' : 'done') : i === now ? 'now' : '';
     const word = SOLO.words[i];
     const label = i < SOLO.times.length ? (t == null ? 'skipped' : E.formatMs(t)) : i === now && !SOLO.done ? '…' : '';
     return `<li class="${state}"><span class="sq">${i < SOLO.times.length ? E.dailySquare(t) : ''}</span>
-      <span class="p">${i <= now || SOLO.done ? esc(p.toUpperCase()) : '··'}</span>
+      <span class="p">${p ? esc(p.toUpperCase()) : '··'}</span>
       <span class="w">${word ? highlight(word, p) : ''}</span><span class="t">${label}</span></li>`;
   }).join('');
   $('daily-total').textContent = SOLO.times.length ? E.formatMs(E.dailyTotal(SOLO.times)) : '';
@@ -1586,25 +1115,35 @@ function dailyDone(fresh) {
   $('solo-answer-box').hidden = true;
   $('solo-prompt').innerHTML = '<span class="done-word">Done!</span>';
   $('solo-timer').textContent = '';
-  saveDaily(true);
   const total = E.dailyTotal(SOLO.times);
   const skips = SOLO.times.filter((t) => t == null).length;
   $('daily-done').hidden = false;
   $('daily-score').textContent = E.formatMs(total);
   $('daily-sub').textContent = skips ? `Including ${plural(skips, 'skip')} (10 s each).` : 'No skips. Lovely.';
   renderDailyList();
-  if (fresh) {
-    cloud.track('daily_finished', { ms: total, skips });
-    if (cloud.getUser()) {
-      cloud.saveMyDaily(SOLO.day, total).catch((err) => { if (err.code !== 'already-saved') toast(`Your daily wasn’t saved. ${cloud.errorText(err)}`); });
-    }
+  if (fresh) cloud.track('daily_finished', { ms: total, skips });
+  renderDailyBoard();
+}
+
+async function renderDailyBoard() {
+  const el = $('daily-board');
+  el.innerHTML = '';
+  try {
+    const b = await cloud.api('/api/rotten/daily/board');
+    if (!SOLO.done || SOLO.mode !== 'daily') return;
+    const mine = b.me ? `You’re <b>#${b.me.rank}</b> of ${plural(b.players, 'player')} today.` : '';
+    el.innerHTML = (mine ? `<p class="board-me">${mine}</p>` : '')
+      + `<ol class="board">${b.top.slice(0, 10).map((r) => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>`
+      + `<span class="nm">${esc(r.name)}</span><span class="sq">${esc(r.detail)}</span><span class="t">${E.formatMs(r.score)}</span></li>`).join('')}</ol>`;
+  } catch {
+    el.innerHTML = '<p class="muted small">Couldn’t load today’s leaderboard.</p>';
   }
 }
 
 function dailyShareText() {
   const total = E.dailyTotal(SOLO.times);
   const skips = SOLO.times.filter((t) => t == null).length;
-  return `Rotten #${E.dailyNumber(SOLO.day)}: ${E.formatMs(total)}${skips ? ` (${plural(skips, 'skip')})` : ''}\n`
+  return `Rotten #${SOLO.number}: ${E.formatMs(total)}${skips ? ` (${plural(skips, 'skip')})` : ''}\n`
     + `${SOLO.times.map(E.dailySquare).join('')}\n${location.origin}${location.pathname}`;
 }
 $('daily-share').addEventListener('click', async () => {
@@ -1750,6 +1289,7 @@ function readName() {
 
 function setBusy(busy) {
   $('host-btn').disabled = busy;
+  $('quick-btn').disabled = busy;
   $('join-btn').disabled = busy;
   $('join-btn').textContent = busy ? 'Connecting…' : 'Join room';
 }
@@ -1764,10 +1304,10 @@ $('host-btn').addEventListener('click', () => {
   const name = readName();
   if (!name) return;
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   setBusy(true);
-  hostCreate();
+  S.creating = true;
+  link.host(false);
 });
 
 function join() {
@@ -1780,12 +1320,28 @@ function join() {
     return;
   }
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   setBusy(true);
-  joinRoom(code);
+  link.join(code);
 }
 $('join-btn').addEventListener('click', join);
+
+// Quick Play: a public room that's waiting for players, or a new public one
+$('quick-btn').addEventListener('click', async () => {
+  const name = readName();
+  if (!name) return;
+  homeError('');
+  S.myName = name;
+  setBusy(true);
+  try {
+    const code = await quickPlay('rotten');
+    if (code) link.join(code);
+    else { S.creating = true; link.host(true); }
+  } catch (err) {
+    setBusy(false);
+    homeError(err.message);
+  }
+});
 $('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 
 /* =========================================================
@@ -1818,7 +1374,7 @@ async function renderSettings() {
   const u = cloud.getUser();
   $('account-box').innerHTML = u
     ? `${u.photo ? `<img class="avatar" src="${esc(u.photo)}" alt="">` : ''}<span class="who"><b>${esc(u.name)}</b><span>${esc(u.email)}</span></span><button class="btn ghost" id="sign-out" type="button">Sign out</button>`
-    : '<span class="who"><b>Playing as a guest</b><span>Sign in to keep your stats and save crew scores.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
+    : '<span class="who"><b>Playing as a guest</b><span>Your stats are kept in this browser. Sign in to keep them on any device.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
   $('sign-in')?.addEventListener('click', signIn);
   $('sign-out')?.addEventListener('click', () => cloud.signOutUser());
   $('sound-toggle').checked = PREFS.sound !== false;
@@ -1828,12 +1384,10 @@ async function renderSettings() {
   $('kbd-select').value = PREFS.kbd;
   $('analytics-row').hidden = !cloud.analyticsConfigured();
   $('analytics-toggle').checked = PREFS.analytics !== false;
-  $('my-stats').innerHTML = '';
-  if (!u) return;
   $('my-stats').innerHTML = '<p class="muted">Loading your stats…</p>';
   try {
     const st = await cloud.getMyStats();
-    if (cloud.getUser()?.uid !== u.uid) return;
+    if ((cloud.getUser()?.uid || null) !== (u?.uid || null)) return;
     $('my-stats').innerHTML = `
       <div class="stat-grid">
         <div><b>${st.games}</b><span>Games</span></div>
@@ -1859,7 +1413,7 @@ $('analytics-toggle').addEventListener('change', (e) => {
 });
 
 // Test hook: with ?debug in the address, automated tests can inspect the state.
-if (new URLSearchParams(location.search).has('debug')) window.__rotten = { S, H, SOLO, WORDS, E, hostSplat };
+if (new URLSearchParams(location.search).has('debug')) window.__rotten = { S, SOLO, WORDS, E, link };
 
 /* =========================================================
    Start
@@ -1879,7 +1433,6 @@ if (new URLSearchParams(location.search).has('debug')) window.__rotten = { S, H,
   loadWords();
   cloud.onUser((u) => {
     renderAccount(u);
-    if (S.isHost && H.room && H.room.crew) hostSetCrew(H.room.crew.name);
   });
   cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();

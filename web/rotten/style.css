@@ -587,3 +587,18 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .all-games:hover { border-color: var(--ink); }
 .all-games svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 330px) { .all-games span { display: none; } .all-games { padding: 0 0.6rem; } }
+
+/* Daily: today's global leaderboard */
+.daily-board { margin: 0.75rem 0 0.25rem; }
+.daily-board .board-me { margin: 0 0 0.5rem; }
+.daily-board .board { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.daily-board .board li {
+  display: grid; grid-template-columns: 2rem 1fr auto auto; gap: 0.6rem; align-items: center;
+  padding: 0.35rem 0; border-bottom: 1px solid var(--line); font-size: 0.95rem;
+}
+.daily-board .board li.me { font-weight: 700; color: var(--accent); }
+.daily-board .rk { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daily-board .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-board .sq { font-size: 0.8rem; letter-spacing: -0.1em; }
+.daily-board .t { font-variant-numeric: tabular-nums; }
+@media (max-width: 420px) { .daily-board .sq { display: none; } .daily-board .board li { grid-template-columns: 2rem 1fr auto; } }

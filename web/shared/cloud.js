@@ -1,0 +1,169 @@
+// Google sign-in (Firebase Auth) and the games' own API, shared by every game on this site.
+// Firebase is loaded only when someone signs in, or when this browser was signed in last time:
+// guests never download it. Scores and stats live on our server now, not in Firestore.
+
+// This config is meant to be public; Auth's authorized domains and API-key restrictions protect it.
+export const firebaseConfig = {
+  apiKey: 'AIzaSyAzZxF9QMPjN3iMIgjycybnHG7a5Va3Fxo',
+  authDomain: 'wordle-party-81870.firebaseapp.com',
+  projectId: 'wordle-party-81870',
+  storageBucket: 'wordle-party-81870.firebasestorage.app',
+  messagingSenderId: '782876412988',
+  appId: '1:782876412988:web:dbf115a0f2910e9615c739',
+  measurementId: '', // Google Analytics, e.g. 'G-XXXXXXXXXX'
+};
+
+const FB = 'https://www.gstatic.com/firebasejs/10.12.2/';
+const SIGNED_IN_KEY = 'og.signedIn';
+const GUEST_KEY = 'og.guest';
+
+export const isConfigured = () => Boolean(firebaseConfig.apiKey && firebaseConfig.appId);
+
+let appPromise = null;
+let fb = null;
+let loading = null;
+let currentUser = null;
+const listeners = new Set();
+let analytics = null;
+let analyticsLoading = null;
+const queued = [];
+
+// One Firebase app for every game, so signing in once signs you in everywhere on this site
+function firebaseApp() {
+  appPromise ||= import(FB + 'firebase-app.js').then((m) =>
+    m.getApps().find((a) => a.name === 'office-games') || m.initializeApp(firebaseConfig, 'office-games'));
+  return appPromise;
+}
+
+async function load() {
+  if (fb) return fb;
+  if (!isConfigured()) throw new Error('Sign-in isn’t set up.');
+  loading ||= (async () => {
+    const [app, A] = await Promise.all([firebaseApp(), import(FB + 'firebase-auth.js')]);
+    const auth = A.getAuth(app);
+    fb = { auth, A };
+    A.onAuthStateChanged(auth, (u) => {
+      currentUser = u && u.providerData.some((p) => p.providerId === 'google.com') ? u : null;
+      if (currentUser) track('login', { method: 'Google' });
+      try { currentUser ? localStorage.setItem(SIGNED_IN_KEY, '1') : localStorage.removeItem(SIGNED_IN_KEY); } catch {}
+      listeners.forEach((cb) => cb(publicUser()));
+    });
+    return fb;
+  })();
+  return loading;
+}
+
+function publicUser() {
+  if (!currentUser) return null;
+  return {
+    uid: currentUser.uid,
+    name: currentUser.displayName || 'Player',
+    email: currentUser.email || '',
+    photo: currentUser.photoURL || '',
+  };
+}
+
+export const getUser = () => publicUser();
+
+/** Call once at startup: restores the session if this browser was signed in before. */
+export function restore() {
+  let was = false;
+  try { was = localStorage.getItem(SIGNED_IN_KEY) === '1'; } catch {}
+  if (was && isConfigured()) load().catch(() => {});
+}
+
+export function onUser(cb) { listeners.add(cb); return () => listeners.delete(cb); }
+
+export async function signIn() {
+  const { auth, A } = await load();
+  const provider = new A.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+  await A.signInWithPopup(auth, provider);
+}
+
+export async function signOutUser() {
+  if (!fb) return;
+  await fb.A.signOut(fb.auth);
+}
+
+/** A fresh Firebase ID token for the server to check, or null for guests. */
+export async function getIdToken() {
+  if (!currentUser) return null;
+  try { return await currentUser.getIdToken(); } catch { return null; }
+}
+
+// ---------- Guests ----------
+// The server hands every guest a signed id the first time they join a room; it identifies
+// their stats from then on, across all the games on this site.
+
+export function getGuest() {
+  try { return localStorage.getItem(GUEST_KEY) || ''; } catch { return ''; }
+}
+
+export function setGuest(token) {
+  try { localStorage.setItem(GUEST_KEY, String(token)); } catch {}
+}
+
+// ---------- Our API ----------
+
+async function ensureGuest() {
+  if (getGuest()) return;
+  const res = await fetch('/api/guest', { method: 'POST' });
+  if (res.ok) setGuest((await res.json()).token);
+}
+
+export async function api(path, { method = 'GET', body } = {}) {
+  const headers = {};
+  const token = await getIdToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  else await ensureGuest();
+  const guest = getGuest();
+  if (guest) headers['X-Guest'] = guest;
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  const res = await fetch(path, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+  let data = null;
+  try { data = await res.json(); } catch {}
+  if (!res.ok) {
+    const err = new Error((data && data.error) || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return data;
+}
+
+export function errorText(err) {
+  const code = String(err?.code || '');
+  if (err?.status === 401) return 'Play a room game first, or sign in, to start saving stats.';
+  if (code.includes('unavailable') || code.includes('network') || err instanceof TypeError) return 'Couldn’t reach the server. Check your internet.';
+  if (code.includes('popup-closed') || code.includes('cancelled-popup')) return 'Sign-in was closed before it finished.';
+  if (code.includes('popup-blocked')) return 'The sign-in window was blocked. Allow pop-ups for this site and try again.';
+  return err?.message ? String(err.message) : 'Something went wrong. Try again.';
+}
+
+// ---------- Analytics (off until a measurementId is set) ----------
+
+export const analyticsConfigured = () => isConfigured() && Boolean(firebaseConfig.measurementId);
+
+export function initAnalytics(enabled = true) {
+  if (!enabled || !analyticsConfigured() || analyticsLoading) return;
+  analyticsLoading = (async () => {
+    const [app, A] = await Promise.all([firebaseApp(), import(FB + 'firebase-analytics.js')]);
+    if (!(await A.isSupported())) return null;
+    analytics = { A, inst: A.getAnalytics(app) };
+    queued.splice(0).forEach(([n, p]) => A.logEvent(analytics.inst, n, p));
+    return analytics;
+  })().catch(() => null);
+}
+
+export function setAnalyticsEnabled(on) {
+  if (analytics) analytics.A.setAnalyticsCollectionEnabled(analytics.inst, on);
+  else if (on) initAnalytics(true);
+}
+
+/** Log a custom event. Safe to call any time; does nothing when analytics is off or not set up. */
+export function track(name, params = {}) {
+  try {
+    if (analytics) analytics.A.logEvent(analytics.inst, name, params);
+    else if (analyticsLoading && queued.length < 50) queued.push([name, params]);
+  } catch {}
+}

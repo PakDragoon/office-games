@@ -11,14 +11,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
-  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
 
 <!-- ============ Home ============ -->
 <main id="home" class="screen home">
-  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+  <a class="all-games" href="/" aria-label="All office games">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
     <span>All games</span>
   </a>
@@ -45,9 +44,10 @@
 
     <div class="home-cards">
       <section class="choice">
-        <h2>Host a room</h2>
-        <p>Your browser runs the game. Keep this tab open while you play.</p>
-        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+        <h2>Play now</h2>
+        <p>Jump into a public game with other players, or open a private room for friends.</p>
+        <button class="btn primary" id="quick-btn" type="button">Quick Play</button>
+        <button class="btn" id="host-btn" type="button">Host a private room</button>
       </section>
       <section class="choice">
         <h2>Join a room</h2>
@@ -323,6 +323,7 @@
         <ol class="daily-list" id="daily-list"></ol>
         <div id="daily-done" hidden>
           <div class="result-head won"><h2 id="daily-score"></h2><p id="daily-sub"></p></div>
+          <div id="daily-board" class="daily-board" aria-live="polite"></div>
           <div class="result-actions">
             <button class="btn primary" id="daily-share" type="button">Share result</button>
             <button class="btn ghost" id="daily-home" type="button">Back to home</button>
