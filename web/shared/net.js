@@ -1,7 +1,7 @@
 // The connection from a game page to its room on the server (a WebSocket).
 // Handles keep-alive, noticing a dead connection, reconnecting with the same tab id,
 // and the hello that tells the server who this is.
-import { getGuest, setGuest, getIdToken } from './cloud.js';
+import { getGuest, setGuest, getIdToken, api } from './cloud.js';
 
 export const PROTOCOL = 1;
 const PING_MS = 3000;     // answered by the server runtime itself, so it never wakes the room
@@ -158,7 +158,14 @@ export function createRoomLink(game, handlers) {
 }
 
 /** Quick Play: the code of a public room waiting for players, or null to open a new one. */
+const RATED = ['flipchip', 'thulla'];
+
 export async function quickPlay(game) {
+  // Games with skill ratings say who is asking, so the server can pick a room of similar players.
+  // If that fails for any reason, Quick Play still works the old way.
+  if (RATED.includes(game)) {
+    try { return (await api(`/api/${game}/quick`, { method: 'POST' })).code || null; } catch { /* plain request below */ }
+  }
   const res = await fetch(`/api/${game}/quick`, { method: 'POST' });
   if (!res.ok) throw new Error('Quick Play isn’t available right now.');
   const data = await res.json();

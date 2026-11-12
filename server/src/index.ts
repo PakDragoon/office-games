@@ -3,6 +3,7 @@ import { GAMES } from './games';
 import { CODE_RE, randomCode } from './core/util';
 import { newGuest, verifyFirebase, verifyGuest } from './auth';
 import { crewTable, playerKey, playerStats } from './db/stats';
+import { RATED_GAMES, ratingFor } from './db/ratings';
 import { handleDaily, rollDaily } from './daily';
 
 export { GameRoom } from './do/GameRoom';
@@ -60,14 +61,21 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
     if (!GAMES[game]) return json({ error: 'unknown game' }, 404);
     const player = await requestPlayer(request, env);
     if (!player) return json({ error: 'not signed in' }, 401);
-    return json({ stats: await playerStats(env.DB, player, game) });
+    const [stats, rating] = await Promise.all([playerStats(env.DB, player, game), ratingFor(env.DB, game, player)]);
+    return json({ stats, rating });
   }
   const game = area;
   if (!GAMES[game]) return json({ error: 'unknown game' }, 404);
   const lobby = () => env.LOBBY.get(env.LOBBY.idFromName(game));
   if (a === 'rooms' && request.method === 'GET') return json({ rooms: await lobby().list() });
   if (a === 'quick' && request.method === 'POST') {
-    const code = await lobby().quickPlay();
+    // Rated games match by rating when the browser says who it is (no identity: the fullest room, as before)
+    let seeker: { rating: number; rd: number } | null = null;
+    if (RATED_GAMES.has(game)) {
+      const me = await ratingFor(env.DB, game, await requestPlayer(request, env));
+      if (me) seeker = { rating: me.rating, rd: me.rd };
+    }
+    const code = await lobby().quickPlay(seeker);
     return json(code ? { code } : { create: true });
   }
   if (a === 'crew' && request.method === 'GET') {

@@ -2,7 +2,7 @@
 // against the computer still run that code in the browser). Two seats, Dark and Light; everyone
 // else watches. The server checks every move, runs the move timer and keeps the score.
 import * as E from '../../../web/flipchip/js/engine.js';
-import type { GameModule, Msg, RoomCtx } from '../core/game';
+import type { GameModule, Msg, RatingInfo, RoomCtx } from '../core/game';
 import { type BaseRoom, reportPlayer, restoreSeats, type Seat, SeatRoom } from '../core/seats';
 
 const GAME = 'flipchip';
@@ -19,6 +19,10 @@ interface Player extends Seat {
   draws: number;
   matchWins: number;
   reactAt: number;
+  /** Skill rating for the lobby and the table (null: no id yet, or not looked up yet). */
+  rating?: RatingInfo | null;
+  /** What the last finished game did to the rating (null until it is known). */
+  ratingDelta?: number | null;
 }
 
 interface Room extends BaseRoom<Player> {
@@ -55,6 +59,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
   // In the lobby a newcomer takes an empty seat; mid-game they watch
   protected seated(p: Player, rejoin: boolean): void {
     const room = this.room;
+    this.loadRating(p);
     if (rejoin || room.status !== 'lobby' || this.seatOf(p.id)) return;
     if (!room.seats[DARK]) room.seats[DARK] = p.id;
     else if (!room.seats[LIGHT]) room.seats[LIGHT] = p.id;
@@ -64,6 +69,22 @@ class FlipRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     if (room.status !== 'lobby') return;
     for (const s of [DARK, LIGHT] as Side[]) if (room.seats[s] && !this.byId(room.seats[s])) room.seats[s] = null;
+  }
+
+  /** Look up the rating of someone who just sat down or came back, and show it once it arrives. */
+  private loadRating(p: Player): void {
+    if (!p.uid && !p.guest) return;
+    this.ctx.later(async () => {
+      const [info] = await this.ctx.ratings(GAME, [{ uid: p.uid, guest: p.guest }]);
+      if (!info) return;
+      p.rating = info;
+      this.broadcast();
+    });
+  }
+
+  protected listingRating(): number | null {
+    const rated = this.room.players.filter((p) => p.connected && this.seatOf(p.id) && p.rating);
+    return rated.length ? Math.round(rated.reduce((n, p) => n + (p.rating as RatingInfo).rating, 0) / rated.length) : null;
   }
 
   private seatOf = (id: string): Side | 0 => (this.room.seats[DARK] === id ? DARK : this.room.seats[LIGHT] === id ? LIGHT : 0);
@@ -169,7 +190,10 @@ class FlipRoom extends SeatRoom<Player, Room> {
       room.matchWinner = null;
     }
     room.size = room.settings.size;
-    for (const p of room.players) p.inGame = Boolean(this.seatOf(p.id));
+    for (const p of room.players) {
+      p.inGame = Boolean(this.seatOf(p.id));
+      p.ratingDelta = null;
+    }
     Object.assign(room, {
       status: 'play', board: E.newBoard(room.size), turn: DARK, moveSeq: 0, last: null, pass: null,
       log: [], result: null, game: room.game + 1,
@@ -252,7 +276,33 @@ class FlipRoom extends SeatRoom<Player, Room> {
         draws: winner ? 0 : 1, chips: side ? counts[side] || 0 : 0,
       });
     }), w ? w.name : null);
+    this.rateGame(seated, winner, reason);
     this.broadcast();
+  }
+
+  /**
+   * Skill ratings. A game counts when it was played out (even if it ended by resignation or a
+   * claimed win, so leaving a lost game never saves your rating), as long as each side made at
+   * least two moves, so an accidental start or an instant resign can't be used to feed points.
+   * Games ended by the host ("End game for everyone") never reach this point. Seats that are
+   * computer players (isBot) make the whole game unrated.
+   */
+  private rateGame(seated: Player[], winner: number, reason: string): void {
+    const room = this.room;
+    const moves = room.log.filter((l) => !(l as { pass?: boolean }).pass).length;
+    if (seated.length !== 2 || (reason !== 'count' && moves < 4)) return;
+    const game = room.game;
+    const entries = seated.map((p) => ({ uid: p.uid, guest: p.guest, bot: p.isBot, place: !winner || winner === this.seatOf(p.id) ? 1 : 2 }));
+    this.ctx.later(async () => {
+      const changes = await this.ctx.rate(GAME, entries);
+      seated.forEach((p, i) => {
+        const c = changes[i];
+        if (!c) return;
+        p.rating = c;
+        if (room.game === game) p.ratingDelta = c.delta;
+      });
+      this.broadcast();
+    });
   }
 
   // What everyone may see (in this game nothing is secret)
@@ -265,6 +315,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, isBot: false, photo: p.photo,
         connected: p.connected, away: p.away, games: p.games, wins: p.wins, draws: p.draws, matchWins: p.matchWins,
+        rating: p.rating ? p.rating.rating : null, ratingProv: Boolean(p.rating?.provisional), ratingDelta: p.ratingDelta ?? null,
         offlineFor: p.connected ? 0 : now - p.offlineAt,
       })),
       seats: { ...room.seats },

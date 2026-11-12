@@ -6,6 +6,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { deltaChip, myRatingHTML, ratingChip } from '../../shared/rating.js';
 import { pickCritter, slapMe, slapSeat } from './slap.js';
 
 const MAX_PLAYERS = 8;
@@ -317,7 +318,7 @@ function renderLobby(v) {
     <li class="${p.online ? '' : 'offline'}">
       <span class="dot c${p.color}"></span>
       ${p.photo ? `<img class="avatar" src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer">` : ''}
-      <span>${esc(disp(p.name))}</span>
+      <span>${esc(disp(p.name))}${ratingChip(p.rating, p.ratingProv)}</span>
       <span class="tag">${[p.isHost && 'Host', p.id === v.you && 'You', !p.online && 'Offline'].filter(Boolean).join(', ')}</span>
     </li>`).join('') + (list.length < MAX_PLAYERS
     ? `<li class="empty">${list.length < 2 ? 'Waiting for at least one more player…' : `Room for ${MAX_PLAYERS - list.length} more`}</li>` : '');
@@ -588,7 +589,7 @@ function scoresHTML(v) {
   if (!total) html += '<p class="scores-empty">Scores appear after the first round.</p>';
   else {
     html += `<table class="scores"><thead><tr><th>Player</th><th title="Times lost">Lost</th><th title="Average finishing position">Avg</th><th title="Thullas given">Thullas</th></tr></thead><tbody>${
-      rows.map((x) => `<tr class="${x.gone ? 'gone' : ''}"><td><span class="pname"><span class="dot c${x.color}"></span><span>${esc(disp(x.name))}</span></span></td>
+      rows.map((x) => `<tr class="${x.gone ? 'gone' : ''}"><td><span class="pname"><span class="dot c${x.color}"></span><span>${esc(disp(x.name))}${ratingChip(player(v, x.id)?.rating, player(v, x.id)?.ratingProv)}${deltaChip(x.ratingDelta)}</span></span></td>
         <td class="losses">${x.losses}</td><td>${x.rounds ? x.avg.toFixed(1) : '–'}</td><td>${x.given}</td></tr>`).join('')
     }</tbody></table><p class="scores-note">Fewest losses wins. Ties go to the better average finish.</p>`;
   }
@@ -631,7 +632,7 @@ function renderOverlays(v) {
       const thullas = res.results.filter((x) => x.given).sort((a, b) => b.given - a.given);
       $('#round-sub').textContent = thullas.length ? `Most thullas: ${disp(thullas[0].name)} (${thullas[0].given})` : 'No thullas this round.';
       $('#round-ranking').innerHTML = rankingHTML(v, res.results.map((x) => ({
-        id: x.id, name: x.name, how: x.lost ? (res.gaveUp ? 'Gave up' : 'Lost') : `Safe, ${ordinal(x.pos)}`, last: x.lost,
+        id: x.id, name: x.name, how: x.lost ? (res.gaveUp ? 'Gave up' : 'Lost') : `Safe, ${ordinal(x.pos)}`, last: x.lost, rt: deltaChip(x.rating ? x.rating.delta : null),
       })));
     }
   }
@@ -647,7 +648,7 @@ function renderOverlays(v) {
     $('#over-title').textContent = top ? (top.id === v.you ? 'You win!' : `${disp(top.name)} wins!`) : 'Game over';
     $('#over-sub').textContent = top ? `After ${v.roundNo} round${v.roundNo === 1 ? '' : 's'}. Fewest losses wins.` : 'No rounds were finished.';
     $('#over-ranking').innerHTML = rankingHTML(v, fin.map((x, i) => ({
-      id: x.id, name: x.name, how: `${x.losses} lost · avg ${x.avg.toFixed(1)}`, first: i === 0, last: i === fin.length - 1 && fin.length > 1,
+      id: x.id, name: x.name, how: `${x.losses} lost · avg ${x.avg.toFixed(1)}`, rt: deltaChip(x.ratingDelta), first: i === 0, last: i === fin.length - 1 && fin.length > 1,
     })));
   }
   $('#over-host').hidden = !isHost;
@@ -667,7 +668,7 @@ function renderOverlays(v) {
 function rankingHTML(v, items) {
   return items.map((x) => {
     const p = player(v, x.id);
-    return `<li class="${x.first ? 'first' : ''}${x.last ? ' last' : ''}"><span class="dot c${p?.color ?? 0}"></span><span class="who">${esc(x.id === v.you ? 'You' : disp(x.name))}</span><span class="how">${esc(x.how)}</span></li>`;
+    return `<li class="${x.first ? 'first' : ''}${x.last ? ' last' : ''}"><span class="dot c${p?.color ?? 0}"></span><span class="who">${esc(x.id === v.you ? 'You' : disp(x.name))}</span><span class="how">${esc(x.how)}${x.rt || ''}</span></li>`;
   }).join('');
 }
 
@@ -957,6 +958,7 @@ async function loadStats() {
   grid.innerHTML = '<p class="muted">Loading…</p>';
   try {
     const s = await cloud.getMyStats();
+    $('#my-rating').innerHTML = myRatingHTML(s.ratingInfo);
     const avg = s.rounds ? (s.posSum / s.rounds).toFixed(1) : '–';
     const pct = s.rounds ? Math.round((100 * s.losses) / s.rounds) + '%' : '–';
     const cell = (b, l) => `<div class="stat"><b>${b}</b><span>${l}</span></div>`;

@@ -2,7 +2,7 @@
 // holds every hand, checks every move and decides tricks; each player only receives their own
 // cards plus public information. Seats have stable ids (p1, p2...) and a current connection.
 import * as Engine from '../../../web/thulla/js/engine.js';
-import type { GameInstance, GameModule, Msg, RoomCtx } from '../core/game';
+import type { GameInstance, GameModule, Msg, RatingInfo, RoomCtx } from '../core/game';
 import { cleanName, cleanPhoto } from '../core/util';
 import { reportPlayer } from '../core/seats';
 
@@ -61,9 +61,13 @@ interface Player {
   guest: string | null;
   photo: string;
   lastChat: number;
+  /** Skill rating for the lobby and the scores (null: not looked up yet). */
+  rating?: RatingInfo | null;
+  /** A computer player. Any round with one in it is never rated. */
+  bot?: boolean;
 }
 
-interface Score { rounds: number; losses: number; posSum: number; given: number; received: number }
+interface Score { rounds: number; losses: number; posSum: number; given: number; received: number; ratingDelta?: number }
 
 interface State {
   code: string;
@@ -158,9 +162,27 @@ class ThullaRoom implements GameInstance {
     const inRound = Boolean(H.round && H.phase === 'playing' && H.round.seats.includes(p.id));
     if (H.phase === 'playing' && !inRound) reply({ t: 'note', msg: 'A round is in progress. You’ll be dealt in next round.' });
     this.fxAll({ kind: 'joined', name: p.name, back: inRound }, p.id);
+    this.loadRating(p);
     this.ctx.track('room_joined');
     this.refreshStuck();
     this.broadcast();
+  }
+
+  /** Look up the rating of someone who just joined or came back, and show it once it arrives. */
+  private loadRating(p: Player): void {
+    if (!p.uid && !p.guest) return;
+    this.ctx.later(async () => {
+      const [info] = await this.ctx.ratings(GAME, [{ uid: p.uid, guest: p.guest }]);
+      if (!info) return;
+      p.rating = info;
+      this.broadcast();
+    });
+  }
+
+  /** Average rating of the people in the room, for Quick Play matching. */
+  private listingRating(): number | null {
+    const rated = this.H.players.filter((p) => p.online && !p.left && p.rating);
+    return rated.length ? Math.round(rated.reduce((n, p) => n + (p.rating as RatingInfo).rating, 0) / rated.length) : null;
   }
 
   message(connId: string, msg: Msg): void {
@@ -557,7 +579,38 @@ class ThullaRoom implements GameInstance {
     if (gameOver) H.final = this.standings();
     this.fxAll({ kind: 'roundOver', loser: this.nameOf(r.loser), loserId: r.loser });
     this.saveRound(results);
+    this.rateRound(results);
     this.broadcast();
+  }
+
+  /**
+   * Skill ratings, one update per finished round (rounds are what Thulla saves, and an
+   * unlimited game never "ends"). The finishing order of the round is the result: every pair of
+   * players is one game won by whoever got out first, the loser being last (see core/glicko2.ts).
+   * Everyone dealt into the round counts, even someone who left or went offline during it, so
+   * walking away never saves you from a loss. Rounds the host ended early have no result and
+   * aren't rated; a round with a computer player (bot) in it is never rated.
+   */
+  private rateRound(results: Array<{ id: string; pos: number }>): void {
+    const H = this.H;
+    const roundNo = H.roundNo;
+    const players = results.map((x) => this.byId(x.id) as Player);
+    const entries = results.map((x, i) => ({ uid: players[i].uid, guest: players[i].guest, bot: players[i].bot, place: x.pos }));
+    this.ctx.later(async () => {
+      const changes = await this.ctx.rate(GAME, entries);
+      const res = H.lastResult as { no: number; results: Array<{ id: string; rating?: { delta: number; now: number; prov: boolean } }> } | null;
+      results.forEach((x, i) => {
+        const c = changes[i];
+        if (!c) return;
+        players[i].rating = c;
+        const s = H.scores[x.id];
+        if (s) s.ratingDelta = (s.ratingDelta ?? 0) + c.delta;
+        const row = res && res.no === roundNo ? res.results.find((r) => r.id === x.id) : undefined;
+        if (row) row.rating = { delta: c.delta, now: c.rating, prov: c.provisional };
+      });
+      if (H.phase === 'over' && H.final) H.final = this.standings();   // the final table shows the session's rating change
+      this.broadcast();
+    });
   }
 
   /** Each round is saved: every player's stats, and the crew's totals when there is a crew. */
@@ -590,7 +643,7 @@ class ThullaRoom implements GameInstance {
       return {
         id, name: p ? p.name : '?', color: p ? p.color : 0, gone: !p || p.left || !p.online,
         rounds: s.rounds, losses: s.losses, avg: s.rounds ? s.posSum / s.rounds : 0,
-        given: s.given, received: s.received,
+        given: s.given, received: s.received, ratingDelta: s.ratingDelta ?? null,
       };
     });
     const avgKey = (x: { rounds: number; avg: number }) => (x.rounds ? x.avg : Infinity);
@@ -607,6 +660,7 @@ class ThullaRoom implements GameInstance {
     const inGame = (p: Player) => (r && r.seats.includes(p.id)) || H.scores[p.id];
     const players = H.players.filter((p) => !p.left || inGame(p)).map((p) => ({
       id: p.id, name: p.name, color: p.color, online: p.online, left: p.left, isHost: p.isHost, photo: p.photo,
+      rating: p.rating ? p.rating.rating : null, ratingProv: Boolean(p.rating?.provisional),
       inRound: Boolean(r && r.seats.includes(p.id)),
       count: r && r.hands[p.id] ? r.hands[p.id].length : null,
       safe: r ? r.out.indexOf(p.id) + 1 : 0,
@@ -666,6 +720,7 @@ class ThullaRoom implements GameInstance {
       players: H.players.filter((p) => p.online).length,
       max: MAX_PLAYERS,
       host: host ? host.name : '',
+      rating: this.listingRating(),
     });
     this.ctx.dirty();
   }

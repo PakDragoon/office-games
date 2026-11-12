@@ -1,6 +1,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { deltaChip, myRatingHTML, ratingChip, ratingLabel } from '../../shared/rating.js';
 
 /* =========================================================
    Flipchip
@@ -883,6 +884,7 @@ function renderDuel(v) {
     else if (p && !p.isBot && !p.connected) tag = 'Left · reconnecting';
     else if (p && p.away) tag = 'Away';
     if (v.status === 'over' && v.result) tag = !v.result.winner ? 'Draw' : v.result.winner === s ? 'Winner' : E.SIDE_NAME[s];
+    if (p && p.rating != null && !v.solo) tag += ` · ${ratingLabel(p.rating, p.ratingProv)}`;
     const el = $(`card-${s}`);
     const prevCount = Number(el.dataset.count || -1);
     el.className = `player-card s${s}${turn ? ' turn' : ''}${p && !pActive(p) ? ' off' : ''}${v.status === 'over' && v.result?.winner === s ? ' won' : ''}`;
@@ -984,7 +986,11 @@ function renderResult(v) {
       : (S.isHost ? `Rematch keeps the same two players.${swap}` : `The host starts the next game.${swap}`);
   }
   $('crew-line').textContent = v.crewName ? v.crewStatus : '';
-
+  // My rating change, once the server has worked it out (only for the two players, never in solo)
+  const mine = !v.solo && S.myId ? pOf(v, S.myId) : null;
+  const rated = mine && mySide(v) && mine.ratingDelta != null;
+  $('result-rating').hidden = !rated;
+  if (rated) $('result-rating').innerHTML = `Skill rating ${deltaChip(mine.ratingDelta)} <span class="muted">now ${esc(ratingLabel(mine.rating, mine.ratingProv))}</span>`;
 }
 
 $('next-game').addEventListener('click', () => {
@@ -1198,7 +1204,7 @@ function renderLobby(v) {
   $('lobby-code').textContent = v.code;
   const rows = v.players.map((p) => {
     const seat = v.seats[DARK] === p.id ? 'Dark' : v.seats[LIGHT] === p.id ? 'Light' : 'Watching';
-    return `<li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}
+    return `<li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${ratingChip(p.rating, p.ratingProv)}
       <span class="tag">${!active(p) ? 'Reconnecting' : `<b>${seat}</b>${p.isHost ? ' · Host' : ''}`}</span></li>`;
   });
   if (v.players.length < 2) rows.push('<li class="empty">Waiting for someone to join…</li>');
@@ -1213,7 +1219,7 @@ function renderLobby(v) {
       : free ? `<button class="btn ${mine ? 'ghost' : 'primary'}" type="button" data-sit="${s}">${mine ? 'Switch to this seat' : 'Sit here'}</button>` : '';
     return `<div class="seat-card${free ? ' empty' : ''}${isMe ? ' me' : ''}">
       <span class="seat-side">${miniChip(s)}${E.SIDE_NAME[s]}${s === DARK ? ' · goes first' : ''}</span>
-      <span class="seat-name">${p && p.connected ? esc(p.name) + (isMe ? ' (you)' : '') : 'Empty seat'}</span>${btn}</div>`;
+      <span class="seat-name">${p && p.connected ? esc(p.name) + (isMe ? ' (you)' : '') + ratingChip(p.rating, p.ratingProv) : 'Empty seat'}</span>${btn}</div>`;
   }).join('') + (S.isHost && (v.seats[DARK] || v.seats[LIGHT]) ? '<button class="btn link seat-swap" type="button" data-swap>Swap colours</button>' : '');
 
   $('host-settings').hidden = !S.isHost;
@@ -1390,7 +1396,7 @@ async function renderSettings() {
   try {
     const st = await cloud.getMyStats();
     if ((cloud.getUser()?.uid || null) !== (u?.uid || null)) return;
-    $('my-stats').innerHTML = `
+    $('my-stats').innerHTML = `${myRatingHTML(st.rating)}
       <div class="stat-grid">
         <div><b>${st.games}</b><span>Room games</span></div>
         <div><b>${st.wins}</b><span>Room wins</span></div>

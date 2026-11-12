@@ -10,6 +10,6 @@ const emptyStats = () => ({ rounds: 0, losses: 0, posSum: 0, given: 0, received:
 
 /** My Thulla stats (signed in, or this browser's guest id). */
 export async function getMyStats() {
-  const { stats } = await api('/api/me/stats?game=thulla');
-  return { ...emptyStats(), ...stats };
+  const { stats, rating } = await api('/api/me/stats?game=thulla');
+  return { ...emptyStats(), ...stats, ratingInfo: rating || null };
 }
