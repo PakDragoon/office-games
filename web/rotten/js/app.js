@@ -860,7 +860,7 @@ const soloBanana = createBanana($('solo-banana'));
 const soloKeyboard = createKeyboard($('solo-kbd'), $('solo-answer'), { onEnter: soloSubmit, onType: soloInput });
 const SOLO = {
   mode: null, prompts: [], idx: 0, times: [], promptStart: 0, startAt: 0, used: new Set(), lex: null,
-  day: '', streak: 0, best: store.get('practiceBest', 0), fuseEnd: 0, fuseMax: 1, pauseUntil: 0, raf: 0, bands: null,
+  day: '', streak: 0, sentBest: 0, runAt: 0, best: store.get('practiceBest', 0), fuseEnd: 0, fuseMax: 1, pauseUntil: 0, raf: 0, bands: null,
   wordsPlayed: 0, done: false, lastTick: 0, token: 0, words: [],
 };
 
@@ -1087,6 +1087,7 @@ function soloSolved(word) {
 function soloSkip() {
   if (SOLO.done) return;
   if (SOLO.mode === 'practice') {
+    reportPracticeStreak();
     SOLO.streak = 0;
     renderPractice();
     practiceNext();
@@ -1169,6 +1170,7 @@ function practiceSettingsChanged() {
   paintPrWords();
   if (SOLO.mode !== 'practice' || !WORDS.ready) return;
   SOLO.bands = E.promptBands(PRACTICE.words, WORDS.lex);
+  reportPracticeStreak();
   SOLO.streak = 0;
   SOLO.wordsPlayed = 0;
   SOLO.token++;
@@ -1209,6 +1211,7 @@ function practiceNext() {
 }
 
 function practiceSolved(word) {
+  if (!SOLO.streak) SOLO.runAt = performance.now();
   SOLO.streak++;
   SOLO.wordsPlayed++;
   if (SOLO.streak > SOLO.best) { SOLO.best = SOLO.streak; store.set('practiceBest', SOLO.best); }
@@ -1227,6 +1230,7 @@ function practiceSplat() {
   setAge($('solo-age'), -1);
   SOUND.splat();
   soloFlash(SOLO.streak ? `Splat! Streak of ${SOLO.streak} over` : 'Splat!', 'splat');
+  reportPracticeStreak();
   SOLO.streak = 0;
   SOLO.wordsPlayed = 0;
   renderPractice();
@@ -1261,7 +1265,15 @@ function soloLoop() {
   SOLO.raf = requestAnimationFrame(frame);
 }
 
+// A practice streak that ends (splat, new letters, leaving) goes to my own stats if it beat what was already sent
+function reportPracticeStreak() {
+  if (SOLO.mode !== 'practice' || SOLO.streak <= SOLO.sentBest) return;
+  SOLO.sentBest = SOLO.streak;
+  cloud.savePractice(SOLO.streak, Math.round(performance.now() - SOLO.runAt)).catch(() => { /* stats only */ });
+}
+
 function leaveSolo() {
+  reportPracticeStreak();
   cancelAnimationFrame(SOLO.raf);
   SOLO.mode = null;
   SOLO.token++;
@@ -1399,6 +1411,7 @@ async function renderSettings() {
         <div><b>${st.longest || '–'}</b><span>Longest word</span></div>
         <div><b>${st.dailies}</b><span>Dailies</span></div>
         <div><b>${st.bestDaily ? E.formatMs(st.bestDaily) : '–'}</b><span>Best daily</span></div>
+        <div><b>${st.practiceBest || '–'}</b><span>Practice best</span></div>
       </div>`;
   } catch (err) {
     $('my-stats').innerHTML = `<p class="muted">${esc(cloud.errorText(err))}</p>`;

@@ -258,7 +258,12 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       rounds: 1, solved: p.solved ? 1 : 0, guessSum: p.solved ? p.guesses.length : 0,
       // How many guesses it took, for the stats sheet's distribution
       ...(p.solved ? { [`dist${p.guesses.length}`]: 1 } : {}),
-    }, p.solved && p.finishMs != null ? { fastestNeg: -p.finishMs } : undefined)), winner ? winner.name : null);
+    }, p.solved && p.finishMs != null ? { fastestNeg: -p.finishMs } : undefined, {
+      // Win streak: a round only counts as won for the winner; everyone else's streak resets
+      streaks: { streak: Boolean(winner && p.id === winner.id) },
+      // Favourite opener: the first word they guessed
+      ...(p.guesses.length ? { tally: { opener: p.guesses[0].word.toLowerCase() } } : {}),
+    })), winner ? winner.name : null);
   }
 
   protected view(): Msg {

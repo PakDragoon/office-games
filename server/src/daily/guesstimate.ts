@@ -13,6 +13,7 @@ interface GuessDaily {
 export const guesstimateDaily: DailyGame<GuessDaily> = {
   id: 'guesstimate',
   order: 'desc',
+  streak: true,
   number: (day) => R.dayNumber(day),
   start(_day, key) {
     return { seed: R.daySeed(key), kinds: [...R.DAILY.kinds], idx: 0, results: [] };

@@ -883,7 +883,7 @@ async function renderSettings() {
         <div><b>${st.wins}</b><span>Wins</span></div>
         <div><b>${avg(st.points, st.rounds)}</b><span>Average</span></div>
         <div><b>${st.dailies}</b><span>Dailies</span></div>
-        <div><b>${st.streak}</b><span>Streak</span></div>
+        <div><b>${st.streak}</b><span>Day streak (best ${st.bestStreak})</span></div>
         <div><b>${st.bestDaily || '–'}</b><span>Best daily</span></div>
       </div>
       <div class="kind-stats">${R.KINDS.map((k) => {

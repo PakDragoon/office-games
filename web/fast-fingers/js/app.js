@@ -734,6 +734,7 @@ function renderResult(v) {
       S.overSeen = v.game;
       S.newBest = mine.wpm > old;
       if (S.newBest) { bests[key] = mine.wpm; store.set('best', bests); }
+      if (mine.done) cloud.savePractice(mine.pos, mine.ms).catch(() => { /* stats only; the run itself is fine */ });
     }
     const best = Math.max(old, mine.wpm);
     html = `<div class="result-banner good">${S.newBest && old ? 'A new best!' : 'Finished!'}</div>

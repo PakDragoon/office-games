@@ -564,6 +564,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .stat-grid div { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 0.55rem 0.6rem; }
 .stat-grid b { display: block; font-size: 1.35rem; font-weight: 800; font-variant-numeric: tabular-nums; }
 .stat-grid span { font-size: 0.8rem; color: var(--muted); }
+#my-stats .stat-grid div:last-child:nth-child(3n+1) { grid-column: 1 / -1; }   /* a lone last tile (Practice best) spans the row */
 @media (max-width: 560px) {
   .sheet-panel, .sheet-panel.wide { top: auto; width: 100%; max-height: 88vh; border-left: 0; border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; }
 }

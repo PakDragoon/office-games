@@ -11,9 +11,12 @@ export {
 export async function getMyStats() {
   const { stats } = await api('/api/me/stats?game=guesstimate');
   const n = (k) => stats[k] || 0;
+  // The day streak only still counts if the last daily was today or yesterday (UTC days)
+  const today = Math.floor(Date.now() / 86400000);
+  const alive = n('lastDay') >= today - 1;
   return {
     games: n('games'), wins: n('wins'), points: n('points'), rounds: n('rounds'),
-    dailies: n('dailies'), streak: '–', bestDaily: n('bestDaily'),
+    dailies: n('dailies'), streak: alive ? n('streak') : 0, bestStreak: Math.max(n('bestStreak'), n('streak')), bestDaily: n('bestDaily'),
     kinds: Object.fromEntries(KINDS.map((k) => [k, { points: n(`${k}Points`), rounds: n(`${k}Rounds`) }])),
   };
 }

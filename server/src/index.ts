@@ -5,6 +5,7 @@ import { newGuest, verifyFirebase, verifyGuest } from './auth';
 import { crewTable, playerKey, playerStats } from './db/stats';
 import { handleDaily, rollDaily } from './daily';
 import { isReplayId, pruneReplays, replayStore } from './db/replays';
+import { PRACTICE, practiceAllowed, recordPractice } from './practice';
 
 export { GameRoom } from './do/GameRoom';
 export { Lobby } from './do/Lobby';
@@ -83,6 +84,18 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
     return new Response(JSON.stringify({ replay: found.payload, createdAt: found.createdAt }), {
       headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
     });
+  }
+  if (a === 'practice' && request.method === 'POST') {
+    if (!PRACTICE[game]) return json({ error: 'no practice stats for this game' }, 404);
+    const player = await requestPlayer(request, env);
+    if (!player) return json({ error: 'not signed in' }, 401);
+    if (Number(request.headers.get('Content-Length') || 0) > 512) return json({ error: 'too big' }, 413);
+    if (!practiceAllowed(player)) return json({ error: 'too fast' }, 429);
+    const text = await request.text();
+    let body: unknown = null;
+    try { body = text.length <= 512 ? JSON.parse(text) : null; } catch { /* invalid */ }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return json({ error: 'invalid' }, 400);
+    return (await recordPractice(env.DB, player, game, body as Record<string, unknown>)) === 'ok' ? json({ ok: true }) : json({ error: 'invalid' }, 400);
   }
   if (a === 'daily') return handleDaily(request, env, game, b, requestPlayer);
   return json({ error: 'not found' }, 404);
