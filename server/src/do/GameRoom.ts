@@ -292,6 +292,11 @@ export class GameRoom extends DurableObject<Env> {
       listing(l: Listing | null) {
         const key = JSON.stringify(l);
         if (key === self.lastListing) return;
+        // The room's own flag is the one that counts; keep the saved copy in step with it
+        if (l && l.public !== self.isPublic) {
+          self.isPublic = l.public;
+          self.isDirty = true;
+        }
         self.lastListing = key;
         const lobby = self.env.LOBBY.get(self.env.LOBBY.idFromName(self.gameId));
         self.ctx.waitUntil(lobby.update(self.code, l).catch((err: unknown) => console.error('lobby update failed', err)));

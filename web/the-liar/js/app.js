@@ -3,6 +3,7 @@ import { CATEGORY_NAMES } from './words.js';
 import { createSheet } from './sketch.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
    The Liar
@@ -987,11 +988,12 @@ function renderLobby(v) {
     paintRoomSettings();
     if (document.activeElement !== $('crew-input')) $('crew-input').value = v.crewName;
     $('crew-status').textContent = v.crewStatus;
+    paintPublic(v);
     const ready = v.players.filter((p) => p.connected).length;
     $('start-btn').disabled = ready < E.MIN_PLAYERS;
     $('start-note').textContent = ready < E.MIN_PLAYERS ? `Needs ${E.MIN_PLAYERS} players to start (${E.MIN_PLAYERS - ready} more).` : '';
   } else {
-    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '');
+    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '') + `<li>${publicLine(v)}</li>`;
   }
 }
 
@@ -1000,6 +1002,7 @@ $('copy-link').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(url); toast('Invite link copied'); } catch { toast(url); }
 });
 $('crew-save').addEventListener('click', () => hostSetCrew($('crew-input').value));
+wirePublic(toHost);
 $('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostSetCrew($('crew-input').value); });
 $('start-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });

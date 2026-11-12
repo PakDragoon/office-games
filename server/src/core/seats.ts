@@ -149,8 +149,11 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
     if (p.isHost) {
       if (msg.t === 'crew') return this.setCrew(msg.name);
       if (msg.t === 'public') {
-        this.room.public = Boolean(msg.on);
-        this.broadcast();
+        // Open to Quick Play or private: the host can flip it in the lobby only
+        if (this.room.status === 'lobby' && typeof msg.on === 'boolean' && msg.on !== this.room.public) {
+          this.room.public = msg.on;
+          this.broadcast();
+        }
         return;
       }
       if (this.hostMessage(p, msg)) return;

@@ -77,6 +77,7 @@
       <ul id="lobby-players" class="lobby-players"></ul>
 
       <p id="lobby-rules" class="rules"></p>
+      <p id="public-state" class="muted small-note" hidden></p>
 
       <div id="host-controls" hidden>
         <fieldset class="win-rule">
@@ -120,6 +121,11 @@
           <input type="checkbox" id="hard-toggle">
           <span>Hard mode: revealed hints must be used</span>
         </label>
+        <label class="toggle public-toggle">
+          <input type="checkbox" id="public-toggle">
+          <span>Open to Quick Play</span>
+        </label>
+        <p id="public-note" class="muted small-note public-note"></p>
         <button id="start-btn" class="btn primary wide">Start game</button>
       </div>
       <p id="lobby-wait" class="muted" hidden></p>

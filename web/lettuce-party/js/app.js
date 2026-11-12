@@ -1,5 +1,6 @@
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
    Lettuce Party
@@ -480,6 +481,8 @@ function renderLobby(v) {
   $('lobby-wait').hidden = S.isHost;
   $('lobby-rules').textContent = settingsSummary(v);
   $('lobby-rules').hidden = S.isHost;
+  $('public-state').hidden = S.isHost;
+  $('public-state').innerHTML = publicLine(v);
   $('word-status').hidden = true;
   const crewLine = $('crew-status');
   crewLine.textContent = v.crew
@@ -489,6 +492,7 @@ function renderLobby(v) {
   if (S.isHost && document.activeElement !== $('crew-input')) $('crew-input').value = v.crew || '';
   if (S.isHost) {
     $('strict-toggle').checked = v.strict;
+    paintPublic(v);
     for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
     $('rounds-select').value = String(v.maxRounds);
     $('hard-toggle').checked = v.hard;
@@ -1000,6 +1004,7 @@ for (const r of document.querySelectorAll('input[name="win-rule"]')) {
   });
 }
 
+wirePublic(send);
 $('crew-btn').addEventListener('click', () => S.isHost && hostSetCrew($('crew-input').value));
 $('crew-input').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') $('crew-btn').click();

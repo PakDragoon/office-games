@@ -6,6 +6,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { pickCritter, slapMe, slapSeat } from './slap.js';
 
 const MAX_PLAYERS = 8;
@@ -334,6 +335,7 @@ function renderLobby(v) {
     $('#set-early').checked = !!s.earlyPlay;
     if (document.activeElement !== $('#set-crew')) $('#set-crew').value = s.crew || '';
     $('#crew-note').textContent = v.crewNote || 'Name a crew to keep its scores across games.';
+    paintPublic(v);
     const online = list.filter((p) => p.online).length;
     $('#start-btn').disabled = online < 2;
     $('#start-btn').textContent = online < 2 ? 'Waiting for players' : `Start game (${online} players)`;
@@ -343,6 +345,7 @@ function renderLobby(v) {
       <li>Turn timer: <b>${s.timer ? s.timer + ' seconds' : 'Off'}</b></li>
       <li>Play early: <b>${s.earlyPlay ? 'On' : 'Off'}</b></li>
       <li>Take the next player’s cards: <b>${s.allowTake ? 'Allowed' : 'Off'}</b></li>
+      <li>${publicLine(v)}</li>
       ${s.crew ? `<li>Crew: <b>${esc(s.crew)}</b></li>` : ''}`;
   }
 }
@@ -777,6 +780,7 @@ $('#set-rounds').addEventListener('change', (e) => hostSetSettings({ rounds: Num
 $('#set-timer').addEventListener('change', (e) => hostSetSettings({ timer: Number(e.target.value) }));
 $('#set-take').addEventListener('change', (e) => hostSetSettings({ allowTake: e.target.checked }));
 $('#set-early').addEventListener('change', (e) => hostSetSettings({ earlyPlay: e.target.checked }));
+wirePublic(send);
 $('#crew-save').addEventListener('click', () => hostUseCrew($('#set-crew').value));
 $('#set-crew').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostUseCrew(e.target.value); });
 $('#start-btn').addEventListener('click', () => { $('#lobby-error').textContent = ''; hostStartRound(); });

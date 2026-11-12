@@ -201,6 +201,8 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
   border: 1px solid var(--line); border-radius: 999px; padding: 0.3rem 0.7rem; cursor: pointer;
 }
 .cat[aria-pressed="true"] { color: var(--bg); background: var(--ink); border-color: var(--ink); }
+.public-field { display: grid; gap: 0.35rem; }
+.public-field .toggle { width: fit-content; }
 .crew-field { display: grid; gap: 0.35rem; }
 .crew-field label { font-weight: 600; }
 .crew-field label .muted { font-weight: 400; font-size: 0.9rem; }

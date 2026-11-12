@@ -171,6 +171,8 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .toggle input { width: 1.15rem; height: 1.15rem; accent-color: var(--hit); }
 
 .rules { margin: 0; font-weight: 600; }
+.public-toggle { margin-bottom: 0.25rem; }
+.public-note { margin-bottom: 1rem; }
 .small-note { font-size: 0.85rem; margin: 0; }
 .win-rule {
   border: 2px solid var(--line); border-radius: 12px;

@@ -189,8 +189,12 @@ class ThullaRoom implements GameInstance {
         return this.broadcast();
       case 'playFor': return this.playFor();
       case 'public':
-        this.H.public = Boolean(msg.on);
-        return this.broadcast();
+        // Open to Quick Play or private: the host can flip it in the lobby only
+        if (this.H.phase === 'lobby' && typeof msg.on === 'boolean' && msg.on !== this.H.public) {
+          this.H.public = msg.on;
+          this.broadcast();
+        }
+        return;
       default:
     }
   }
@@ -640,6 +644,7 @@ class ThullaRoom implements GameInstance {
     }
     return {
       code: H.code,
+      public: H.public,
       phase: H.phase,
       you: pid,
       hostId: this.hostId(),

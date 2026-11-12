@@ -1,6 +1,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
    Fast Fingers
@@ -853,9 +854,10 @@ function renderLobby(v) {
     paintRoomSettings(st);
     if (document.activeElement !== $('crew-input')) $('crew-input').value = v.crewName;
     $('crew-status').textContent = v.crewStatus;
+    paintPublic(v);
     $('start-note').textContent = v.players.length < 2 ? 'You can start alone, but it’s a race: copy the invite link and send it round.' : '';
   } else {
-    $('settings-summary').innerHTML = settingsLines(st) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '');
+    $('settings-summary').innerHTML = settingsLines(st) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '') + `<li>${publicLine(v)}</li>`;
   }
 }
 
@@ -864,6 +866,7 @@ $('copy-link').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(url); toast('Invite link copied'); } catch { toast(url); }
 });
 $('crew-save').addEventListener('click', () => roomSetCrew($('crew-input').value));
+wirePublic(toHost);
 $('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') roomSetCrew($('crew-input').value); });
 $('start-btn').addEventListener('click', () => { if (S.isHost) roomStart(); });
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });

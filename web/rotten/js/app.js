@@ -1,6 +1,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { createBanana, stageOf } from './banana.js';
 import { createKeyboard } from './keys.js';
 import { meltingLogo } from './logo.js';
@@ -821,9 +822,10 @@ function renderLobby(v) {
     paintRoomSettings();
     if (document.activeElement !== $('crew-input')) $('crew-input').value = v.crewName;
     $('crew-status').textContent = v.crewStatus;
+    paintPublic(v);
     renderStartButton(v);
   } else {
-    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '');
+    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '') + `<li>${publicLine(v)}</li>`;
   }
 }
 
@@ -846,6 +848,7 @@ $('copy-link').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(url); toast('Invite link copied'); } catch { toast(url); }
 });
 $('crew-save').addEventListener('click', () => hostSetCrew($('crew-input').value));
+wirePublic(toHost);
 $('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostSetCrew($('crew-input').value); });
 $('start-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });

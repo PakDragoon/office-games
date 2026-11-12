@@ -2,6 +2,7 @@ import * as R from './rounds.js';
 import { TESTS, icon, blank } from './play.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
    Guesstimate
@@ -580,9 +581,10 @@ function renderLobby(v) {
     $('set-timer').value = String(ROOM_PREFS.timer);
     if (document.activeElement !== $('crew-input')) $('crew-input').value = v.crewName;
     $('crew-status').textContent = v.crewStatus;
+    paintPublic(v);
     $('start-btn').textContent = v.players.length > 1 ? 'Start game' : 'Start game (just you so far)';
   } else {
-    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '');
+    $('settings-summary').innerHTML = settingsLines(v.settings) + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '') + `<li>${publicLine(v)}</li>`;
   }
 }
 
@@ -591,6 +593,7 @@ $('copy-link').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText(url); toast('Invite link copied'); } catch { toast(url); }
 });
 $('crew-save').addEventListener('click', () => hostSetCrew($('crew-input').value));
+wirePublic(toHost);
 $('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostSetCrew($('crew-input').value); });
 $('start-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });

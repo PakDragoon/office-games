@@ -198,8 +198,11 @@ class RottenRoom implements GameInstance {
       case 'lobby': return this.backToLobby();
       case 'crew': return this.setCrew(msg.name);
       case 'public':
-        room.public = Boolean(msg.on);
-        this.broadcast();
+        // Open to Quick Play or private: the host can flip it in the lobby only
+        if (room.status === 'lobby' && typeof msg.on === 'boolean' && msg.on !== room.public) {
+          room.public = msg.on;
+          this.broadcast();
+        }
         return;
       default:
     }
