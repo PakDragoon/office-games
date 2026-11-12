@@ -259,6 +259,7 @@
           <button class="btn ghost" id="replay-btn" type="button">Replay drawing</button>
           <button class="btn ghost" id="save-btn" type="button">Save picture</button>
         </div>
+        <button class="btn ghost wide" id="share-btn" type="button" hidden>Share replay</button>
         <div class="result-actions">
           <button class="btn primary" id="next-game" type="button">Next game</button>
           <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
@@ -272,6 +273,54 @@
         <ol class="score-list" id="score-list"></ol>
       </section>
     </aside>
+  </div>
+</main>
+
+<!-- ============ A shared replay (?replay=<id>): read-only, no room needed ============ -->
+<main id="replay" class="screen game replay" hidden>
+  <header class="game-bar">
+    <span class="bar-code">Replay</span>
+    <span class="bar-phase" id="rp-when"></span>
+    <a class="btn ghost small" href="./">Play The Liar</a>
+  </header>
+  <div class="arena">
+    <section class="desk">
+      <div class="desk-head">
+        <span class="muted">Category</span>
+        <b id="rp-category"></b>
+      </div>
+      <div class="sheet-card">
+        <div class="sheet-host" id="rp-sheet"></div>
+        <div class="clue-board" id="rp-clues" hidden></div>
+      </div>
+    </section>
+    <aside class="side">
+      <section class="panel">
+        <div class="result-head" id="rp-head">
+          <h2 id="rp-title"></h2>
+          <p id="rp-sub"></p>
+        </div>
+        <div class="reveal-row">
+          <div><span class="muted">The word</span><b class="reveal-word" id="rp-word"></b></div>
+          <div><span class="muted">The liar</span><b class="reveal-liar" id="rp-liar"></b></div>
+        </div>
+        <ul class="vote-results" id="rp-votes"></ul>
+        <p class="muted small-note" id="rp-tip"></p>
+        <div class="result-actions">
+          <button class="btn ghost" id="rp-again" type="button">Watch again</button>
+          <a class="btn primary" href="./">Play The Liar</a>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<main id="replay-missing" class="screen replay-missing" hidden>
+  <div class="missing-card">
+    <h1>Replay not found</h1>
+    <p class="muted" id="rm-text">This replay link doesn’t work. It may have expired (replays are kept for 90 days) or the link may be incomplete.</p>
+    <a class="btn primary" href="./">Play The Liar</a>
+    <a class="btn link" href="/">All games</a>
   </div>
 </main>
 

@@ -30,6 +30,8 @@ export interface BaseRoom<P extends Seat> {
   players: P[];
   crew: { name: string } | null;
   crewStatus: string;
+  /** The saved replay of the game just finished (set a moment after the game ends); cleared at the next start. */
+  replayId?: string | null;
 }
 
 export const baseSeat = (ctx: RoomCtx, id: string, name: string, color: number): Seat => {
@@ -299,6 +301,25 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
         console.error(`saving ${this.gameId} game failed`, err);
         if (room.game !== game || !room.crew) return;
         room.crewStatus = 'This game wasn’t saved. Try again next game.';
+      }
+      this.ctx.dirty();
+      this.broadcast();
+    });
+  }
+
+  /** Keep a replay of the game that just finished. Runs in the background; the id shows up in the next view. */
+  protected saveReplay(payload: unknown, seats: Seat[]): void {
+    const room = this.room;
+    const game = room.game;
+    const ids = seats.map((s) => (s.uid ? `u:${s.uid}` : s.guest ? `g:${s.guest}` : '')).filter(Boolean);
+    this.ctx.later(async () => {
+      try {
+        const id = await this.ctx.saveReplay(this.gameId, payload, ids);
+        if (!id || room.game !== game || room.status === 'lobby') return;
+        room.replayId = id;
+      } catch (err) {
+        console.error(`saving ${this.gameId} replay failed`, err);
+        return;
       }
       this.ctx.dirty();
       this.broadcast();

@@ -4,6 +4,7 @@ import { CODE_RE, randomCode } from './core/util';
 import { newGuest, verifyFirebase, verifyGuest } from './auth';
 import { crewTable, playerKey, playerStats } from './db/stats';
 import { handleDaily, rollDaily } from './daily';
+import { isReplayId, pruneReplays, replayStore } from './db/replays';
 
 export { GameRoom } from './do/GameRoom';
 export { Lobby } from './do/Lobby';
@@ -75,6 +76,14 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
     const table = await crewTable(env.DB, game, name);
     return table ? json(table) : json({ error: 'no such crew' }, 404);
   }
+  if (a === 'replay' && request.method === 'GET') {
+    const found = b && isReplayId(b) ? await replayStore(env.DB).get(game, b) : null;
+    if (!found) return json({ error: 'no such replay' }, 404);
+    // The link is the secret; the content never changes, so browsers may keep it for a while
+    return new Response(JSON.stringify({ replay: found.payload, createdAt: found.createdAt }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'public, max-age=300' },
+    });
+  }
   if (a === 'daily') return handleDaily(request, env, game, b, requestPlayer);
   return json({ error: 'not found' }, 404);
 }
@@ -96,6 +105,10 @@ export default {
   },
 
   async scheduled(_event, env): Promise<void> {
-    await rollDaily(env);
+    try {
+      await rollDaily(env);
+    } finally {
+      await pruneReplays(env.DB);
+    }
   },
 } satisfies ExportedHandler<Env>;

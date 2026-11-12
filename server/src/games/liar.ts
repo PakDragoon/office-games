@@ -68,6 +68,20 @@ function cleanSettings(raw: unknown): Settings {
 const wordsGame = (st: Settings) => st.play === 'words';
 const timeGame = (st: Settings) => st.play === 'time';
 
+/** A drawing that is too big to keep is thinned (every other point, ends kept) until it fits. */
+function thinStrokes(strokes: Array<{ p: number | null; pts: number[] }>) {
+  let out = strokes;
+  for (let pass = 0; pass < 4 && JSON.stringify(out).length > 100 * 1024; pass++) {
+    out = out.map((s) => {
+      const keep: number[] = [];
+      const n = s.pts.length / 2;
+      for (let i = 0; i < n; i++) if (i % 2 === 0 || i === n - 1) keep.push(s.pts[i * 2], s.pts[i * 2 + 1]);
+      return { p: s.p, pts: keep };
+    });
+  }
+  return out;
+}
+
 class LiarRoom extends SeatRoom<Player, Room> {
   protected readonly gameId = GAME;
   protected readonly maxPlayers = E.MAX_PLAYERS;
@@ -217,7 +231,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
     room.order = E.turnOrder(ids, room.liar, this.rnd);
     Object.assign(room, {
       game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], stops: {}, started: {}, strokeSid: null, turnStrokes: 0,
-      votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
+      votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null,
       deadline: this.ctx.now() + E.TIMES.roleMs,
     });
     this.phaseIn(E.TIMES.roleMs - 300);
@@ -489,7 +503,27 @@ class LiarRoom extends SeatRoom<Player, Room> {
         catches: !isLiar && room.result === 'caught' && room.votes[p.id] === room.liar ? 1 : 0,
       });
     }), this.byId(room.liar)?.name ?? null);
+    if (!room.time) this.saveReplay(this.replayPayload(), this.inGame());
     this.broadcast();
+  }
+
+  // What a shared replay shows: the drawing (Draw) or the words board (Words), who was who and how it ended.
+  // Names and colours only; no player ids. The Time game has nothing worth replaying, so it saves nothing.
+  private replayPayload() {
+    const room = this.room;
+    const players = this.inGame();
+    const idx = (id: string | null) => { const i = players.findIndex((p) => p.id === id); return i < 0 ? null : i; };
+    const words = wordsGame(room.settings);
+    return {
+      v: 1,
+      mode: words ? 'words' : 'draw',
+      word: room.word, category: room.category,
+      liar: idx(room.liar), accused: idx(room.accused), guess: room.guess, result: room.result,
+      rounds: E.ROUNDS,
+      players: players.map((p) => ({ name: p.name, color: p.color, vote: idx(room.votes[p.id] ?? null), points: room.delta[p.id] || 0 })),
+      strokes: words ? [] : thinStrokes(room.strokes.map((s) => ({ p: idx(s.pid), pts: s.pts }))),
+      clues: words ? room.clues.map((c) => ({ p: idx(c.pid), round: c.round, text: c.text, passed: c.passed === true })) : [],
+    };
   }
 
   private backToLobby(): void {
@@ -530,6 +564,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
       accused: room.status === 'guess' || reveal ? room.accused : null,
       options: room.status === 'guess' || reveal ? room.options : [],
       liar: reveal ? room.liar : room.status === 'guess' ? room.accused : null,
+      replayId: reveal ? room.replayId ?? null : null,
       word: reveal ? room.word : '',
       votes: reveal ? room.votes : {},
       guess: reveal ? room.guess : null,
@@ -551,7 +586,7 @@ export const liar: GameModule = {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
       settings: cleanSettings({}), used: [], liar: null, lastLiar: null, word: '', category: '', order: [], round: 0, turn: 0,
       turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {}, started: {},
-      votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
+      votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null,
     });
   },
   restore(ctx, snap) {

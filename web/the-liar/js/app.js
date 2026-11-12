@@ -45,7 +45,7 @@ const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
 
 /* ---------- Screens, sheets, messages ---------- */
-const SCREENS = ['home', 'lobby', 'game'];
+const SCREENS = ['home', 'lobby', 'game', 'replay', 'replay-missing'];
 function showScreen(name) {
   SCREENS.forEach((s) => { $(s).hidden = s !== name; });
   window.scrollTo(0, 0);
@@ -856,7 +856,16 @@ function renderResult(v) {
   $('to-lobby').hidden = !S.isHost;
   $('result-wait').hidden = S.isHost;
   $('crew-line').textContent = v.crewName ? v.crewStatus : '';
+  // The server keeps a replay of Draw and Words games a moment after they end
+  $('share-btn').hidden = !v.replayId;
+  S.replayId = v.replayId || null;
 }
+
+$('share-btn').addEventListener('click', async () => {
+  if (!S.replayId) return;
+  const url = `${location.origin}${location.pathname}?replay=${S.replayId}`;
+  try { await navigator.clipboard.writeText(url); toast('Replay link copied'); } catch { toast(url); }
+});
 
 $('replay-btn').addEventListener('click', async () => {
   $('replay-btn').disabled = true;
@@ -1132,6 +1141,115 @@ $('analytics-toggle').addEventListener('change', (e) => {
 if (new URLSearchParams(location.search).has('debug')) window.__theliar = { S, sheet, link };
 
 /* =========================================================
+   A shared replay (?replay=<id>): read-only, no room, works for guests.
+   The server saved it at the end of the game: the drawing line by line (Draw) or the
+   words board (Words), who was who, the votes and the outcome.
+   ========================================================= */
+const R = { sheet: null, data: null, run: 0 };
+if (new URLSearchParams(location.search).has('debug')) window.__theliar.R = R;
+const REDUCED_MOTION = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+function missingReplay(text) {
+  if (text) $('rm-text').textContent = text;
+  showScreen('replay-missing');
+}
+
+async function loadReplay(id) {
+  showScreen('replay');
+  $('rp-title').textContent = 'Loading replay…';
+  let res;
+  try {
+    res = await fetch(`/api/the-liar/replay/${encodeURIComponent(id)}`);
+  } catch {
+    return missingReplay('Couldn’t load this replay. Check your connection and try the link again.');
+  }
+  if (res.status === 404) return missingReplay();
+  if (!res.ok) return missingReplay('Couldn’t load this replay right now. Try again in a minute.');
+  const { replay, createdAt } = await res.json();
+  if (!replay || !Array.isArray(replay.players)) return missingReplay();
+  R.data = replay;
+  renderReplay(replay, createdAt);
+}
+
+function renderReplay(r, createdAt) {
+  const players = r.players;
+  const words = r.mode === 'words';
+  const liar = players[r.liar];
+  const liarName = liar ? liar.name : 'Someone';
+  const accused = r.accused === null || r.accused === undefined ? null : players[r.accused];
+  $('rp-when').textContent = new Date(createdAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  $('rp-category').textContent = r.category;
+  const head = {
+    caught: ['Caught!', `${liarName} was the liar and couldn’t name the word.`],
+    stolen: ['Stolen!', `${liarName} was caught but named the word.`],
+    escaped: ['The liar got away', accused ? `The group voted out ${accused.name}. ${liarName} was the liar.` : `The vote was split. ${liarName} was the liar.`],
+  }[r.result] || ['Replay', ''];
+  $('rp-head').className = 'result-head';
+  $('rp-title').textContent = head[0];
+  $('rp-sub').textContent = head[1];
+  $('rp-word').textContent = cap(String(r.word));
+  $('rp-liar').innerHTML = `<span class="pen-dot pc${liar ? liar.color : 0}"></span>${esc(liarName)}`;
+  $('rp-votes').innerHTML = players.map((p, i) => {
+    const target = p.vote === null || p.vote === undefined ? null : players[p.vote];
+    const right = target && p.vote === r.liar;
+    return `<li class="pc${p.color}${i === r.liar ? ' is-liar' : ''}" data-i="${i}">
+      <span class="pen-dot"></span><span class="nm">${esc(p.name)}</span>
+      <span class="voted">${target ? `voted ${esc(target.name)}${right ? ' ✓' : ''}` : 'no vote'}</span>
+      <span class="gain ${p.points ? 'plus' : ''}">${p.points ? `+${p.points}` : '0'}</span></li>`;
+  }).join('');
+  $('rp-tip').textContent = words ? 'Point at a name to see only their words.' : 'Point at a name to see only their lines.';
+  $('rp-sheet').hidden = words;
+  $('rp-clues').hidden = !words;
+  if (words) {
+    const cells = ['<span></span>', ...Array.from({ length: r.rounds }, (_, i) => `<span class="rh">Round ${i + 1}</span>`)];
+    players.forEach((p, i) => {
+      cells.push(`<span class="who pc${p.color}" data-pid="${i}"><i class="pen-dot"></i><span>${esc(p.name)}</span></span>`);
+      for (let round = 0; round < r.rounds; round++) {
+        const c = r.clues.find((x) => x.p === i && x.round === round);
+        const kind = c ? (c.passed ? 'passed' : 'said') : '';
+        cells.push(`<span class="cell pc${p.color} ${kind}" data-pid="${i}" data-order="${round * players.length + i}">${c ? (c.passed ? 'passed' : esc(c.text)) : ''}</span>`);
+      }
+    });
+    $('rp-clues').innerHTML = `<div class="clue-grid">${cells.join('')}</div>`;
+  } else {
+    R.sheet ||= createSheet($('rp-sheet'));
+    R.sheet.load(r.strokes.map((s, n) => ({ sid: `r${n}`, pid: String(s.p), color: players[s.p] ? players[s.p].color : 0, pts: s.pts })));
+  }
+  watchAgain(!REDUCED_MOTION);
+}
+
+// Draw: the lines are drawn again in order. Words: the words appear in turn order.
+async function watchAgain(animate) {
+  const run = ++R.run;
+  $('rp-again').disabled = true;
+  highlightReplay(null);
+  if (R.data.mode === 'words') {
+    const cells = [...$('rp-clues').querySelectorAll('.cell[data-order]')].sort((a, b) => a.dataset.order - b.dataset.order);
+    if (animate) cells.forEach((c) => { c.style.visibility = 'hidden'; });
+    for (const c of cells) {
+      if (run !== R.run) return;
+      if (animate && c.textContent) await new Promise((ok) => setTimeout(ok, 650));
+      c.style.visibility = '';
+    }
+  } else if (animate) {
+    await R.sheet.replay();
+  }
+  if (run === R.run) $('rp-again').disabled = false;
+}
+$('rp-again').addEventListener('click', () => watchAgain(true));
+
+function highlightReplay(i) {
+  if (R.sheet) R.sheet.highlight(i === null ? null : String(i));
+  $('rp-clues').querySelectorAll('[data-pid]').forEach((el) => el.classList.toggle('dim', i !== null && el.dataset.pid !== String(i)));
+  $('rp-votes').querySelectorAll('li').forEach((li) => li.classList.toggle('dim', i !== null && li.dataset.i !== String(i)));
+}
+$('rp-votes').addEventListener('pointerover', (e) => {
+  const li = e.target.closest('li');
+  if (li) highlightReplay(Number(li.dataset.i));
+});
+$('rp-votes').addEventListener('pointerleave', () => highlightReplay(null));
+
+/* =========================================================
    Start
    ========================================================= */
 (function init() {
@@ -1140,6 +1258,12 @@ if (new URLSearchParams(location.search).has('debug')) window.__theliar = { S, s
     + [...'LIAR'].map((c) => `<span class="tile${c === 'I' ? ' odd' : ''}">${c}</span>`).join('');
   const saved = store.get('name', '');
   if (saved) $('name-input').value = saved;
+  const replay = new URLSearchParams(location.search).get('replay');
+  if (replay !== null) {
+    if (/^[A-Za-z0-9]{12}$/.test(replay)) loadReplay(replay);
+    else missingReplay();
+    return;
+  }
   const room = new URLSearchParams(location.search).get('room');
   if (room && /^[A-Za-z]{4}$/.test(room)) {
     $('code-input').value = room.toUpperCase();

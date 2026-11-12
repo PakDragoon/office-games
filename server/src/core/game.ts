@@ -51,6 +51,8 @@ export interface RoomCtx {
   /** Save a finished game's results; returns a status line for the room (crew totals etc.). */
   report(r: GameReport): Promise<string>;
   /** Look up how many games a crew has played (for the lobby's crew line). */
+  /** Keep a replay of a finished game (compressed, shareable by id); null when it could not be kept. */
+  saveReplay(game: string, payload: unknown, playerIds: string[]): Promise<string | null>;
   crewInfo(game: string, name: string): Promise<{ games: number } | null>;
   track(event: string, data?: Record<string, string | number>): void;
   /** Run async work (saving results, looking up a crew) and save the room again when it finishes. */

@@ -26,13 +26,16 @@ export function pathData(pts) {
   return `${d}L${x(n - 1)} ${y(n - 1)}`;
 }
 
+let sheets = 0;
+
 export function createSheet(container) {
+  const patternId = `paper-dots-${sheets++}`;   // each sheet needs its own (a hidden sheet's pattern can't be used by another)
   const svg = el('svg', { viewBox: `0 0 ${BOARD.w} ${BOARD.h}`, class: 'sheet-svg', role: 'img', 'aria-label': 'Shared drawing' });
   const defs = el('defs', {}, svg);
-  const dots = el('pattern', { id: 'paper-dots', width: 20, height: 20, patternUnits: 'userSpaceOnUse' }, defs);
+  const dots = el('pattern', { id: patternId, width: 20, height: 20, patternUnits: 'userSpaceOnUse' }, defs);
   el('circle', { cx: 10, cy: 10, r: 0.9, class: 'paper-dot' }, dots);
   el('rect', { x: 0, y: 0, width: BOARD.w, height: BOARD.h, class: 'paper' }, svg);
-  el('rect', { x: 0, y: 0, width: BOARD.w, height: BOARD.h, fill: 'url(#paper-dots)' }, svg);
+  el('rect', { x: 0, y: 0, width: BOARD.w, height: BOARD.h, fill: `url(#${patternId})` }, svg);
   const ink = el('g', { class: 'ink' }, svg);
   container.append(svg);
 

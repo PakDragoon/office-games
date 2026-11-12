@@ -570,3 +570,14 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .all-games:hover { border-color: var(--ink); }
 .all-games svg { width: 1.1rem; height: 1.1rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 @media (max-width: 330px) { .all-games span { display: none; } .all-games { padding: 0 0.6rem; } }
+
+/* ---------- Shared replay ---------- */
+a.btn { display: inline-block; text-align: center; text-decoration: none; }
+.btn.small { padding: 0.5rem 0.9rem; font-size: 0.9rem; white-space: nowrap; }
+#share-btn { width: 100%; }
+.missing-card, .replay-missing { display: grid; place-items: center; }
+.replay-missing { min-height: 100dvh; padding: 1.5rem; }
+.missing-card { width: min(420px, 100%); gap: 0.8rem; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 1.6rem 1.3rem; }
+.missing-card .btn { width: 100%; }
+.replay .vote-results li { cursor: default; }
+.replay .vote-results li.dim { opacity: 0.35; }

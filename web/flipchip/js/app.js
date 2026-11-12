@@ -1,6 +1,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { startReplay } from './replay.js';
 
 /* =========================================================
    Flipchip
@@ -984,8 +985,16 @@ function renderResult(v) {
       : (S.isHost ? `Rematch keeps the same two players.${swap}` : `The host starts the next game.${swap}`);
   }
   $('crew-line').textContent = v.crewName ? v.crewStatus : '';
-
+  // The server keeps a replay of every finished room game a moment after it ends
+  $('share-btn').hidden = !v.replayId;
+  S.replayId = v.replayId || null;
 }
+
+$('share-btn').addEventListener('click', async () => {
+  if (!S.replayId) return;
+  const url = `${location.origin}${location.pathname}?replay=${S.replayId}`;
+  try { await navigator.clipboard.writeText(url); toast('Replay link copied'); } catch { toast(url); }
+});
 
 $('next-game').addEventListener('click', () => {
   const v = S.view;
@@ -1424,6 +1433,11 @@ if (new URLSearchParams(location.search).has('debug')) window.__flipchip = { S, 
   $('logo-row').innerHTML = logoHtml();
   const saved = store.get('name', '');
   if (saved) $('name-input').value = saved;
+  const replay = new URLSearchParams(location.search).get('replay');
+  if (replay !== null) {
+    startReplay(replay);
+    return;
+  }
   const room = new URLSearchParams(location.search).get('room');
   if (room && /^[A-Za-z]{4}$/.test(room)) {
     $('code-input').value = room.toUpperCase();
