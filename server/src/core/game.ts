@@ -50,6 +50,8 @@ export interface RoomCtx {
   random(): number;
   /** Save a finished game's results; returns a status line for the room (crew totals etc.). */
   report(r: GameReport): Promise<string>;
+  /** Keep a replay of a finished game (compressed, shareable by id); null when it could not be kept. */
+  saveReplay(game: string, payload: unknown, playerIds: string[]): Promise<string | null>;
   /** Look up how many games a crew has played (for the lobby's crew line). */
   crewInfo(game: string, name: string): Promise<{ games: number } | null>;
   track(event: string, data?: Record<string, string | number>): void;

@@ -5,6 +5,7 @@ import { Bucket, randomId, Rng } from '../core/util';
 import { GAMES } from '../games';
 import { newGuest, verifyFirebase, verifyGuest } from '../auth';
 import { crewInfo, recordGame } from '../db/stats';
+import { replayStore } from '../db/replays';
 
 /** Kept with each socket, so it survives the room hibernating. */
 interface Attachment {
@@ -270,6 +271,7 @@ export class GameRoom extends DurableObject<Env> {
       },
       random: () => self.rng.next(),
       report: (r: GameReport) => recordGame(self.env.DB, r),
+      saveReplay: (game, payload, playerIds) => replayStore(self.env.DB).put(game, payload, playerIds),
       crewInfo: (game, name) => crewInfo(self.env.DB, game, name),
       track(event, data = {}) {
         try {

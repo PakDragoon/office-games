@@ -36,6 +36,8 @@ interface Room extends BaseRoom<Player> {
   matchWinner: string | null;
 }
 
+type LogEntry = { side: number; i?: number; pass?: boolean };
+
 class FlipRoom extends SeatRoom<Player, Room> {
   protected readonly gameId = GAME;
   protected readonly maxPlayers = E.MAX_PLAYERS;
@@ -172,7 +174,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
     for (const p of room.players) p.inGame = Boolean(this.seatOf(p.id));
     Object.assign(room, {
       status: 'play', board: E.newBoard(room.size), turn: DARK, moveSeq: 0, last: null, pass: null,
-      log: [], result: null, game: room.game + 1,
+      log: [], result: null, replayId: null, game: room.game + 1,
     });
     this.ctx.track('game_started', { size: room.size });
     this.afterTurn();
@@ -246,6 +248,13 @@ class FlipRoom extends SeatRoom<Player, Room> {
     const w = winner ? this.byId(room.seats[winner as Side]) : undefined;
     if (target && w && w.matchWins >= target) room.matchWinner = w.id;
     this.ctx.track('game_finished', { reason, size: room.size });
+    // A shareable replay: who played which colour, every move (passes included) and how it ended
+    this.saveReplay({
+      v: 1, size: room.size, reason, winner,
+      counts: { dark: counts[DARK] || 0, light: counts[LIGHT] || 0 },
+      players: { dark: this.byId(room.seats[DARK])?.name ?? 'Dark', light: this.byId(room.seats[LIGHT])?.name ?? 'Light' },
+      moves: (room.log as LogEntry[]).map((m) => (m.pass ? { side: m.side, pass: true } : { side: m.side, i: m.i })),
+    }, seated);
     this.saveGame(seated.map((p) => {
       const side = this.seatOf(p.id);
       return reportPlayer(p, !winner ? 1 : winner === side ? 1 : 2, Boolean(winner) && winner === side, {
@@ -272,7 +281,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
       last: room.last, pass: room.pass, log: room.log,
       turnLeft: room.turnEnd ? room.turnEnd - now : null,
       turnMs: E.timerMs(room.settings),
-      result: room.result, matchWinner: room.matchWinner,
+      result: room.result, matchWinner: room.matchWinner, replayId: room.status === 'over' ? room.replayId ?? null : null,
       canUndo: false,
       crewName: room.crew ? room.crew.name : '',
       crewStatus: room.crewStatus,
@@ -289,7 +298,7 @@ export const flipchip: GameModule = {
     return new FlipRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
       settings, seats: { 1: null, 2: null }, board: null, size: settings.size, turn: 0, moveSeq: 0,
-      last: null, pass: null, log: [], turnEnd: 0, result: null, matchWinner: null,
+      last: null, pass: null, log: [], turnEnd: 0, result: null, matchWinner: null, replayId: null,
     });
   },
   restore(ctx, snap) {
