@@ -3,7 +3,7 @@
 import { api, getUser } from '../../shared/cloud.js';
 
 export {
-  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track,
+  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData,
 } from '../../shared/cloud.js';
 export { api };
 

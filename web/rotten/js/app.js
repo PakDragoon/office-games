@@ -1369,6 +1369,7 @@ async function signIn() {
   try { await cloud.signIn(); } catch (err) { toast(cloud.errorText(err)); }
 }
 $('home-account').addEventListener('click', () => (cloud.getUser() ? open('settings') : signIn()));
+cloud.mountDeleteData($('delete-data'), { onDone: renderSettings });
 
 async function renderSettings() {
   const u = cloud.getUser();

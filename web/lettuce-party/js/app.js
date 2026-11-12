@@ -1100,7 +1100,9 @@ document.addEventListener('keydown', (e) => {
   savePrefs();
   cloud.onUser((u) => {
     renderAccount(u);
+    if (u && !$('settings-sheet').hidden) loadMyStats();   // e.g. the guest's stats just merged into the account
   });
+  cloud.mountDeleteData($('delete-data'), { btnClass: 'btn ghost small', onDone: () => renderAccount(cloud.currentUser()) });
   cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();
 })();

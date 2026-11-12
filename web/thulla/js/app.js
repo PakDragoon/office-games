@@ -978,6 +978,7 @@ cloud.onUser(() => {
 // ===========================================================================
 // Start up
 // ===========================================================================
+cloud.mountDeleteData($('#delete-data'), { btnClass: 'btn small ghost', onDone: () => { renderAccount(); loadStats(); } });
 applyPrefs();
 cloud.restore();
 cloud.initAnalytics(prefs.analytics !== false);

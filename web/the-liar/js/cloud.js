@@ -3,7 +3,7 @@
 import { api } from '../../shared/cloud.js';
 
 export {
-  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track,
+  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData,
 } from '../../shared/cloud.js';
 
 const emptyStats = () => ({ games: 0, points: 0, catches: 0, liarGames: 0, liarWins: 0, correctVotes: 0 });

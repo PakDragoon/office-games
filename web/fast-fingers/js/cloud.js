@@ -4,7 +4,7 @@
 import { api } from '../../shared/cloud.js';
 
 export {
-  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track,
+  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData,
 } from '../../shared/cloud.js';
 
 /** My Fast Fingers stats: room races from the server, practice bests from this browser. */
