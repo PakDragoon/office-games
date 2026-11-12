@@ -1,20 +1,15 @@
-// Thulla: real-time multiplayer in the browser. No backend.
-// The host's browser is the game server: it deals, holds every hand, checks every
-// move and decides tricks. Other players connect to it directly with PeerJS and only
-// ever receive their own cards plus public information.
+// Thulla: real-time multiplayer card game.
+// The game runs on the server (server/src/games/thulla.ts): it deals, holds every hand,
+// checks every move and decides tricks. Each player only receives their own cards plus
+// public information; this page draws them and sends your moves.
 
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
+import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { pickCritter, slapMe, slapSeat } from './slap.js';
 
 const MAX_PLAYERS = 8;
-const PEER_PREFIX = 'thulla-pk-';
 const DEBUG = new URLSearchParams(location.search).has('debug');
-const FAST = DEBUG && new URLSearchParams(location.search).has('fast'); // test runs only
-const RESOLVE_MS = FAST ? 150 : 1700;   // how long a finished trick stays on the table
-const TAKE_MS = 15000;                  // time to answer a take-cards request
-const STUCK_MS = FAST ? 3000 : 30000;   // offline player's turn (no timer): host can play for them after this
-const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
 const CHAT_PHRASES = ['Shabash!', 'Uff yaar', 'Jaldi khelo', 'Ye lo thulla!', 'Bach gaya!', 'Wah wah', 'Sorry 😅', 'GG'];
 
 const $ = (s) => document.querySelector(s);
@@ -36,13 +31,6 @@ const prefs = (() => {
 function savePrefs() { try { localStorage.setItem('thulla-prefs', JSON.stringify(prefs)); } catch {} }
 function applyPrefs() { document.body.classList.toggle('contrast', !!prefs.contrast); }
 
-const cid = (() => {
-  try {
-    let v = sessionStorage.getItem('thulla-cid');
-    if (!v) { v = Math.random().toString(36).slice(2, 12); sessionStorage.setItem('thulla-cid', v); }
-    return v;
-  } catch { return Math.random().toString(36).slice(2, 12); }
-})();
 
 // ---------------------------------------------------------------------------
 // Sounds (generated, no files)
@@ -112,571 +100,53 @@ function stamp(big, sub, kind = '') {
 }
 
 // ===========================================================================
-// HOST: the game server
-// ===========================================================================
-let H = null;
-
-function newHost(code) {
-  return {
-    code,
-    peer: null,
-    players: [],          // { id, name, cid, conn, online, left, isHost, color, uid, photo }
-    nextId: 1,
-    settings: { rounds: 0, timer: 0, allowTake: false, earlyPlay: false, crew: '' },
-    phase: 'lobby',       // lobby | playing | between | over
-    roundNo: 0,
-    dealer: -1,
-    round: null,
-    resolving: null,
-    take: null,
-    stuck: null,
-    scores: {},           // id -> { rounds, losses, posSum, given, received }
-    history: [],
-    lastResult: null,
-    final: null,
-    turnDeadline: 0,
-    timers: {},
-    allTime: null,
-    crewNote: '',
-    seq: 0,
-  };
-}
-
-const byId = (id) => H.players.find((p) => p.id === id);
-const nameOf = (id) => (byId(id) || {}).name || '?';
-
-function freeColor() {
-  const used = new Set(H.players.filter((p) => !p.left).map((p) => p.color));
-  for (let i = 0; i < MAX_PLAYERS; i++) if (!used.has(i)) return i;
-  return 0;
-}
-
-function clearTimer(key) { clearTimeout(H.timers[key]); delete H.timers[key]; }
-function clearAllTimers() { Object.keys(H.timers).forEach(clearTimer); }
-
-function hostStart(name) {
-  const code = Array.from({ length: 4 }, () => CODE_LETTERS[Math.floor(Math.random() * CODE_LETTERS.length)]).join('');
-  setBusy(true);
-  const peer = new window.Peer(PEER_PREFIX + code);
-  let opened = false;
-  peer.on('open', () => {
-    opened = true;
-    H = newHost(code);
-    H.peer = peer;
-    const u = cloud.getUser();
-    const p = { id: 'p' + H.nextId++, name, cid, conn: null, online: true, left: false, isHost: true, color: 0, uid: u?.uid || '', photo: u?.photo || '' };
-    H.players.push(p);
-    me.role = 'host'; me.id = p.id; me.code = code; me.name = name;
-    saveSession({ code, name, role: 'host' });
-    cloud.track('room_created');
-    setBusy(false);
-    broadcast();
-  });
-  peer.on('connection', (conn) => {
-    conn.on('data', (msg) => hostReceive(conn, msg));
-    conn.on('close', () => hostConnClosed(conn));
-    conn.on('error', () => hostConnClosed(conn));
-  });
-  peer.on('disconnected', () => { if (!peer.destroyed) try { peer.reconnect(); } catch {} });
-  peer.on('error', (err) => {
-    if (!opened && err.type === 'unavailable-id') { peer.destroy(); hostStart(name); return; }
-    if (!opened) { setBusy(false); showHomeError(networkError(err)); peer.destroy(); }
-    else if (DEBUG) console.warn('host peer error', err);
-  });
-}
-
-function networkError(err) {
-  if (err?.type === 'peer-unavailable') return 'No room with that code. Check the code with your host.';
-  if (err?.type === 'browser-incompatible') return 'This browser can’t make direct connections. Try Chrome, Safari or Firefox.';
-  if (err?.type === 'network' || err?.type === 'server-error' || err?.type === 'socket-error') return 'Couldn’t reach the connection server. Check your internet and try again.';
-  return 'Couldn’t connect. Try again in a moment.';
-}
-
-/** Messages from guests (conn) or from the host's own UI (conn = null). */
-function hostReceive(conn, msg) {
-  if (!H || !msg || typeof msg !== 'object') return;
-  if (msg.t === 'hello') return hostHello(conn, msg);
-  const p = conn ? byId(conn._pid) : byId(me.id);
-  if (!p || (conn && p.conn !== conn)) return;
-  switch (msg.t) {
-    case 'play': return hostPlay(p, String(msg.card || ''));
-    case 'take': return hostTakeAsk(p);
-    case 'chat': return hostChat(p, msg.i);
-    case 'giveup': return hostGiveUp(p);
-    case 'takeReply': return hostTakeReply(p, !!msg.accept);
-    case 'leave': return hostLeave(p);
-    default: return undefined;
-  }
-}
-
-function hostHello(conn, msg) {
-  const name = cleanName(msg.name);
-  const reply = (m) => { try { conn.send(m); } catch {} };
-  if (!name) return reply({ t: 'error', msg: 'Type your name first.' });
-  let p = H.players.find((x) => x.name.toLowerCase() === name.toLowerCase());
-  if (p) {
-    if (p.isHost) return reply({ t: 'error', msg: `${name} is the host’s name. Pick another name.` });
-    const stillThere = p.online && p.conn && p.conn.open && p.cid !== msg.cid;
-    if (stillThere) return reply({ t: 'error', msg: `Someone called ${name} is already in this room. Pick another name.` });
-    if (p.left) {
-      if (H.players.filter((x) => !x.left).length >= MAX_PLAYERS) return reply({ t: 'error', msg: `This room is full (${MAX_PLAYERS} players).` });
-      if (H.players.some((x) => x !== p && !x.left && x.color === p.color)) p.color = freeColor();
-    }
-    if (p.conn && p.conn !== conn) { try { p.conn._pid = null; p.conn.close(); } catch {} }
-    Object.assign(p, { conn, online: true, left: false, cid: msg.cid || p.cid });
-  } else {
-    const count = H.players.filter((x) => !x.left).length;
-    if (count >= MAX_PLAYERS) return reply({ t: 'error', msg: `This room is full (${MAX_PLAYERS} players).` });
-    p = { id: 'p' + H.nextId++, name, cid: msg.cid || '', conn, online: true, left: false, isHost: false, color: freeColor(), uid: '', photo: '' };
-    H.players.push(p);
-  }
-  p.uid = String(msg.uid || '').slice(0, 128);
-  p.photo = /^https:\/\//.test(msg.photo || '') ? String(msg.photo).slice(0, 500) : '';
-  conn._pid = p.id;
-  reply({ t: 'welcome', id: p.id, code: H.code });
-  const inRound = H.round && H.phase === 'playing' && H.round.seats.includes(p.id);
-  if (H.phase === 'playing' && !inRound) reply({ t: 'note', msg: 'A round is in progress. You’ll be dealt in next round.' });
-  fxAll({ kind: 'joined', name: p.name, back: Boolean(inRound) }, p.id);
-  refreshStuck();
-  broadcast();
-}
-
-function hostConnClosed(conn) {
-  if (!H || !conn._pid) return;
-  const p = byId(conn._pid);
-  if (!p || p.conn !== conn) return;
-  p.conn = null;
-  p.online = false;
-  if (H.phase === 'lobby') {
-    H.players = H.players.filter((x) => x !== p);
-  } else {
-    fxAll({ kind: 'offline', name: p.name });
-    if (H.take && (H.take.to === p.id || H.take.from === p.id)) hostTakeResolve(false, 'offline');
-  }
-  refreshStuck();
-  broadcast();
-}
-
-function hostLeave(p) {
-  if (p.isHost) return;
-  try { p.conn && p.conn.close(); } catch {}
-  p.conn = null; p.online = false; p.left = true;
-  if (H.phase === 'lobby') H.players = H.players.filter((x) => x !== p);
-  else {
-    fxAll({ kind: 'left', name: p.name });
-    if (H.take && (H.take.to === p.id || H.take.from === p.id)) hostTakeResolve(false, 'offline');
-  }
-  refreshStuck();
-  broadcast();
-}
-
-// ---------- Settings & flow (host UI calls these directly) ----------
-
-function hostSetSettings(patch) {
-  if (!H || H.phase !== 'lobby') return;
-  Object.assign(H.settings, patch);
-  broadcast();
-}
-
-async function hostUseCrew(raw) {
-  const name = String(raw || '').trim();
-  if (!name) { H.settings.crew = ''; H.allTime = null; H.crewNote = ''; broadcast(); return; }
-  if (cloud.crewId(name).length < 3) { H.crewNote = 'Use at least 3 letters or numbers.'; broadcast(); return; }
-  if (!cloud.getUser()) { H.crewNote = 'Sign in with Google (gear icon) to save crew scores.'; broadcast(); return; }
-  H.settings.crew = name;
-  H.crewNote = 'Loading crew scores…';
-  broadcast();
-  try {
-    H.allTime = await cloud.getCrew(name);
-    H.crewNote = H.allTime.rounds ? `Saving to “${name}”. ${H.allTime.rounds} rounds saved so far.` : `Saving to new crew “${name}”.`;
-  } catch (e) {
-    H.crewNote = 'Couldn’t load that crew. Check your connection and try again.';
-    if (DEBUG) console.warn(e);
-  }
-  broadcast();
-}
-
-function hostStartRound() {
-  if (!H) return;
-  const seats = H.players.filter((p) => !p.left && p.online).map((p) => p.id);
-  if (seats.length < 2) { toast('You need at least 2 players to start.'); return; }
-  clearAllTimers();
-  H.dealer = (H.dealer + 1) % seats.length;
-  H.round = E.createRound({ seats, dealer: H.dealer, allowTake: H.settings.allowTake, earlyPlay: H.settings.earlyPlay });
-  for (const id of seats) H.scores[id] ||= { rounds: 0, losses: 0, posSum: 0, given: 0, received: 0 };
-  H.roundNo++;
-  if (H.roundNo === 1) {
-    cloud.track('game_started', {
-      players: seats.length, rounds_setting: H.settings.rounds || 0, timer: H.settings.timer,
-      play_early: H.settings.earlyPlay ? 1 : 0, take_cards: H.settings.allowTake ? 1 : 0, crew: H.settings.crew ? 1 : 0,
-    });
-  }
-  H.phase = 'playing';
-  H.resolving = null; H.take = null; H.stuck = null; H.lastResult = null; H.final = null;
-  fxAll({ kind: 'roundStart', no: H.roundNo, leader: nameOf(H.round.turn) });
-  startTurnClock();
-  broadcast();
-}
-
-function hostEndRoundEarly() {
-  if (!H || H.phase !== 'playing') return;
-  clearAllTimers();
-  H.history.unshift({ no: H.roundNo, ended: true });
-  H.lastResult = { no: H.roundNo, ended: true, results: [] };
-  H.round = null; H.resolving = null; H.take = null; H.stuck = null;
-  H.phase = H.settings.rounds && H.roundNo >= H.settings.rounds ? 'over' : 'between';
-  if (H.phase === 'over') H.final = standings();
-  broadcast();
-}
-
-function hostEndGame() {
-  if (!H) return;
-  cloud.track('game_finished', { rounds: H.roundNo, players: Object.keys(H.scores).length });
-  clearAllTimers();
-  H.round = null; H.resolving = null; H.take = null;
-  H.phase = 'over';
-  H.final = standings();
-  broadcast();
-}
-
-function hostResetGame() {
-  H.scores = {}; H.history = []; H.roundNo = 0; H.lastResult = null; H.final = null; H.round = null;
-  // Forget players who left; keep everyone else in their seats.
-  H.players = H.players.filter((p) => !p.left && (p.online || p.isHost));
-}
-function hostRematch() { hostResetGame(); hostStartRound(); }
-function hostChangeSettings() { hostResetGame(); H.phase = 'lobby'; broadcast(); }
-
-function hostCloseRoom() {
-  if (!H) return;
-  clearAllTimers();
-  for (const p of H.players) if (p.conn) { try { p.conn.send({ t: 'closed' }); } catch {} }
-  const peer = H.peer;
-  H = null;
-  setTimeout(() => { try { peer.destroy(); } catch {} }, 300);
-}
-
-// ---------- Playing ----------
-
-function canAct(pid) {
-  const r = H.round;
-  return H.phase === 'playing' && r && !r.over && !H.resolving && !H.take && r.turn === pid;
-}
-
-function canEarly(pid) {
-  const r = H.round;
-  return H.phase === 'playing' && r && !r.over && !H.resolving && !H.take && E.earlyCards(r, pid).length > 0;
-}
-
-function hostPlay(p, card) {
-  const r = H.round;
-  if (!canAct(p.id) && !canEarly(p.id)) { sendTo(p, { t: 'error', msg: H.take ? 'Wait for the answer to the card request.' : 'Wait for your turn.' }); broadcast(); return; }
-  const res = E.play(r, p.id, card);
-  if (!res.ok) { sendTo(p, { t: 'error', msg: res.error }); broadcast(); return; }
-  if (res.events.length === 1 && res.events[0].early) { broadcast(); return; } // turn and timer carry on
-  afterEvents(res.events);
-}
-
-function afterEvents(events) {
-  const r = H.round;
-  for (const e of events) {
-    if (e.type === 'thulla') fxAll({ kind: 'thulla', giver: nameOf(e.giver), receiver: nameOf(e.receiver), receiverId: e.receiver, count: e.count, jumped: e.jumped });
-    if (e.type === 'finish' && !e.cancelled) fxAll({ kind: 'finish', id: e.id, name: nameOf(e.id), pos: e.pos });
-    if (e.type === 'take') fxAll({ kind: 'take', from: nameOf(e.from), to: nameOf(e.to), count: e.count });
-  }
-  clearTimer('turn');
-  if (events.some((e) => e.type === 'discard' || e.type === 'thulla')) {
-    H.resolving = { seq: ++H.seq, ...r.lastTrick };
-    H.stuck = null;
-    broadcast();
-    H.timers.resolve = setTimeout(() => {
-      H.resolving = null;
-      if (r.over) hostFinishRound();
-      else { startTurnClock(); broadcast(); }
-    }, RESOLVE_MS);
-    return;
-  }
-  startTurnClock();
-  broadcast();
-}
-
-function startTurnClock() {
-  clearTimer('turn');
-  const r = H.round;
-  H.turnDeadline = 0;
-  if (!r || r.over || H.resolving || H.take || H.phase !== 'playing') { refreshStuck(); return; }
-  if (H.settings.timer) {
-    const ms = H.settings.timer * 1000;
-    const turnNo = r.turnNo;
-    H.turnDeadline = Date.now() + ms;
-    H.timers.turn = setTimeout(() => hostAutoPlay(turnNo), ms + 150);
-  }
-  refreshStuck();
-}
-
-function hostAutoPlay(turnNo) {
-  const r = H?.round;
-  if (!r || r.over || r.turnNo !== turnNo || H.resolving || H.take) return;
-  const id = r.turn;
-  const card = E.autoCard(r, id);
-  if (!card) return;
-  const res = E.play(r, id, card);
-  if (!res.ok) return;
-  fxAll({ kind: 'auto', id, name: nameOf(id), card });
-  afterEvents(res.events);
-}
-
-function refreshStuck() {
-  if (!H) return;
-  clearTimer('stuck');
-  const r = H.round;
-  if (!r || r.over || H.phase !== 'playing' || H.settings.timer || H.resolving || H.take) { H.stuck = null; return; }
-  const p = byId(r.turn);
-  if (p && !p.online) {
-    if (!H.stuck || H.stuck.turnNo !== r.turnNo) H.stuck = { turnNo: r.turnNo, since: Date.now() };
-    const wait = H.stuck.since + STUCK_MS - Date.now();
-    if (wait > 0) H.timers.stuck = setTimeout(broadcast, wait + 50);
-  } else {
-    H.stuck = null;
-  }
-}
-
-function hostPlayFor() {
-  const r = H?.round;
-  if (!r || !H.stuck || r.turnNo !== H.stuck.turnNo) return;
-  hostAutoPlay(r.turnNo);
-}
-
-// ---------- Giving up (two players left) ----------
-
-function hostGiveUp(p) {
-  const r = H.round;
-  if (H.phase !== 'playing' || !r || r.over || H.resolving || !E.canGiveUp(r, p.id)) {
-    sendTo(p, { t: 'error', msg: 'You can only give up when two players are left.' });
-    return;
-  }
-  if (H.take) { clearTimer('take'); H.take = null; }
-  clearAllTimers();
-  const res = E.giveUp(r, p.id);
-  cloud.track('give_up');
-  if (!res.ok) { sendTo(p, { t: 'error', msg: res.error }); return; }
-  fxAll({ kind: 'gaveUp', id: p.id, name: p.name });
-  hostFinishRound();
-}
-
-// ---------- Quick chat (fixed phrases only) ----------
-
-function hostChat(p, i) {
-  if (!Number.isInteger(i) || i < 0 || i >= CHAT_PHRASES.length) return;
-  const now = Date.now();
-  if (now - (p.lastChat || 0) < 1500) return;   // no spamming
-  p.lastChat = now;
-  fxAll({ kind: 'chat', id: p.id, i });
-}
-
-// ---------- Taking the next player's cards ----------
-
-function hostTakeAsk(p) {
-  const r = H.round;
-  if (!canAct(p.id)) return sendTo(p, { t: 'error', msg: 'You can only ask on your turn, before you lead.' });
-  const { target, reason } = E.takeTarget(r, p.id);
-  if (!target) return sendTo(p, { t: 'error', msg: reason });
-  const t = byId(target);
-  if (!t || !t.online) return sendTo(p, { t: 'error', msg: `${nameOf(target)} is offline right now.` });
-  E.markTakeAsked(r);
-  clearTimer('turn');
-  H.turnDeadline = 0;
-  H.take = { from: p.id, to: target, until: Date.now() + TAKE_MS };
-  H.timers.take = setTimeout(() => hostTakeResolve(false, 'timeout'), TAKE_MS);
-  fxAll({ kind: 'takeAsk', from: p.name, to: t.name, toId: t.id });
-  refreshStuck();
-  broadcast();
-}
-
-function hostTakeReply(p, accept) {
-  if (!H.take || H.take.to !== p.id) return;
-  hostTakeResolve(accept, 'answer');
-}
-
-function hostTakeResolve(accept, why) {
-  const tk = H.take;
-  if (!tk) return;
-  clearTimer('take');
-  H.take = null;
-  const r = H.round;
-  if (accept && r && !r.over && r.turn === tk.from) {
-    afterEvents(E.applyTake(r, tk.from, tk.to));
-    return;
-  }
-  fxAll({ kind: 'takeNo', from: nameOf(tk.from), to: nameOf(tk.to), why });
-  startTurnClock();
-  broadcast();
-}
-
-// ---------- Round end and scores ----------
-
-function hostFinishRound() {
-  const r = H.round;
-  clearAllTimers();
-  const pos = E.positions(r);
-  const results = r.seats.map((id) => ({
-    id, name: nameOf(id), pos: pos[id], lost: id === r.loser,
-    given: r.stats[id].given, received: r.stats[id].received,
-  })).sort((a, b) => a.pos - b.pos);
-  for (const x of results) {
-    const s = H.scores[x.id];
-    s.rounds++; s.losses += x.lost ? 1 : 0; s.posSum += x.pos; s.given += x.given; s.received += x.received;
-  }
-  H.history.unshift({ no: H.roundNo, loser: nameOf(r.loser), players: r.seats.length, gaveUp: Boolean(r.gaveUp) });
-  H.lastResult = { no: H.roundNo, ended: false, loser: r.loser, results, gaveUp: Boolean(r.gaveUp) };
-  const gameOver = Boolean(H.settings.rounds && H.roundNo >= H.settings.rounds);
-  cloud.track('round_finished', { players: results.length, round: H.roundNo, gave_up: r.gaveUp ? 1 : 0, tricks: r.tricks });
-  H.phase = gameOver ? 'over' : 'between';
-  H.round = null;
-  if (gameOver) H.final = standings();
-  fxAll({ kind: 'roundOver', loser: nameOf(r.loser), loserId: r.loser });
-
-  // Each signed-in player saves their own stats.
-  for (const x of results) {
-    const p = byId(x.id);
-    if (p) sendTo(p, { t: 'roundEnd', key: `${H.code}-${H.roundNo}-${H.seq}`, mine: { pos: x.pos, players: results.length, lost: x.lost, given: x.given, received: x.received } });
-  }
-  // Host saves the round to the crew.
-  if (H.settings.crew && cloud.getUser()) {
-    const crewName = H.settings.crew;
-    cloud.saveCrewRound(crewName, {
-      room: H.code,
-      loser: nameOf(r.loser),
-      players: results.map(({ name, pos, lost, given, received }) => ({ name, pos, lost, given, received })),
-    }).then((saved) => {
-      if (!H || H.settings.crew !== crewName) return;
-      H.allTime = saved;
-      H.crewNote = `Saved to “${crewName}”.`;
-      broadcast();
-    }).catch((e) => {
-      if (!H) return;
-      H.crewNote = 'Couldn’t save this round to the crew. Check your connection.';
-      if (DEBUG) console.warn(e);
-      broadcast();
-    });
-  } else if (H.settings.crew) {
-    H.crewNote = 'Not saved: the host isn’t signed in.';
-  }
-  broadcast();
-}
-
-function standings() {
-  const rows = Object.entries(H.scores).map(([id, s]) => {
-    const p = byId(id);
-    return {
-      id, name: p ? p.name : '?', color: p ? p.color : 0, gone: !p || p.left || !p.online,
-      rounds: s.rounds, losses: s.losses, avg: s.rounds ? s.posSum / s.rounds : 0,
-      given: s.given, received: s.received,
-    };
-  });
-  const avgKey = (x) => (x.rounds ? x.avg : Infinity);
-  rows.sort((a, b) => a.losses - b.losses || avgKey(a) - avgKey(b) || b.rounds - a.rounds || a.name.localeCompare(b.name));
-  return rows;
-}
-
-function allTimeRows() {
-  if (!H.allTime) return null;
-  const rows = Object.values(H.allTime.players || {}).map((p) => ({
-    name: p.name, rounds: p.rounds, losses: p.losses, avg: p.rounds ? p.posSum / p.rounds : 0, given: p.given,
-  }));
-  rows.sort((a, b) => (a.losses / (a.rounds || 1)) - (b.losses / (b.rounds || 1)) || a.avg - b.avg || b.rounds - a.rounds);
-  return { name: H.allTime.name || H.settings.crew, rounds: H.allTime.rounds || 0, rows: rows.slice(0, 20) };
-}
-
-// ---------- Views (what each player is allowed to see) ----------
-
-function buildView(pid) {
-  const r = H.round;
-  const now = Date.now();
-  const inGame = (p) => (r && r.seats.includes(p.id)) || H.scores[p.id];
-  const players = H.players.filter((p) => !p.left || inGame(p)).map((p) => ({
-    id: p.id, name: p.name, color: p.color, online: p.online, left: p.left, isHost: p.isHost, photo: p.photo,
-    inRound: Boolean(r && r.seats.includes(p.id)),
-    count: r && r.hands[p.id] ? r.hands[p.id].length : null,
-    safe: r ? r.out.indexOf(p.id) + 1 : 0,
-  }));
-  let round = null;
-  if (r && H.phase === 'playing') {
-    const take = E.takeTarget(r, pid);
-    const stuckReady = H.stuck && now - H.stuck.since >= STUCK_MS;
-    round = {
-      seats: r.seats,
-      turn: r.turn,
-      first: r.first,
-      ledSuit: H.resolving ? null : r.ledSuit,
-      trick: H.resolving ? H.resolving.cards : r.trick,
-      resolving: H.resolving ? { seq: H.resolving.seq, kind: H.resolving.kind, winner: H.resolving.winner, giver: H.resolving.giver } : null,
-      discarded: r.tricks > 0,
-      hand: r.hands[pid] ? r.hands[pid].slice() : null,
-      legal: canAct(pid) ? E.legalCards(r, pid) : [],
-      early: canEarly(pid) ? E.earlyCards(r, pid) : [],
-      myTurn: canAct(pid),
-      timer: H.settings.timer,
-      turnMs: H.turnDeadline ? Math.max(0, H.turnDeadline - now) : 0,
-      take: H.take ? { from: H.take.from, to: H.take.to, ms: Math.max(0, H.take.until - now) } : null,
-      canTake: canAct(pid) && Boolean(take.target),
-      canGiveUp: !H.resolving && E.canGiveUp(r, pid),
-      takeTarget: take.target,
-      playFor: pid === hostId() && stuckReady ? r.turn : null,
-      stuck: H.stuck ? r.turn : null,
-    };
-  }
-  return {
-    code: H.code,
-    phase: H.phase,
-    you: pid,
-    hostId: hostId(),
-    settings: { ...H.settings },
-    roundNo: H.roundNo,
-    players,
-    round,
-    standings: standings(),
-    history: H.history.slice(0, 15),
-    result: H.lastResult,
-    final: H.final,
-    allTime: allTimeRows(),
-    crewNote: pid === hostId() ? H.crewNote : '',
-  };
-}
-
-const hostId = () => H.players.find((p) => p.isHost)?.id;
-
-function sendTo(p, msg) {
-  if (p.isHost) { clientMessage(msg); return; }
-  if (p.conn && p.online) { try { p.conn.send(msg); } catch {} }
-}
-
-let broadcastQueued = false;
-function broadcast() {
-  if (!H || broadcastQueued) return;
-  broadcastQueued = true;
-  queueMicrotask(() => {
-    broadcastQueued = false;
-    if (!H) return;
-    for (const p of H.players) {
-      if (p.isHost || (p.online && p.conn)) sendTo(p, { t: 'state', v: buildView(p.id) });
-    }
-  });
-}
-
-function fxAll(fx, exceptId) {
-  for (const p of H.players) if (p.id !== exceptId && (p.isHost || p.online)) sendTo(p, { t: 'fx', fx });
-}
-
-// ===========================================================================
 // CLIENT: every player, including the host's own screen
 // ===========================================================================
-const me = { role: null, id: null, code: null, name: '', peer: null, conn: null, view: null, joining: false, closedByHost: false };
+const me = { role: null, id: null, code: null, name: '', view: null, joining: false };
+
+const link = createRoomLink('thulla', {
+  hello: () => {
+    const u = cloud.getUser();
+    return { name: me.name, photo: u?.photo || '' };
+  },
+  message: (msg) => {
+    if (msg.t === 'welcome') {
+      const fresh = !me.code;
+      me.joining = false;
+      setBusy(false);
+      me.id = msg.id;
+      me.code = msg.code;
+      saveSession({ code: msg.code, name: me.name });
+      if (fresh) cloud.track('room_joined');
+      const url = new URL(location.href); url.searchParams.set('room', msg.code); history.replaceState(null, '', url);
+      $('#closed-overlay').hidden = true;
+      return;
+    }
+    if (msg.t === 'reject') {
+      me.joining = false;
+      setBusy(false);
+      if (me.view) showClosed(msg.reason, !msg.gone);
+      else { showScreen('home'); showHomeError(msg.reason); }
+      return;
+    }
+    clientMessage(msg);
+  },
+  reconnecting: () => toast('Connection lost. Reconnecting…'),
+  gone: (reason) => {
+    clearSession();
+    showClosed(reason || 'The room closed.', false);
+  },
+  failed: (text) => {
+    me.joining = false;
+    setBusy(false);
+    showScreen('home');
+    showHomeError(text);
+  },
+});
 
 function send(msg) {
-  if (me.role === 'host') hostReceive(null, msg);
-  else if (me.conn && me.conn.open) me.conn.send(msg);
-  else toast('Not connected to the host.');
+  if (link.connected) link.send(msg);
+  else toast('Not connected to the room.');
 }
 
 function saveSession(s) { try { sessionStorage.setItem('thulla-session', JSON.stringify(s)); } catch {} }
@@ -686,71 +156,42 @@ function clearSession() { try { sessionStorage.removeItem('thulla-session'); } c
 function joinRoom(code, name) {
   if (me.joining) return;
   me.joining = true;
-  me.closedByHost = false;
+  me.name = name;
+  me.code = null;
   setBusy(true);
   showHomeError('');
-  const peer = new window.Peer();
-  me.peer = peer;
-  let done = false;
-  const fail = (msg) => {
-    if (done) return;
-    done = true; me.joining = false; setBusy(false);
-    try { peer.destroy(); } catch {}
-    if (me.view) showClosed(msg, true); else { showScreen('home'); showHomeError(msg); }
-  };
-  const timeout = setTimeout(() => fail('Couldn’t reach that room. Check the code, and that the host still has the game open.'), 15000);
-  peer.on('open', () => {
-    const conn = peer.connect(PEER_PREFIX + code, { reliable: true });
-    conn.on('open', () => {
-      const u = cloud.getUser();
-      conn.send({ t: 'hello', name, cid, uid: u?.uid || '', photo: u?.photo || '' });
-    });
-    conn.on('data', (msg) => {
-      if (msg?.t === 'welcome') {
-        clearTimeout(timeout);
-        done = true; me.joining = false; setBusy(false);
-        me.role = 'guest'; me.id = msg.id; me.code = code; me.name = name; me.conn = conn;
-        saveSession({ code, name, role: 'guest' });
-        cloud.track('room_joined');
-        const url = new URL(location.href); url.searchParams.set('room', code); history.replaceState(null, '', url);
-        $('#closed-overlay').hidden = true;
-        return;
-      }
-      if (msg?.t === 'error' && !done) { clearTimeout(timeout); fail(msg.msg); return; }
-      clientMessage(msg);
-    });
-    conn.on('close', () => {
-      if (me.conn !== conn) return;
-      me.conn = null;
-      if (me.closedByHost) return;
-      showClosed('Lost the connection to the host. If they still have the game open, rejoin to get your cards back.', true);
-    });
-  });
-  peer.on('error', (err) => {
-    clearTimeout(timeout);
-    if (!done) fail(networkError(err));
-    else if (err.type === 'peer-unavailable' || err.type === 'network') {
-      if (me.view && !me.closedByHost) showClosed('Lost the connection to the host. If they still have the game open, rejoin to get your cards back.', true);
-    }
-  });
+  link.join(code);
+}
+
+function hostRoom(name, isPublic = false) {
+  if (me.joining) return;
+  me.joining = true;
+  me.name = name;
+  me.code = null;
+  setBusy(true);
+  showHomeError('');
+  link.host(isPublic);
 }
 
 function leaveRoom() {
-  if (me.role === 'host') {
-    hostCloseRoom();
-  } else if (me.conn) {
-    try { me.conn.send({ t: 'leave' }); } catch {}
-    const conn = me.conn; me.conn = null;
-    setTimeout(() => { try { conn.close(); } catch {} }, 150);
-  }
-  const peer = me.peer;
-  setTimeout(() => { try { peer && peer.destroy(); } catch {} }, 400);
-  Object.assign(me, { role: null, id: null, code: null, peer: null, conn: null, view: null });
+  if (link.connected) send({ t: 'leave' });
+  setTimeout(() => link.close(), 150);
+  Object.assign(me, { role: null, id: null, code: null, view: null, joining: false });
   clearSession();
   const url = new URL(location.href); url.searchParams.delete('room'); history.replaceState(null, '', url);
   ['#round-overlay', '#over-overlay', '#scores-overlay', '#take-overlay', '#closed-overlay'].forEach((s) => { $(s).hidden = true; });
   showScreen('home');
 }
+
+// The host's controls: the server only acts on these from whoever is host right now
+const hostSetSettings = (patch) => send({ t: 'settings', patch });
+const hostUseCrew = (name) => send({ t: 'crew', name: String(name || '').trim() });
+const hostStartRound = () => send({ t: 'start' });
+const hostEndRoundEarly = () => send({ t: 'endRound' });
+const hostEndGame = () => send({ t: 'endGame' });
+const hostRematch = () => send({ t: 'rematch' });
+const hostChangeSettings = () => send({ t: 'changeSettings' });
+const hostPlayFor = () => send({ t: 'playFor' });
 
 function showClosed(text, canRetry) {
   $('#closed-text').textContent = text;
@@ -765,24 +206,8 @@ function clientMessage(msg) {
     case 'fx': onFx(msg.fx); break;
     case 'error': toast(msg.msg, 3200); if (me.view?.phase === 'lobby') $('#lobby-error').textContent = msg.msg; break;
     case 'note': toast(msg.msg, 3500); break;
-    case 'roundEnd': savePersonalRound(msg); break;
-    case 'closed':
-      me.closedByHost = true;
-      showClosed('The host closed the room.', false);
-      clearSession();
-      break;
     default: break;
   }
-}
-
-async function savePersonalRound(msg) {
-  if (!cloud.getUser()) return;
-  try {
-    const key = 'thulla-saved-' + msg.key;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, '1');
-    await cloud.saveMyRound(msg.mine);
-  } catch (e) { if (DEBUG) console.warn('stats save failed', e); }
 }
 
 // ---------- Effects ----------
@@ -860,6 +285,7 @@ function showScreen(name) {
 function applyView(v) {
   prevView = me.view;
   me.view = v;
+  me.role = v.hostId === v.you ? 'host' : 'guest';
   turnEndsAt = v.round?.turnMs ? Date.now() + v.round.turnMs : 0;
   takeEndsAt = v.round?.take ? Date.now() + v.round.take.ms : 0;
   if (v.round?.myTurn && !(prevView?.round?.myTurn)) sfx.turn();
@@ -907,7 +333,7 @@ function renderLobby(v) {
     $('#set-take').checked = !!s.allowTake;
     $('#set-early').checked = !!s.earlyPlay;
     if (document.activeElement !== $('#set-crew')) $('#set-crew').value = s.crew || '';
-    $('#crew-note').textContent = v.crewNote || (cloud.getUser() ? 'Signed-in hosts can save rounds to a crew.' : 'Sign in (gear icon) to save crew scores.');
+    $('#crew-note').textContent = v.crewNote || 'Name a crew to keep its scores across games.';
     const online = list.filter((p) => p.online).length;
     $('#start-btn').disabled = online < 2;
     $('#start-btn').textContent = online < 2 ? 'Waiting for players' : `Start game (${online} players)`;
@@ -1301,7 +727,7 @@ function animateTrickAway(res) {
 // ===========================================================================
 // Home, lobby and game controls
 // ===========================================================================
-function setBusy(b) { $('#host-btn').disabled = b; $('#join-btn').disabled = b; $('#join-btn').textContent = b ? 'Connecting…' : 'Join room'; }
+function setBusy(b) { $('#host-btn').disabled = b; $('#quick-btn').disabled = b; $('#join-btn').disabled = b; $('#join-btn').textContent = b ? 'Connecting…' : 'Join room'; }
 function showHomeError(m) { $('#home-error').textContent = m || ''; }
 
 function readName() {
@@ -1313,16 +739,27 @@ function readName() {
 
 $('#host-btn').addEventListener('click', () => {
   const n = readName(); if (!n) return;
-  if (!window.Peer) { showHomeError('Couldn’t load the connection library. Check your internet and reload.'); return; }
   showHomeError('');
-  hostStart(n);
+  hostRoom(n, false);
+});
+
+// Quick Play: a public room that's waiting for players, or a new public one
+$('#quick-btn').addEventListener('click', async () => {
+  const n = readName(); if (!n) return;
+  showHomeError('');
+  try {
+    const code = await quickPlay('thulla');
+    if (code) joinRoom(code, n);
+    else hostRoom(n, true);
+  } catch (err) {
+    showHomeError(err.message);
+  }
 });
 
 function doJoin() {
   const n = readName(); if (!n) return;
   const code = $('#code-input').value.trim().toUpperCase();
   if (!/^[A-Z]{4}$/.test(code)) { showHomeError('Room codes are 4 letters.'); $('#code-input').focus(); return; }
-  if (!window.Peer) { showHomeError('Couldn’t load the connection library. Check your internet and reload.'); return; }
   joinRoom(code, n);
 }
 $('#join-btn').addEventListener('click', doJoin);
@@ -1345,9 +782,7 @@ $('#set-crew').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostU
 $('#start-btn').addEventListener('click', () => { $('#lobby-error').textContent = ''; hostStartRound(); });
 
 function confirmLeave() {
-  const msg = me.role === 'host'
-    ? 'Leave and close the room? The game ends for everyone.'
-    : 'Leave the room? You can rejoin later with the same name.';
+  const msg = 'Leave the room? You can rejoin later with the same name.';
   if (confirm(msg)) leaveRoom();
 }
 $('#lobby-leave').addEventListener('click', confirmLeave);
@@ -1453,14 +888,10 @@ $('#closed-home').addEventListener('click', () => { $('#closed-overlay').hidden 
 $('#closed-retry').addEventListener('click', () => {
   const code = me.code, name = me.name;
   $('#closed-overlay').hidden = true;
-  try { me.peer && me.peer.destroy(); } catch {}
   joinRoom(code, name);
 });
 
 window.addEventListener('resize', () => { if (me.view?.round) renderHand(me.view); });
-window.addEventListener('beforeunload', (e) => {
-  if (me.role === 'host' && H && H.players.some((p) => !p.isHost && p.online)) { e.preventDefault(); e.returnValue = ''; }
-});
 
 // ===========================================================================
 // Settings, account and stats
@@ -1508,7 +939,7 @@ function renderAccount() {
   const u = cloud.getUser();
   $('#account-out').hidden = !!u;
   $('#account-in').hidden = !u;
-  $('#stats-section').hidden = !u;
+  $('#stats-section').hidden = false;
   $('#home-account-label').textContent = u ? u.name.split(' ')[0] : 'Sign in';
   $('#home-avatar').hidden = !(u && u.photo);
   if (u) {
@@ -1522,7 +953,6 @@ function renderAccount() {
 }
 
 async function loadStats() {
-  if (!cloud.getUser()) return;
   const grid = $('#stat-grid');
   grid.innerHTML = '<p class="muted">Loading…</p>';
   try {
@@ -1532,7 +962,7 @@ async function loadStats() {
     const cell = (b, l) => `<div class="stat"><b>${b}</b><span>${l}</span></div>`;
     grid.innerHTML = cell(s.rounds, 'Rounds played') + cell(s.losses, 'Times lost') + cell(pct, 'Loss rate')
       + cell(avg, 'Avg finish') + cell(s.given, 'Thullas given') + cell(s.received, 'Thullas received');
-    $('#stats-note').textContent = s.rounds ? 'Saved from every round you finish while signed in.' : 'Finish a round while signed in to start your stats.';
+    $('#stats-note').textContent = s.rounds ? 'Saved from every round you finish.' : 'Finish a round to start your stats.';
   } catch {
     grid.innerHTML = '';
     $('#stats-note').textContent = 'Couldn’t load your stats. Check your connection.';
@@ -1557,13 +987,9 @@ try { $('#name-input').value = localStorage.getItem('thulla-name') || $('#name-i
   const params = new URLSearchParams(location.search);
   const room = (params.get('room') || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
   const sess = loadSession();
-  if (sess?.role === 'host') {
-    clearSession();
-    showHomeError('Your room closed when this page reloaded. Host a new room to play again.');
-  }
   if (room) {
     $('#code-input').value = room;
-    if (sess && sess.role === 'guest' && sess.code === room && sess.name && window.Peer) {
+    if (sess && sess.code === room && sess.name) {
       $('#name-input').value = sess.name;
       joinRoom(room, sess.name);
     } else {
@@ -1572,4 +998,4 @@ try { $('#name-input').value = localStorage.getItem('thulla-name') || $('#name-i
   }
 }
 
-if (DEBUG) window.thullaDebug = { me, get host() { return H; }, E, onFx };
+if (DEBUG) window.thullaDebug = { me, link, E, onFx };
