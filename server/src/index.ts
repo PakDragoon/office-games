@@ -2,7 +2,7 @@ import type { Env } from './env';
 import { GAMES } from './games';
 import { CODE_RE, randomCode } from './core/util';
 import { newGuest, verifyFirebase, verifyGuest } from './auth';
-import { crewTable, playerKey, playerStats } from './db/stats';
+import { crewTable, deletePlayer, mergePlayer, playerKey, playerStats } from './db/stats';
 import { RATED_GAMES, ratingFor } from './db/ratings';
 import { handleDaily, rollDaily } from './daily';
 import { isReplayId, pruneReplays, replayStore } from './db/replays';
@@ -51,6 +51,23 @@ async function requestPlayer(request: Request, env: Env): Promise<string | null>
   return guest ? playerKey(null, guest) : null;
 }
 
+/**
+ * Both identities a request may carry. `user` / `guest` are player ids ("u:..." / "g:..."), or null when that
+ * credential is missing or doesn't check out. `badUser` / `badGuest` say a credential WAS sent but is no good.
+ */
+async function requestIdentities(request: Request, env: Env) {
+  const auth = request.headers.get('Authorization') || '';
+  const guestToken = request.headers.get('X-Guest');
+  const firebase = auth.startsWith('Bearer ') ? await verifyFirebase(auth.slice(7), env.FIREBASE_PROJECT) : null;
+  const guestId = guestToken ? await verifyGuest(guestToken, env.SERVER_SECRET || 'dev-only-secret-change-me') : null;
+  return {
+    user: firebase ? playerKey(firebase.uid, null) : null,
+    guest: guestId ? playerKey(null, guestId) : null,
+    badUser: auth.startsWith('Bearer ') && !firebase,
+    badGuest: Boolean(guestToken) && !guestId,
+  };
+}
+
 async function api(request: Request, env: Env, parts: string[]): Promise<Response> {
   const [, area, a, b] = parts;   // ["api", area, ...]
   if (area === 'guest' && request.method === 'POST') {
@@ -65,6 +82,25 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
     if (!player) return json({ error: 'not signed in' }, 401);
     const [stats, rating] = await Promise.all([playerStats(env.DB, player, game), ratingFor(env.DB, game, player)]);
     return json({ stats, rating });
+  }
+  if (area === 'me' && a === 'merge' && request.method === 'POST') {
+    // A guest signed in with Google: move the guest's stats to the account. Needs BOTH proofs: a Firebase token for the
+    // account and a guest token (only this server can sign one, so nobody can claim someone else's guest stats).
+    const who = await requestIdentities(request, env);
+    if (!who.user) return json({ error: 'not signed in', code: 'bad-user' }, 401);
+    if (!who.guest) return json({ error: 'no valid guest to merge', code: 'bad-guest' }, 401);
+    await mergePlayer(env.DB, who.guest, who.user);
+    return json({ ok: true });
+  }
+  if (area === 'me' && !a && request.method === 'DELETE') {
+    // Delete my data: the account and/or the guest this request proves. Both are deleted when both are sent.
+    // A Google token that doesn't check out is refused (not ignored), so nobody thinks the account went when it didn't.
+    const who = await requestIdentities(request, env);
+    if (who.badUser) return json({ error: 'not signed in', code: 'bad-user' }, 401);
+    const ids = [who.user, who.guest].filter((id): id is string => Boolean(id));
+    if (!ids.length) return json({ error: 'not signed in', code: 'bad-guest' }, 401);
+    await deletePlayer(env.DB, ids);
+    return json({ ok: true });
   }
   const game = area;
   if (!GAMES[game]) return json({ error: 'unknown game' }, 404);

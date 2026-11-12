@@ -4,7 +4,7 @@ import { api } from '../../shared/cloud.js';
 import { KINDS } from './rounds.js';
 
 export {
-  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, api,
+  getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData, api,
 } from '../../shared/cloud.js';
 
 /** My Guesstimate stats (signed in, or this browser's guest id), in the shape the settings sheet shows. */

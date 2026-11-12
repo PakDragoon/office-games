@@ -4,7 +4,7 @@ import { api } from '../../shared/cloud.js';
 import { dailyParts, formatMs } from './engine.js';
 
 export {
-  api, getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track,
+  api, getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData,
 } from '../../shared/cloud.js';
 
 /** My Melon Burst stats (signed in, or this browser's guest id). */

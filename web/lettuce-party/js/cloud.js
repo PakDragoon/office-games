@@ -2,7 +2,7 @@
 // (../../shared/cloud.js); stats are written by the server at the end of each round.
 import { api, getUser, signOutUser } from '../../shared/cloud.js';
 
-export { onUser, restore, signIn, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track } from '../../shared/cloud.js';
+export { onUser, restore, signIn, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData } from '../../shared/cloud.js';
 
 export const currentUser = () => getUser();
 export const signOut = () => signOutUser();

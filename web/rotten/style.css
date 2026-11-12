@@ -605,3 +605,9 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .daily-board .sq { font-size: 0.8rem; letter-spacing: -0.1em; }
 .daily-board .t { font-variant-numeric: tabular-nums; }
 @media (max-width: 420px) { .daily-board .sq { display: none; } .daily-board .board li { grid-template-columns: 2rem 1fr auto; } }
+
+/* Delete my data (built by mountDeleteData in web/shared/cloud.js) */
+.delete-data { display: grid; gap: 0.5rem; justify-items: start; margin-top: 0.5rem; padding-top: 0.9rem; border-top: 1px solid var(--line); }
+.delete-data .delete-data-btn { border-color: var(--danger); color: var(--danger); }
+.delete-data .delete-data-btn.sure { background: var(--danger); border-color: var(--danger); color: #fff; }
+.delete-data .delete-data-note { margin: 0; text-align: left; }
