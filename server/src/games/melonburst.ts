@@ -1,5 +1,5 @@
-// Melon Burst rooms on the server: the host code from web/melonburst/js/app.js, moved here (the daily
-// word and practice run in the browser; the global daily word is server/src/daily/melonburst.ts). Each player is sent their own view, so
+// Melon Burst rooms on the server: the host code from web/melonburst/js/app.js, moved here (practice
+// runs in the browser; the global daily word is server/src/daily/melonburst.ts). Each player is sent their own view, so
 // nobody receives a word or letters they shouldn't see.
 import * as E from '../../../web/melonburst/js/engine.js';
 import COMMON_TEXT from '../../../web/melonburst/words/common.txt';
