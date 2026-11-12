@@ -62,3 +62,28 @@ export async function verifyGuest(token: unknown, secret: string): Promise<strin
   if (!id.startsWith('g_')) return null;
   return (await hmac(secret, id)) === token.slice(dot + 1) ? id : null;
 }
+
+// ---------- Hub tickets ----------
+// A browser can't put an Authorization header on a WebSocket, and a Firebase token must not sit in a URL. So the
+// browser first asks (POST /api/friends/ticket, normal auth) for a ticket that is good for one minute and names
+// the player, then opens the socket with it. Only this server can sign one.
+
+const TICKET_MS = 60_000;
+const TICKET_PLAYER = /^u:[A-Za-z0-9_-]{1,128}$/;
+
+export async function makeTicket(secret: string, player: string, now = Date.now()): Promise<string> {
+  const exp = now + TICKET_MS;
+  return `${exp}.${await hmac(secret, `hub|${exp}|${player}`)}.${player}`;
+}
+
+/** The player id a fresh, genuine ticket was made for, else null. */
+export async function verifyTicket(secret: string, ticket: unknown, now = Date.now()): Promise<string | null> {
+  if (typeof ticket !== 'string' || ticket.length > 300) return null;
+  const a = ticket.indexOf('.');
+  const b = ticket.indexOf('.', a + 1);
+  if (a < 1 || b < 0) return null;
+  const exp = Number(ticket.slice(0, a));
+  const player = ticket.slice(b + 1);
+  if (!Number.isFinite(exp) || exp < now || exp > now + TICKET_MS + 5000 || !TICKET_PLAYER.test(player)) return null;
+  return (await hmac(secret, `hub|${exp}|${player}`)) === ticket.slice(a + 1, b) ? player : null;
+}

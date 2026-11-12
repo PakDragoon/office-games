@@ -1,4 +1,5 @@
 import type { GameReport } from '../core/game';
+import { recentStatements } from './friends';
 
 export const playerKey = (uid: string | null, guest: string | null): string | null =>
   uid ? `u:${uid}` : guest ? `g:${guest}` : null;
@@ -139,6 +140,8 @@ export async function recordGame(db: D1Database, r: GameReport): Promise<string>
         now,
       ),
   );
+  // Who played with whom, for everyone's "Recent players" list (friends feature)
+  stmts.push(...recentStatements(db, r, now));
   await db.batch(stmts);
   if (!crewId) return '';
   const row = await db.prepare('SELECT games FROM crews WHERE id = ?1').bind(crewId).first<{ games: number }>();
@@ -296,6 +299,21 @@ export async function mergePlayer(db: D1Database, fromId: string, toId: string):
     db
       .prepare('INSERT OR IGNORE INTO replay_players (replay_id, player_id) SELECT replay_id, ?2 FROM replay_players WHERE player_id = ?1')
       .bind(fromId, toId),
+    // Recent players: the guest's own list moves to the account (newer sighting wins); lists that have the guest in
+    // them now point at the account. Rows that would collide, or that would make someone their own recent
+    // player, are dropped (the PLAYER_TABLES delete below takes the leftovers).
+    db
+      .prepare(
+        `INSERT INTO recent_players (owner, other, name, game, at, ref)
+         SELECT ?2, other, name, game, at, ref FROM recent_players WHERE owner = ?1 AND other != ?2
+         ON CONFLICT (owner, other) DO UPDATE SET
+           name = CASE WHEN excluded.at > at THEN excluded.name ELSE name END,
+           game = CASE WHEN excluded.at > at THEN excluded.game ELSE game END,
+           at = MAX(at, excluded.at)`,
+      )
+      .bind(fromId, toId),
+    db.prepare('UPDATE OR IGNORE recent_players SET other = ?2 WHERE other = ?1 AND owner != ?2').bind(fromId, toId),
+    db.prepare('DELETE FROM recent_players WHERE owner = other').bind(),
     ...PLAYER_TABLES.map(([table, column]) => db.prepare(`DELETE FROM ${table} WHERE ${column} = ?1`).bind(fromId)),
   ];
   await db.batch(stmts);
@@ -318,6 +336,14 @@ const PLAYER_TABLES: ReadonlyArray<readonly [table: string, column: string]> = [
   ['daily_sessions', 'player_id'],
   ['ratings', 'player_id'],
   ['replay_players', 'player_id'],
+  // Friends: a profile, both directions of every relationship (rows about me AND rows other people hold about me),
+  // presence, and recent players (my own list AND the other lists that name me).
+  ['friend_profiles', 'player_id'],
+  ['friends', 'player_id'],
+  ['friends', 'other_id'],
+  ['presence', 'player_id'],
+  ['recent_players', 'owner'],
+  ['recent_players', 'other'],
   ['players', 'id'],
 ];
 

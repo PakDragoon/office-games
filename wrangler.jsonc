@@ -14,10 +14,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "ROOMS", "class_name": "GameRoom" },
-      { "name": "LOBBY", "class_name": "Lobby" }
+      { "name": "LOBBY", "class_name": "Lobby" },
+      { "name": "HUB", "class_name": "Hub" }
     ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["GameRoom", "Lobby"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["GameRoom", "Lobby"] },
+    { "tag": "v2", "new_sqlite_classes": ["Hub"] }
+  ],
   "d1_databases": [
     {
       "binding": "DB",

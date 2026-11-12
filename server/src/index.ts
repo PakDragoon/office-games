@@ -7,9 +7,11 @@ import { RATED_GAMES, ratingFor } from './db/ratings';
 import { handleDaily, rollDaily } from './daily';
 import { isReplayId, pruneReplays, replayStore } from './db/replays';
 import { PRACTICE, practiceAllowed, recordPractice } from './practice';
+import { friendsApi, hubSocket } from './friends-api';
 
 export { GameRoom } from './do/GameRoom';
 export { Lobby } from './do/Lobby';
+export { Hub } from './do/Hub';
 
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' } });
@@ -68,7 +70,7 @@ async function requestIdentities(request: Request, env: Env) {
   };
 }
 
-async function api(request: Request, env: Env, parts: string[]): Promise<Response> {
+async function api(request: Request, env: Env, ctx: ExecutionContext, parts: string[]): Promise<Response> {
   const [, area, a, b] = parts;   // ["api", area, ...]
   if (area === 'guest' && request.method === 'POST') {
     // A signed guest id for someone who hasn't joined a room yet (daily puzzles, stats)
@@ -100,7 +102,13 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
     const ids = [who.user, who.guest].filter((id): id is string => Boolean(id));
     if (!ids.length) return json({ error: 'not signed in', code: 'bad-guest' }, 401);
     await deletePlayer(env.DB, ids);
+    // Their open tabs' Hub connections go too (a Hub that stayed would write their presence back)
+    for (const id of ids.filter((x) => x.startsWith('u:'))) ctx.waitUntil(env.HUB.get(env.HUB.idFromName(id)).kick().catch(() => undefined));
     return json({ ok: true });
+  }
+  if (area === 'friends') {
+    if (a === 'ws' && !b) return hubSocket(request, env);
+    return friendsApi(request, env, ctx, parts.slice(2).join('/'));
   }
   const game = area;
   if (!GAMES[game]) return json({ error: 'unknown game' }, 404);
@@ -146,13 +154,13 @@ async function api(request: Request, env: Env, parts: string[]): Promise<Respons
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     const parts = url.pathname.split('/').filter(Boolean);
     if (parts.length === 2 && parts[1] === 'ws' && GAMES[parts[0]]) return roomSocket(request, env, parts[0]);
     if (parts[0] === 'api') {
       try {
-        return await api(request, env, parts);
+        return await api(request, env, ctx, parts);
       } catch (err) {
         console.error('api error', url.pathname, err);
         return json({ error: 'server error' }, 500);

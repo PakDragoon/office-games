@@ -77,6 +77,15 @@ export class GameRoom extends DurableObject<Env> {
     return true;
   }
 
+  /** Is this Google account sitting in the room right now (a joined, open connection)? The Hub asks before it sends an invite. */
+  seated(uid: string): boolean {
+    if (!this.game) return false;
+    return this.ctx.getWebSockets().some((ws) => {
+      const att = ws.deserializeAttachment() as Attachment | null;
+      return Boolean(att && att.joined && att.uid === uid);
+    });
+  }
+
   async fetch(request: Request): Promise<Response> {
     if (request.headers.get('Upgrade') !== 'websocket') return new Response('Expected a WebSocket', { status: 426 });
     const pair = new WebSocketPair();
