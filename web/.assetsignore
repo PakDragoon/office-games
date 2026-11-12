@@ -1,0 +1,6 @@
+**/test/
+**/tools/
+**/package.json
+**/README.md
+**/firestore.rules
+**/.gitignore
