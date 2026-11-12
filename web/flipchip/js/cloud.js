@@ -25,7 +25,7 @@ function cpuRecord() {
 
 /** My Flipchip stats: room games from the server, games against the computer from this browser. */
 export async function getMyStats() {
-  const { stats } = await api('/api/me/stats?game=flipchip');
+  const { stats, rating } = await api('/api/me/stats?game=flipchip');
   const n = (k) => stats[k] || 0;
-  return { games: n('games'), wins: n('wins'), draws: n('draws'), ...cpuRecord() };
+  return { games: n('games'), wins: n('wins'), draws: n('draws'), rating: rating || null, ...cpuRecord() };
 }

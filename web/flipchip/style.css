@@ -598,3 +598,14 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .replay-missing { min-height: 100dvh; padding: 1.5rem; display: grid; place-items: center; }
 .missing-card { width: min(420px, 100%); display: grid; gap: 0.8rem; text-align: center; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 1.6rem 1.3rem; }
 .missing-card .btn { width: 100%; }
+
+/* Skill ratings: small and quiet next to names */
+.rt { margin-left: 0.4em; font-size: 0.78em; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rt-delta { margin-left: 0.4em; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rt-delta.up { color: var(--hit); }
+.rt-delta.down { color: var(--danger); }
+.my-rating { display: flex; align-items: baseline; gap: 0.6rem; margin: 0 0 0.2rem; }
+.my-rating b { font-size: 1.6rem; font-variant-numeric: tabular-nums; }
+.my-rating span { color: var(--muted); font-size: 0.9rem; }
+.rating-note { margin: 0 0 0.6rem; font-size: 0.8rem; color: var(--muted); }
+.result-rating { font-weight: 700; margin: 0; }

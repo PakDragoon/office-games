@@ -44,6 +44,31 @@ export interface GameReport {
   }>;
 }
 
+/** A rating as shown to players (the exact numbers stay on the server). */
+export interface RatingInfo {
+  rating: number;
+  rd: number;
+  /** Rated games so far. */
+  games: number;
+  /** Still settling: the number is a rough guess, shown with a question mark. */
+  provisional: boolean;
+}
+
+/** What one finished game did to one player's rating. */
+export interface RatingChange extends RatingInfo {
+  before: number;
+  delta: number;
+}
+
+/** One seat of a finished game, for rating. Seats with `bot: true` make the whole game unrated. */
+export interface RatedEntry {
+  uid: string | null;
+  guest: string | null;
+  /** Finishing place, 1 = best; equal places are a tie. */
+  place: number;
+  bot?: boolean;
+}
+
 export interface RoomCtx {
   readonly code: string;
   now(): number;
@@ -67,6 +92,10 @@ export interface RoomCtx {
   track(event: string, data?: Record<string, string | number>): void;
   /** Run async work (saving results, looking up a crew) and save the room again when it finishes. */
   later(work: () => Promise<void>): void;
+  /** Current ratings for these people, same order (null: no id, or the game isn't rated). */
+  ratings(game: string, who: Array<{ uid: string | null; guest: string | null }>): Promise<Array<RatingInfo | null>>;
+  /** Rate a finished game; same order as `entries`, null for anyone not rated (see db/ratings.ts for the rules). */
+  rate(game: string, entries: RatedEntry[]): Promise<Array<RatingChange | null>>;
   /** Tell the game's lobby (Quick Play / public list) how this room looks now. */
   listing(l: Listing | null): void;
 }
@@ -77,6 +106,8 @@ export interface Listing {
   players: number;
   max: number;
   host: string;
+  /** Average rating of the people seated (for rated games), for Quick Play matching. */
+  rating?: number | null;
 }
 
 export interface GameInstance {
