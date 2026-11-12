@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Everyone draws the same secret word, gives a word about it, or stops a hidden clock at a secret time. One of you doesn't know it. Find the liar.">
+  <title>The Liar</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><path d='M7 21c4-9 8 3 12-6 2-4 5-2 6 0' fill='none' stroke='%23e0566e' stroke-width='3' stroke-linecap='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="The Liar">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-sub" aria-hidden="true">draw it or say it, one of you is lying</span>
+      </h1>
+      <p class="lede">Everyone gets the same secret word and takes turns to draw it, or to say one word about it, or the same secret time to stop a hidden clock at. One of you doesn’t know it and is bluffing. Find the liar.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Keep this tab open while you play.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice steps">
+        <h2>How a game goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="7" y="5" width="18" height="22" rx="3"/><path d="M12 13h8M12 18h5"/></svg><b>Get your card</b><span>A secret word, or “you are the liar”.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24c5-10 9 2 14-7 2-4 4-3 6-1"/><circle cx="26" cy="16" r="1.6"/></svg><b>Draw or say a word</b><span>3 rounds, one turn each: a line on the drawing, or a word.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M9 16l5 5 9-11"/><rect x="4" y="4" width="24" height="24" rx="5"/></svg><b>Vote</b><span>Point at the liar. Majority decides.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="13" r="6"/><path d="M8 27c1.5-5 4.5-7 8-7s6.5 2 8 7"/><path d="M13 12.5h.01M19 12.5h.01"/></svg><b>Last chance</b><span>A caught liar can still steal it by naming the word.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Game</span>
+          <div class="seg" id="set-play" role="group" aria-label="Game">
+            <button type="button" data-value="draw"><b>Draw</b><small>Add to one shared drawing</small></button>
+            <button type="button" data-value="words"><b>Words</b><small>Type a word about it</small></button>
+            <button type="button" data-value="time"><b>Time</b><small>Stop a hidden clock</small></button>
+          </div>
+        </div>
+        <div class="setting" id="mode-setting">
+          <span class="setting-label">Each turn</span>
+          <div class="seg two" id="set-mode" role="group" aria-label="Each turn">
+            <button type="button" data-value="stroke"><b>One line</b><small>Pen down, draw, lift</small></button>
+            <button type="button" data-value="free"><b>Free draw</b><small>As much as you like, timed</small></button>
+          </div>
+        </div>
+        <label class="select-field" id="word-seconds-field">Seconds to type your word
+          <select id="set-word-seconds">
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="45">45 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+        <label class="select-field" id="discuss-field">Time to talk before the vote
+          <select id="set-discuss">
+            <option value="60">60 seconds</option>
+            <option value="120">120 seconds</option>
+            <option value="180">180 seconds</option>
+          </select>
+        </label>
+        <label class="select-field" id="seconds-field">Seconds per turn
+          <select id="set-seconds">
+            <option value="5">5 seconds</option>
+            <option value="8">8 seconds</option>
+            <option value="12">12 seconds</option>
+            <option value="15">15 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds</option>
+          </select>
+        </label>
+        <div class="setting" id="cats-setting">
+          <span class="setting-label">Words from</span>
+          <div class="seg two" id="set-cats-all" role="group" aria-label="Words from">
+            <button type="button" data-value="all"><b>All categories</b></button>
+            <button type="button" data-value="pick"><b>Pick categories</b></button>
+          </div>
+          <div class="cat-picks" id="cat-picks" hidden></div>
+        </div>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start game</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <span class="clock" id="clock" hidden>
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="clock-track" cx="18" cy="18" r="15"/><circle class="clock-fill" id="clock-fill" cx="18" cy="18" r="15" pathLength="1"/></svg>
+      <b id="clock-text"></b>
+    </span>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+  <div class="arena">
+    <section class="desk">
+      <div class="desk-head">
+        <span class="muted">Category</span>
+        <b id="category"></b>
+        <span class="spectator-note" id="spectator-note" hidden>You joined mid-game. You’ll play from the next game.</span>
+      </div>
+      <div class="sheet-card">
+        <div class="sheet-host" id="sheet-host"></div>
+        <div class="clue-board" id="clue-board" hidden></div>
+        <div class="time-board" id="time-board" hidden>
+          <div class="time-play" id="time-play">
+            <p class="time-k" id="time-k">Stop the clock at the time on your card</p>
+            <button class="peek" id="time-peek" type="button" aria-label="Hold to see your card">
+              <span class="peek-cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Hold to see your card</span>
+              <span class="peek-secret" id="time-secret"></span>
+            </button>
+            <button class="time-btn" id="time-btn" type="button">Start</button>
+            <p class="time-status" id="time-status" aria-live="polite"></p>
+            <ul class="time-roster" id="time-roster"></ul>
+            <p class="small-note muted" id="time-roster-note"></p>
+          </div>
+          <div class="time-results" id="time-results" hidden></div>
+        </div>
+        <div class="handoff" id="handoff" hidden>
+          <span class="handoff-name" id="handoff-name"></span>
+          <span class="handoff-sub" id="handoff-sub"></span>
+        </div>
+        <div class="role-overlay" id="role-overlay" hidden>
+          <div class="role-card">
+            <button class="peek big" id="role-peek" type="button" aria-label="Hold to see your card">
+              <span class="peek-cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Hold to see your card</span>
+              <span class="peek-secret" id="role-secret"></span>
+            </button>
+            <p class="role-tip" id="role-tip"></p>
+            <button class="btn primary wide" id="role-ready" type="button">I’m ready</button>
+            <p class="small-note muted" id="role-count"></p>
+          </div>
+        </div>
+      </div>
+      <form class="clue-form" id="clue-form" autocomplete="off" hidden>
+        <label class="sr-only" for="clue-input">Your word</label>
+        <input class="text-input" id="clue-input" maxlength="32" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Your word">
+        <button class="btn primary" id="clue-send" type="submit">Say it</button>
+        <p class="clue-hint" id="clue-hint" aria-live="polite"></p>
+      </form>
+    </section>
+
+    <aside class="side">
+      <div class="my-card" id="my-card" hidden>
+        <button class="peek" id="card-peek" type="button" aria-label="Hold to see your card">
+          <span class="peek-cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Hold to see your card</span>
+          <span class="peek-secret" id="card-secret"></span>
+        </button>
+      </div>
+
+      <section class="panel" id="draw-panel" hidden>
+        <div class="turn-status" id="turn-status">
+          <b id="turn-title"></b>
+          <span id="turn-sub"></span>
+        </div>
+        <button class="btn primary wide" id="turn-done" type="button" hidden>Done drawing</button>
+        <ol class="order-list" id="order-list"></ol>
+        <button class="vote-now" id="vote-now" type="button" aria-pressed="false">
+          <b>Ready to vote</b><span id="vote-now-count"></span>
+        </button>
+      </section>
+
+      <section class="panel" id="vote-panel" hidden>
+        <div class="panel-head"><h2 id="vote-title">Who is the liar?</h2><span class="muted" id="vote-count"></span></div>
+        <p class="small-note muted" id="vote-tip">Point at a name to see only their lines.</p>
+        <ul class="suspects" id="vote-list"></ul>
+      </section>
+
+      <section class="panel" id="guess-panel" hidden>
+        <h2 id="guess-title"></h2>
+        <p class="muted" id="guess-sub"></p>
+        <div class="options" id="guess-list"></div>
+      </section>
+
+      <section class="panel" id="result-panel" hidden>
+        <div class="result-head" id="result-head">
+          <h2 id="result-title"></h2>
+          <p id="result-sub"></p>
+        </div>
+        <div class="reveal-row">
+          <div><span class="muted" id="result-word-label">The word</span><b class="reveal-word" id="result-word"></b></div>
+          <div><span class="muted">The liar</span><b class="reveal-liar" id="result-liar"></b></div>
+        </div>
+        <ul class="vote-results" id="result-votes"></ul>
+        <div class="result-tools" id="result-tools">
+          <button class="btn ghost" id="replay-btn" type="button">Replay drawing</button>
+          <button class="btn ghost" id="save-btn" type="button">Save picture</button>
+        </div>
+        <div class="result-actions">
+          <button class="btn primary" id="next-game" type="button">Next game</button>
+          <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+        </div>
+        <p class="muted small-note" id="result-wait">The host starts the next game.</p>
+        <p class="muted small-note" id="crew-line"></p>
+      </section>
+
+      <section class="scores">
+        <h2>Scores</h2>
+        <ol class="score-list" id="score-list"></ol>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound when it’s your turn</label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>3 to 8 players. Everyone gets the same secret word, except one player: <b>the liar</b>, who only sees the category.</p>
+  <p>The host picks the game: <b>Draw</b>, <b>Words</b> or <b>Time</b>.</p>
+  <h3>Draw</h3>
+  <p>Players take turns adding to one shared drawing, in an order picked at random (the liar is never first). There are 3 rounds in the same order. Depending on the room, a turn is <b>one line</b> (pen down, draw, lift) or <b>free drawing</b> for a set time (press <b>Done drawing</b> to finish early). Every player draws in their own colour.</p>
+  <p>Draw enough to prove you know the word, but not so much that the liar can work it out.</p>
+  <h3>Words</h3>
+  <p>Same turns and rounds, but instead of drawing you type <b>a word about the secret word</b> (one or two words). Everyone sees it on the board. You can’t use the word itself (or a word made from it, like <i>teapot</i> for <i>tea</i>) or repeat a word someone already said. Run out of time and your turn is passed, which looks suspicious.</p>
+  <p>Too obvious and the liar works out the word; too vague and you look like the liar.</p>
+  <h3>Time</h3>
+  <p>Instead of a word, everyone gets a secret time, like <b>6.71 s</b>. The liar only gets a range it’s somewhere in, like <b>3 to 9 s</b>. Everyone presses <b>Start</b>, counts in their head (no clock is shown) and presses <b>Stop</b> at their time.</p>
+  <p>When everyone has stopped, all the times go up and you get 60, 120 or 180 seconds (host setting) to talk it over. Press <b>Ready to vote</b> to cut it short (everyone but one is enough). The liar’s stop is a guess, so look for the odd one out, but people who know the time miss too. There’s no last chance in Time: a caught liar is caught.</p>
+  <h3>Voting</h3>
+  <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. Point at a name to see only their lines or words. The most votes is accused; a tie means nobody is.</p>
+  <h3>Last chance</h3>
+  <p>If the liar is caught, they get one try to pick the secret word from 12 options. Right, and they steal the win. (Not in Time.)</p>
+  <h3>Points</h3>
+  <ul class="rule-points">
+    <li><b>Liar caught:</b> everyone else gets 2.</li>
+    <li><b>Liar gets away:</b> the liar gets 3.</li>
+    <li><b>Liar steals it with the word:</b> the liar gets 2.</li>
+    <li><b>Voted for the liar:</b> 1 extra, whatever happens.</li>
+  </ul>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
