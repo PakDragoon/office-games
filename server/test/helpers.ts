@@ -81,10 +81,26 @@ export class TestClient {
 export const playersOf = (s: Msg) => s.players as Array<Record<string, unknown>>;
 export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Host a new rotten room and return the host client plus the room code. */
-export async function hostRoom(name = 'Hana', query = 'create=1'): Promise<{ host: TestClient; code: string; id: string }> {
-  const host = await TestClient.open(`/rotten/ws?${query}`);
+/** Host a new room (rotten unless another game is named) and return the host client plus the room code. */
+export async function hostRoom(name = 'Hana', query = 'create=1', game = 'rotten'): Promise<{ host: TestClient; code: string; id: string }> {
+  const host = await TestClient.open(`/${game}/ws?${query}`);
   host.join(name);
   const welcome = await host.next((m) => m.t === 'welcome');
   return { host, code: welcome.code as string, id: welcome.id as string };
+}
+
+/** Host a room of `game` and seat the given extra players. */
+export async function room(game: string, names: string[]): Promise<{ code: string; clients: TestClient[]; ids: string[] }> {
+  const { host, code, id } = await hostRoom(names[0], 'create=1', game);
+  const clients = [host];
+  const ids = [id];
+  for (const n of names.slice(1)) {
+    const c = await TestClient.open(`/${game}/ws?code=${code}`);
+    c.join(n);
+    const w = await c.next((m) => m.t === 'welcome');
+    clients.push(c);
+    ids.push(w.id as string);
+  }
+  await host.state((s) => playersOf(s).length === names.length);
+  return { code, clients, ids };
 }

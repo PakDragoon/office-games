@@ -5,7 +5,7 @@ import { BOARD, STROKE } from './engine.js';
 const NS = 'http://www.w3.org/2000/svg';
 const WIDTH = 5;          // pen width in sheet units
 const MIN_STEP = 1.6;     // skip points closer than this to the last one
-const FLUSH_MS = 40;      // how often a drawer sends new points
+const FLUSH_MS = 150;   // ink goes to the server in batches: smooth to watch, few messages
 
 function el(tag, attrs, parent) {
   const node = document.createElementNS(NS, tag);

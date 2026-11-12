@@ -151,6 +151,7 @@ export const clueKey = (s) => String(s ?? '').toLowerCase().normalize('NFKD').re
  * word: the secret word (checked only for players who know it, so the liar learns nothing
  * from a refusal). said: clues already played this game.
  */
+/** @param {unknown} raw @param {{ word?: string, said?: string[] }} [opts] */
 export function clueProblem(raw, { word = '', said = [] } = {}) {
   const c = cleanClue(raw);
   if (!clueKey(c)) return 'Type a word';
