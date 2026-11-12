@@ -3,11 +3,21 @@
 Free real-time multiplayer browser games, served by one Cloudflare Worker:
 **https://play.officegames.workers.dev**
 
-| Path | Game | Runs on |
-| --- | --- | --- |
-| `/` | Games page | static |
-| `/rotten/` | Rotten (pass the banana word game) | **server** (rooms, Quick Play, global daily) |
-| `/the-liar/` `/thulla/` `/melonburst/` `/guesstimate/` `/flipchip/` `/fast-fingers/` `/lettuce-party/` | the other games | still browser-to-browser (PeerJS), moving to the server one by one |
+| Path | Game | On the server | In the browser |
+| --- | --- | --- | --- |
+| `/` | Games page | – | static |
+| `/rotten/` | Rotten | rooms, Quick Play, global daily | practice |
+| `/the-liar/` | The Liar | rooms, Quick Play | – |
+| `/thulla/` | Thulla | rooms, Quick Play | – |
+| `/guesstimate/` | Guesstimate | rooms, Quick Play, global daily | practice |
+| `/melonburst/` | Melon Burst | rooms, Quick Play | daily word, practice |
+| `/flipchip/` | Flipchip | rooms, Quick Play | vs the computer |
+| `/fast-fingers/` | Fast Fingers | rooms, Quick Play | practice |
+| `/lettuce-party/` | Lettuce Party | rooms, Quick Play | – |
+
+Every room is a Durable Object: the server holds the secrets, checks every move, runs the timers,
+passes the host role on when the host leaves, and writes the stats. Solo modes run the same rules
+in the browser and stay off the leaderboards (except the dailies marked above, which the server runs).
 
 ## How it works
 
@@ -21,6 +31,7 @@ Free real-time multiplayer browser games, served by one Cloudflare Worker:
   - `do/Lobby.ts`: one per game; the public room list and Quick Play.
   - `core/game.ts`: the contract between a room and a game (`RoomCtx`, `GameModule`). Game modules never touch
     Cloudflare APIs directly.
+  - `core/seats.ts`: what room games share (seats, taking a seat back after a refresh, host hand-over, Away, crews).
   - `games/<game>.ts`: each game's host logic (moved from the old host-in-the-browser code). The rules stay in
     `web/<game>/js/engine.js`, shared with the browser's solo modes.
   - `daily/`: global daily puzzles run by the server (one prompt at a time, timed on the server, UTC day).

@@ -1,45 +1,17 @@
-import { ANSWERS, EXTRA_GUESSES, BLOCKED_ANSWERS } from './words.js';
 import * as cloud from './cloud.js';
+import { createRoomLink, quickPlay } from '../../shared/net.js';
 
 /* =========================================================
    Lettuce Party
-   One player hosts. Their browser is the "server": it picks the
+   The game runs on the server (server/src/games/lettuce.ts): it picks the
    word, checks every guess and sends everyone the colour patterns.
-   Other players connect to the host directly with PeerJS (WebRTC).
-   Non-host players never receive the word or anyone's letters.
+   Nobody receives the word or anyone else's letters until the round ends.
    ========================================================= */
 
-const PREFIX = 'lettuceparty-v1-';      // namespaces our room ids on the PeerJS server
 const MAX_PLAYERS = 5;
 const ROWS = 6;
 const COLS = 5;
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';  // no I or O, easy to read out loud
 
-/* ---------- Word lists ----------
-   Only the host's browser checks guesses, so only the host downloads these.
-   Both files are built by tools/build-words.mjs from open word lists:
-   possible answers are about 1,900 everyday words (SCOWL), and accepted guesses are
-   every 5-letter English word (about 12,600). If they fail to load, the built-in
-   lists in words.js are used. */
-const WORD_SOURCES = {
-  answers: ['words/answers.txt'],
-  // Public list of offensive words, added on top of the built-in BLOCKED_ANSWERS.
-  blocked: [
-    'https://cdn.jsdelivr.net/gh/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words@master/en',
-    'https://raw.githubusercontent.com/LDNOOBW/List-of-Dirty-Naughty-Obscene-and-Otherwise-Bad-Words/master/en',
-  ],
-  dictionaries: [['words/valid.txt']],
-};
-// Never picked as the secret word, though they can still be typed as guesses.
-const BLOCKED = new Set(BLOCKED_ANSWERS);
-const notBlocked = (w) => !BLOCKED.has(w);
-
-const WORDS = {
-  answers: ANSWERS.filter(notBlocked),
-  valid: new Set([...ANSWERS, ...EXTRA_GUESSES]),
-  ready: false,
-  big: false,
-};
 /* ---------- Preferences (this device only) ---------- */
 const PREFS = { sound: true, contrast: false, analytics: true };
 try { Object.assign(PREFS, JSON.parse(localStorage.getItem('wordleparty-prefs') || '{}')); } catch {}
@@ -76,7 +48,6 @@ const WIN_RULES = {
 };
 const CLASS = { h: 'hit', n: 'near', m: 'miss' };
 const RANK = { miss: 1, near: 2, hit: 3 };
-const PEER_OPTIONS = { debug: 1 };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const $ = (id) => document.getElementById(id);
@@ -87,14 +58,12 @@ const S = {
   myName: '',
   isHost: false,
   code: null,
-  peer: null,
-  hostConn: null,
-  leaving: false,
-  view: null,          // latest room state from the host
+  creating: false,
+  view: null,          // latest room state from the server
   roundShown: 0,       // which round my board was built for
   guesses: [],         // my guesses: [{ word, pattern }]
   current: '',
-  pending: false,      // waiting for the host to score my guess
+  pending: false,      // waiting for the server to score my guess
   keyState: {},
   seenRows: {},        // rival id -> rows already drawn (for the pop animation)
   localStart: 0,
@@ -102,538 +71,41 @@ const S = {
   resultsClosedRound: 0,
 };
 
-/* ---------- state only the host keeps ---------- */
-const H = { room: null, conns: new Map() };
-
 /* =========================================================
-   Scoring
+   The room on the server
    ========================================================= */
-function score(guess, answer) {
-  const out = Array(COLS).fill('m');
-  const left = {};
-  for (let i = 0; i < COLS; i++) {
-    if (guess[i] === answer[i]) out[i] = 'h';
-    else left[answer[i]] = (left[answer[i]] || 0) + 1;
-  }
-  for (let i = 0; i < COLS; i++) {
-    if (out[i] !== 'h' && left[guess[i]] > 0) {
-      out[i] = 'n';
-      left[guess[i]]--;
-    }
-  }
-  return out.join('');
-}
-
-/* =========================================================
-   Host
-   ========================================================= */
-function randomCode() {
-  let c = '';
-  for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return c;
-}
-
-function hostCreate(attempt = 0) {
-  const code = randomCode();
-  const peer = new Peer(PREFIX + code, PEER_OPTIONS);
-  let opened = false;
-
-  peer.on('open', (id) => {
-    opened = true;
-    S.peer = peer;
-    S.myId = id;
-    S.isHost = true;
-    S.code = code;
-    cloud.track('room_created');
-    H.conns.clear();
-    H.room = {
-      code,
-      status: 'lobby',
-      round: 0,
-      strict: true,
-      word: null,
-      lastWord: null,
-      startedAt: 0,
-      players: [newPlayer(id, S.myName, true, 0, cloud.currentUser()?.uid || null, cloud.currentUser()?.photo || '')],
-      winRule: 'first',
-      maxRounds: 0,    // rounds in a game; 0 = unlimited
-      timer: 0,        // seconds per round; 0 = no timer
-      hard: false,     // hard mode: revealed hints must be used
-      matchRound: 0,   // round number within the current game
-      crew: null,      // { id, name } when all-time scores are saved to Firebase
-      crewStatus: '',
-      allTime: null,   // the crew's saved totals
-      used: [],        // answers already played in this room
-      stats: {},       // lower-case name -> totals across rounds in this room
-      history: [],     // [{ round, word, winner }]
-    };
-    peer.on('connection', hostOnConnection);
+const link = createRoomLink('lettuce-party', {
+  hello: () => {
+    const u = cloud.currentUser();
+    return { name: S.myName, photo: u?.photo || '' };
+  },
+  message: onMessage,
+  reconnecting: () => toast('Connection lost. Reconnecting…'),
+  gone: (reason) => {
+    resetLocal();
+    showScreen('home');
+    showNotice('The room closed', reason || 'Everyone left, so the room was closed. Host a new one.');
+  },
+  failed: (text) => {
+    resetLocal();
     setBusy(false);
-    hostBroadcast();
-    const savedCrew = readSavedCrew();
-    if (savedCrew) hostSetCrew(savedCrew);
-  });
-
-  peer.on('error', (err) => {
-    if (!opened && err.type === 'unavailable-id' && attempt < 5) {
-      peer.destroy();
-      hostCreate(attempt + 1);
-      return;
-    }
-    if (!opened) {
-      setBusy(false);
-      homeError(peerErrorText(err));
-      peer.destroy();
-    } else {
-      console.warn('PeerJS error', err);
-    }
-  });
-
-  peer.on('disconnected', () => {
-    // Lost the PeerJS server (not the players). Reconnect so new people can still join.
-    if (!S.leaving && !peer.destroyed) peer.reconnect();
-  });
-}
-
-function newPlayer(id, name, isHost, color, uid = null, photo = '') {
-  return { id, name, isHost, color, uid, photo, connected: true, guesses: [], solved: false, done: false, finishMs: null };
-}
-
-function cleanPhoto(url) {
-  const s = String(url || '');
-  return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(s) ? s.slice(0, 500) : '';
-}
-
-function freeColor() {
-  const used = new Set(H.room.players.map((p) => p.color));
-  for (let c = 0; c < MAX_PLAYERS; c++) if (!used.has(c)) return c;
-  return 0;
-}
-
-function hostOnConnection(conn) {
-  conn.on('data', (msg) => hostOnMessage(conn, msg));
-  conn.on('close', () => hostOnClose(conn));
-  conn.on('error', () => hostOnClose(conn));
-}
-
-function hostOnMessage(conn, msg) {
-  if (!msg || typeof msg !== 'object') return;
-  if (msg.t === 'join') hostJoin(conn, msg.name, msg.uid, msg.photo);
-  if (msg.t === 'guess') hostGuess(conn.peer, msg.word);
-}
-
-function hostJoin(conn, rawName, uid, photo) {
-  const room = H.room;
-  const name = cleanName(rawName) || 'Player';
-
-  // Someone who refreshed or dropped out and comes back with the same name gets their seat
-  // (and their guesses) back. A dropped connection can take a few seconds to be noticed,
-  // so this also takes over a seat that still looks connected.
-  const old = room.players.find((p) => !p.isHost && p.name.toLowerCase() === name.toLowerCase());
-  if (old) {
-    const oldConn = H.conns.get(old.id);
-    H.conns.delete(old.id);
-    if (oldConn && oldConn !== conn) oldConn.close();
-    old.id = conn.peer;
-    old.connected = true;
-    old.uid = typeof uid === 'string' ? uid.slice(0, 128) : old.uid;
-    old.photo = cleanPhoto(photo) || old.photo;
-    H.conns.set(conn.peer, conn);
-    send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-    if (room.status !== 'lobby') send(conn, { t: 'board', round: room.round, guesses: old.guesses });
-    hostBroadcast();
-    return;
-  }
-
-  if (room.status === 'playing') {
-    return reject(conn, 'This round has already started. Join again when it ends.');
-  }
-  if (room.players.length >= MAX_PLAYERS) {
-    room.players = room.players.filter((p) => p.connected);
-  }
-  if (room.players.length >= MAX_PLAYERS) {
-    return reject(conn, `This room is full (${MAX_PLAYERS} players).`);
-  }
-
-  let finalName = name;
-  let n = 2;
-  while (room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase())) {
-    finalName = `${name} ${n++}`;
-  }
-
-  room.players.push(newPlayer(conn.peer, finalName, false, freeColor(), typeof uid === 'string' ? uid.slice(0, 128) : null, cleanPhoto(photo)));
-  H.conns.set(conn.peer, conn);
-  send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-  hostBroadcast();
-}
-
-function reject(conn, reason) {
-  send(conn, { t: 'reject', reason });
-  setTimeout(() => conn.close(), 500);
-}
-
-function hostOnClose(conn) {
-  if (!H.room) return;
-  const p = H.room.players.find((x) => x.id === conn.peer);
-  H.conns.delete(conn.peer);
-  if (!p) return;
-  if (H.room.status === 'lobby') {
-    H.room.players = H.room.players.filter((x) => x !== p);
-  } else {
-    p.connected = false;
-  }
-  hostCheckEnd();
-  hostBroadcast();
-}
-
-// A new game from the lobby: fresh standings, round 1.
-function hostStartGame() {
-  const room = H.room;
-  const typedCrew = $('crew-input').value.replace(/\s+/g, ' ').trim();
-  if (typedCrew !== (room.crew ? room.crew.name : '')) hostSetCrew(typedCrew);
-  room.stats = {};
-  room.history = [];
-  room.matchRound = 0;
-  cloud.track('game_started', {
-    players: room.players.filter((p) => p.connected).length,
-    rounds_setting: room.maxRounds || 0, timer: room.timer || 0,
-    win_rule: room.winRule, hard: room.hard ? 1 : 0, crew: room.crew ? 1 : 0,
-  });
-  hostStart();
-}
-
-// Back to the lobby after a game, so the host can change settings.
-function hostBackToLobby() {
-  const room = H.room;
-  clearTimeout(H.timer);
-  room.status = 'lobby';
-  room.players = room.players.filter((p) => p.connected);
-  hostBroadcast();
-}
-
-// End the game early, between rounds: show the final standings.
-function hostEndGame() {
-  const room = H.room;
-  if (room.status !== 'ended') return;
-  cloud.track('game_finished', { rounds: room.matchRound, players: Object.keys(room.stats).length });
-  room.status = 'over';
-  hostBroadcast();
-}
-
-// End the current round now (host's button, or the timer running out).
-function hostEndRound(reason) {
-  const room = H.room;
-  if (!room || room.status !== 'playing') return;
-  clearTimeout(H.timer);
-  for (const p of room.players) {
-    if (!p.done) {
-      p.done = true;
-      p.finishMs = null;
-      p.timedOut = reason === 'time';
-      p.stopped = reason !== 'time';
-    }
-  }
-  hostCheckEnd();
-  hostBroadcast();
-}
-
-function hostStart() {
-  const room = H.room;
-  clearTimeout(H.timer);
-  room.players = room.players.filter((p) => p.connected);
-  // No repeats within a room until every possible answer has been played.
-  const used = new Set(room.used);
-  let pool = WORDS.answers.filter((w) => !used.has(w) && notBlocked(w));
-  if (pool.length === 0) {
-    room.used = [];
-    pool = WORDS.answers.filter((w) => w !== room.lastWord && notBlocked(w));
-  }
-  const word = pool[Math.floor(Math.random() * pool.length)];
-  room.used.push(word);
-  room.word = word;
-  room.lastWord = word;
-  room.round += 1;
-  room.matchRound += 1;
-  room.status = 'playing';
-  room.startedAt = Date.now();
-  for (const p of room.players) {
-    p.guesses = [];
-    p.solved = false;
-    p.done = false;
-    p.finishMs = null;
-    p.timedOut = false;
-    p.stopped = false;
-  }
-  if (room.timer > 0) {
-    const round = room.round;
-    H.timer = setTimeout(() => {
-      if (H.room === room && room.round === round) hostEndRound('time');
-    }, room.timer * 1000);
-  }
-  hostBroadcast();
-}
-
-function hostGuess(pid, rawWord) {
-  const room = H.room;
-  const p = room.players.find((x) => x.id === pid);
-  if (!p) return;
-  const reply = (m) => (pid === S.myId ? onMessage(m) : send(H.conns.get(pid), m));
-
-  const word = String(rawWord || '').toLowerCase();
-  if (room.status !== 'playing' || p.done) return reply({ t: 'invalid', reason: 'This round is over' });
-  if (!/^[a-z]{5}$/.test(word)) return reply({ t: 'invalid', reason: 'Not enough letters' });
-  if (room.strict && !WORDS.valid.has(word)) return reply({ t: 'invalid', reason: 'Not in word list' });
-  if (room.hard) {
-    const problem = hardModeProblem(p.guesses, word);
-    if (problem) return reply({ t: 'invalid', reason: problem });
-  }
-
-  const pattern = score(word, room.word);
-  p.guesses.push({ word, pattern });
-  if (pattern === 'hhhhh') {
-    p.solved = true;
-    p.done = true;
-    p.finishMs = Date.now() - room.startedAt;
-  } else if (p.guesses.length >= ROWS) {
-    p.done = true;
-    p.finishMs = Date.now() - room.startedAt;
-  }
-  reply({ t: 'result', round: room.round, word, pattern });
-  hostCheckEnd();
-  hostBroadcast();
-}
-
-// Hard mode: every green stays in place, every revealed letter is used again.
-function hardModeProblem(previous, word) {
-  const nth = ['1st', '2nd', '3rd', '4th', '5th'];
-  for (const g of previous) {
-    for (let i = 0; i < COLS; i++) {
-      if (g.pattern[i] === 'h' && word[i] !== g.word[i]) return `${nth.at(i)} letter must be ${g.word[i].toUpperCase()}`;
-    }
-    const need = {};
-    for (let i = 0; i < COLS; i++) if (g.pattern[i] !== 'm') need[g.word[i]] = (need[g.word[i]] || 0) + 1;
-    for (const [ch, n] of Object.entries(need)) {
-      if ([...word].filter((c) => c === ch).length < n) return `Guess must contain ${ch.toUpperCase()}`;
-    }
-  }
-  return null;
-}
-
-function hostCheckEnd() {
-  const room = H.room;
-  if (room.status === 'playing' && room.players.every((p) => p.done || !p.connected)) {
-    clearTimeout(H.timer);
-    hostRecordRound();
-    room.status = room.maxRounds && room.matchRound >= room.maxRounds ? 'over' : 'ended';
-    if (room.status === 'over') cloud.track('game_finished', { rounds: room.matchRound, players: Object.keys(room.stats).length });
-  }
-}
-
-// Add the finished round to the room's running scores. Scores are keyed by name,
-// so they survive someone refreshing and rejoining.
-function hostRecordRound() {
-  const room = H.room;
-  const players = publicView().players;
-  const order = ranked(players, room.winRule);
-  const winner = order[0] && order[0].solved ? order[0] : null;
-  for (const p of players) {
-    const key = p.name.toLowerCase();
-    const st = (room.stats[key] ||= { name: p.name, color: p.color, played: 0, wins: 0, solved: 0, guessSum: 0, bestMs: null });
-    st.name = p.name;
-    st.color = p.color;
-    st.played += 1;
-    if (p.solved) {
-      st.solved += 1;
-      st.guessSum += p.patterns.length;
-      if (st.bestMs == null || p.finishMs < st.bestMs) st.bestMs = p.finishMs;
-    }
-    if (winner && p.id === winner.id) st.wins += 1;
-  }
-  room.history.push({ round: room.round, word: room.word, winner: winner ? winner.name : null });
-  cloud.track('round_finished', {
-    players: players.length, solved: players.filter((p) => p.solved).length,
-    round: room.matchRound, win_rule: room.winRule, hard: room.hard ? 1 : 0,
-  });
-
-  if (room.crew && !cloud.currentUser()) {
-    room.crewStatus = 'This round wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
-  } else if (room.crew) {
-    const crew = room.crew;
-    const uids = new Map(room.players.map((p) => [p.id, p.uid || null]));
-    const record = {
-      word: room.word,
-      winRule: room.winRule,
-      hard: room.hard,
-      winner: winner ? winner.name : null,
-      room: room.code,
-      players: players.map((p) => ({
-        name: p.name,
-        uid: uids.get(p.id) || null,
-        solved: p.solved,
-        guesses: p.patterns.length,
-        ms: p.solved ? p.finishMs : null,
-      })),
-    };
-    room.crewStatus = 'Saving this round…';
-    cloud.saveRound(crew.id, crew.name, record)
-      .then((saved) => {
-        if (H.room !== room || room.crew?.id !== crew.id) return;
-        room.allTime = saved;
-        room.crewStatus = `Saved. ${saved.rounds.toLocaleString('en-US')} rounds played as this crew.`;
-        hostBroadcast();
-      })
-      .catch((err) => {
-        console.warn('Saving to crew failed', err);
-        if (H.room !== room) return;
-        room.crewStatus = `This round wasn’t saved. ${cloud.errorText(err)}`;
-        hostBroadcast();
-      });
-  }
-}
-
-/* ---------- crews: all-time scores saved in Firebase (host only) ---------- */
-function readSavedCrew() {
-  try { return localStorage.getItem('wordleparty-crew') || ''; } catch { return ''; }
-}
-
-async function hostSetCrew(rawName) {
-  const room = H.room;
-  if (!room) return;
-  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-  try { localStorage.setItem('wordleparty-crew', name); } catch {}
-  if (!name) {
-    room.crew = null;
-    room.allTime = null;
-    room.crewStatus = '';
-    hostBroadcast();
-    return;
-  }
-  const id = cloud.crewId(name);
-  if (id.length < 3) {
-    toast('Crew names need at least 3 letters or numbers');
-    return;
-  }
-  room.crew = { id, name };
-  room.allTime = null;
-  if (!cloud.currentUser()) {
-    room.crewStatus = 'Sign in with Google (gear icon) to save crew scores.';
-    hostBroadcast();
-    return;
-  }
-  room.crewStatus = 'Connecting to saved scores…';
-  hostBroadcast();
-  try {
-    const data = await cloud.loadCrew(id);
-    if (H.room !== room || room.crew?.id !== id) return;
-    room.allTime = data;
-    room.crewStatus = data
-      ? `${data.rounds.toLocaleString('en-US')} rounds played as this crew so far.`
-      : 'New crew. Scores start saving after the first round.';
-  } catch (err) {
-    console.warn('Loading crew failed', err);
-    if (H.room !== room || room.crew?.id !== id) return;
-    room.crewStatus = cloud.errorText(err);
-  }
-  hostBroadcast();
-}
-
-function publicView() {
-  const room = H.room;
-  return {
-    t: 'state',
-    code: room.code,
-    status: room.status,
-    round: room.round,
-    strict: room.strict,
-    winRule: room.winRule,
-    maxRounds: room.maxRounds,
-    timer: room.timer,
-    hard: room.hard,
-    matchRound: room.matchRound,
-    elapsed: room.startedAt ? Date.now() - room.startedAt : 0,
-    // Only colour patterns go out. Letters stay on the host.
-    players: room.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      color: p.color,
-      isHost: p.isHost,
-      connected: p.connected,
-      patterns: p.guesses.map((g) => g.pattern),
-      solved: p.solved,
-      done: p.done,
-      finishMs: p.finishMs,
-      photo: p.photo || '',
-      timedOut: Boolean(p.timedOut),
-      stopped: Boolean(p.stopped),
-    })),
-    word: room.status === 'ended' || room.status === 'over' ? room.word : null,
-    stats: Object.values(room.stats),
-    crew: room.crew ? room.crew.name : null,
-    crewStatus: room.crewStatus,
-    allTime: room.allTime,
-    history: room.history.slice(-10),
-  };
-}
-
-function hostBroadcast() {
-  const view = publicView();
-  for (const conn of H.conns.values()) send(conn, view);
-  onMessage(view);
-}
-
-/* =========================================================
-   Joining
-   ========================================================= */
-function joinRoom(code) {
-  const peer = new Peer(PEER_OPTIONS);
-  let connected = false;
-  let failed = false;
-
-  const fail = (text) => {
-    if (failed || connected) return;
-    failed = true;
-    clearTimeout(timer);
-    setBusy(false);
+    showScreen('home');
     homeError(text);
-    peer.destroy();
-  };
-  const timer = setTimeout(() => fail('Could not reach that room. Check the code, or ask the host to keep their tab open.'), 15000);
+  },
+});
 
-  peer.on('open', (id) => {
-    S.peer = peer;
-    S.myId = id;
-    S.isHost = false;
-    const conn = peer.connect(PREFIX + code, { reliable: true });
-    conn.on('open', () => {
-      connected = true;
-      clearTimeout(timer);
-      S.hostConn = conn;
-      const u = cloud.currentUser();
-      send(conn, { t: 'join', name: S.myName, uid: u?.uid || null, photo: u?.photo || '' });
-    });
-    conn.on('data', onMessage);
-    conn.on('close', () => {
-      if (S.leaving || !connected) return;
-      showNotice('The room closed', 'The host left or lost their connection. Ask them to host a new room.');
-    });
-  });
+const send = (msg) => link.send(msg);
 
-  peer.on('error', (err) => {
-    if (err.type === 'peer-unavailable') fail(`There’s no room ${code} right now. Check the code with your host.`);
-    else if (!connected) fail(peerErrorText(err));
-    else console.warn('PeerJS error', err);
-  });
+// The host's controls: the server only acts on them from whoever is host right now
+const hostSettings = (patch) => send({ t: 'settings', patch });
+function hostSetCrew(rawName) {
+  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (name && name.toLowerCase().replace(/[^a-z0-9]/g, '').length < 3) return toast('Crew names need at least 3 letters or numbers');
+  try { localStorage.setItem('wordleparty-crew', name); } catch {}
+  send({ t: 'crew', name });
 }
-
-function peerErrorText(err) {
-  if (err.type === 'browser-incompatible') return 'This browser can’t do live connections. Try Chrome, Firefox, Edge or Safari.';
-  if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error')
-    return 'Couldn’t reach the connection server. Check your internet and try again.';
-  return `Connection failed (${err.type || 'unknown error'}). Try again.`;
-}
-
-function send(conn, msg) {
-  if (conn && conn.open) conn.send(msg);
+function hostStartGame() {
+  send({ t: 'start', crew: $('crew-input').value.replace(/\s+/g, ' ').trim() });
 }
 
 /* =========================================================
@@ -645,13 +117,15 @@ function onMessage(msg) {
     case 'welcome':
       S.myId = msg.id;
       S.code = msg.code;
-      if (!S.isHost) cloud.track('room_joined');
+      cloud.track('room_joined');
       setBusy(false);
       break;
+    case 'toast':
+      toast(String(msg.text || ''));
+      break;
     case 'reject':
-      S.leaving = true;
       setBusy(false);
-      S.peer?.destroy();
+      link.close();
       resetLocal();
       showScreen('home');
       homeError(msg.reason);
@@ -684,6 +158,16 @@ function onMessage(msg) {
 function applyState(v) {
   const prev = S.view;
   S.view = v;
+  const mine = v.players.find((p) => p.id === S.myId);
+  S.isHost = Boolean(mine && mine.isHost);
+  S.code = v.code;
+  if (S.creating && S.isHost) {
+    // A room we just opened: bring this browser's saved crew
+    S.creating = false;
+    let savedCrew = '';
+    try { savedCrew = localStorage.getItem('wordleparty-crew') || ''; } catch {}
+    if (savedCrew) hostSetCrew(savedCrew);
+  }
 
   if (v.status === 'lobby') {
     showScreen('lobby');
@@ -714,7 +198,6 @@ function applyState(v) {
     else if (m && m.stopped) toast('The host ended the round.');
   }
   if (roundOver && prev && prev.status === 'playing') sfx('over');
-  if (roundOver) saveMyGame(v);
   if (roundOver) trackMyRound(v);
   if (roundOver) {
     if (S.resultsClosedRound !== v.round || (v.status === 'over' && prev && prev.status !== 'over')) showResults(v);
@@ -732,27 +215,6 @@ function trackMyRound(v) {
   cloud.track('round_played', { solved: m.solved ? 1 : 0, guesses: m.patterns.length });
 }
 
-// Signed-in players save their own result to their profile, once per round.
-function saveMyGame(v) {
-  const u = cloud.currentUser();
-  const m = me();
-  if (!u || !m || S.savedRound === v.round || !v.word) return;
-  if (!m.done && m.patterns.length === 0) return; // joined after the round started
-  S.savedRound = v.round;
-  const top = ranked(v.players, v.winRule)[0];
-  cloud.saveGame({
-    word: v.word,
-    room: v.code,
-    solved: m.solved,
-    guesses: m.patterns.length,
-    ms: m.solved ? m.finishMs : null,
-    won: Boolean(top && top.id === m.id && top.solved),
-    opener: S.guesses[0]?.word || null,
-  }).catch((err) => {
-    console.warn('Saving to profile failed', err);
-    toast(`Your stats weren’t saved. ${cloud.errorText(err)}`);
-  });
-}
 
 function startLocalRound(v) {
   S.roundShown = v.round;
@@ -872,8 +334,7 @@ function submit() {
     return toast('Not enough letters');
   }
   S.pending = true;
-  if (S.isHost) hostGuess(S.myId, S.current);
-  else send(S.hostConn, { t: 'guess', word: S.current });
+  send({ t: 'guess', word: S.current });
 }
 
 /* ---------- on-screen keyboard ---------- */
@@ -1019,8 +480,7 @@ function renderLobby(v) {
   $('lobby-wait').hidden = S.isHost;
   $('lobby-rules').textContent = settingsSummary(v);
   $('lobby-rules').hidden = S.isHost;
-  $('word-status').textContent = wordStatusText();
-  $('word-status').hidden = !S.isHost;
+  $('word-status').hidden = true;
   const crewLine = $('crew-status');
   crewLine.textContent = v.crew
     ? `Crew “${v.crew}”: ${v.crewStatus}`
@@ -1033,11 +493,8 @@ function renderLobby(v) {
     $('rounds-select').value = String(v.maxRounds);
     $('hard-toggle').checked = v.hard;
     $('timer-select').value = String(v.timer);
-    $('start-btn').disabled = !WORDS.ready;
     const n = v.players.length;
-    $('start-btn').textContent = !WORDS.ready
-      ? 'Loading words…'
-      : n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
+    $('start-btn').textContent = n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
   } else {
     const host = v.players.find((p) => p.isHost);
     $('lobby-wait').textContent = `Waiting for ${host ? label(host.name) : 'the host'} to start the game.`;
@@ -1354,8 +811,9 @@ function homeError(text) {
 
 function setBusy(busy) {
   $('host-btn').disabled = busy;
+  $('quick-btn').disabled = busy;
   $('join-btn').disabled = busy;
-  $('host-btn').textContent = busy && S.isHostingAttempt ? 'Creating room…' : 'Host a room';
+  $('host-btn').textContent = busy && S.isHostingAttempt ? 'Creating room…' : 'Host a private room';
   $('join-btn').textContent = busy && !S.isHostingAttempt ? 'Joining…' : 'Join room';
 }
 
@@ -1369,21 +827,16 @@ function cleanName(n) {
 }
 
 function resetLocal() {
-  S.peer = null;
-  S.hostConn = null;
   S.view = null;
   S.isHost = false;
+  S.creating = false;
   S.code = null;
   S.roundShown = 0;
   S.localStartRound = 0;
-  H.room = null;
-  H.conns.clear();
 }
 
 function leaveRoom() {
-  S.leaving = true;
-  clearTimeout(H.timer);
-  try { S.peer?.destroy(); } catch {}
+  link.close();
   resetLocal();
   $('notice').hidden = true;
   homeError('');
@@ -1428,7 +881,7 @@ async function openSettings() {
   $('pref-analytics').checked = PREFS.analytics !== false;
   $('pref-analytics').closest('label').hidden = !cloud.analyticsConfigured();
   renderAccount(cloud.currentUser());
-  if (cloud.currentUser()) loadMyStats();
+  loadMyStats();
 }
 
 async function loadMyStats() {
@@ -1443,7 +896,7 @@ async function loadMyStats() {
 }
 
 function myStatsHTML(st) {
-  if (!st.games) return '<p class="stats-note">Play a round while signed in and your stats will show up here.</p>';
+  if (!st.games) return '<p class="stats-note">Play a round and your stats will show up here.</p>';
   const winPct = Math.round((st.wins / st.games) * 100);
   const avg = st.solved ? (st.guessSum / st.solved).toFixed(1) : '–';
   const max = Math.max(1, ...st.dist);
@@ -1480,11 +933,28 @@ $('host-btn').addEventListener('click', () => {
   if (!name) return;
   homeError('');
   S.myName = name;
-  S.leaving = false;
   S.isHostingAttempt = true;
   setBusy(true);
-  loadWords();
-  hostCreate();
+  S.creating = true;
+  link.host(false);
+});
+
+// Quick Play: a public room that's waiting for players, or a new public one
+$('quick-btn').addEventListener('click', async () => {
+  const name = readName();
+  if (!name) return;
+  homeError('');
+  S.myName = name;
+  S.isHostingAttempt = false;
+  setBusy(true);
+  try {
+    const code = await quickPlay('lettuce-party');
+    if (code) link.join(code);
+    else { S.creating = true; link.host(true); }
+  } catch (err) {
+    setBusy(false);
+    homeError(err.message);
+  }
 });
 
 $('join-btn').addEventListener('click', () => {
@@ -1498,10 +968,9 @@ $('join-btn').addEventListener('click', () => {
   }
   homeError('');
   S.myName = name;
-  S.leaving = false;
   S.isHostingAttempt = false;
   setBusy(true);
-  joinRoom(code);
+  link.join(code);
 });
 
 $('code-input').addEventListener('keydown', (e) => {
@@ -1522,16 +991,12 @@ $('copy-link-btn').addEventListener('click', async () => {
 });
 
 $('strict-toggle').addEventListener('change', (e) => {
-  if (!S.isHost) return;
-  H.room.strict = e.target.checked;
-  hostBroadcast();
+  if (S.isHost) hostSettings({ strict: e.target.checked });
 });
 
 for (const r of document.querySelectorAll('input[name="win-rule"]')) {
   r.addEventListener('change', (e) => {
-    if (!S.isHost || !e.target.checked) return;
-    H.room.winRule = e.target.value;
-    hostBroadcast();
+    if (S.isHost && e.target.checked) hostSettings({ winRule: e.target.value });
   });
 }
 
@@ -1543,16 +1008,14 @@ $('crew-input').addEventListener('keydown', (e) => {
 $('crew-input').addEventListener('change', () => {
   if (!S.isHost) return;
   const typed = $('crew-input').value.replace(/\s+/g, ' ').trim();
-  if (typed !== (H.room.crew ? H.room.crew.name : '')) hostSetCrew(typed);
+  if (typed !== (S.view?.crew || '')) hostSetCrew(typed);
 });
 
 $('start-btn').addEventListener('click', () => S.isHost && hostStartGame());
 $('rematch-btn').addEventListener('click', () => S.isHost && hostStartGame());
 $('share-btn').addEventListener('click', shareResult);
 $('hard-toggle').addEventListener('change', (e) => {
-  if (!S.isHost) return;
-  H.room.hard = e.target.checked;
-  hostBroadcast();
+  if (S.isHost) hostSettings({ hard: e.target.checked });
 });
 for (const b of document.querySelectorAll('[data-open-settings]')) b.addEventListener('click', openSettings);
 $('settings-close-btn').addEventListener('click', () => ($('settings-sheet').hidden = true));
@@ -1575,29 +1038,20 @@ $('signout-btn').addEventListener('click', async () => {
 $('pref-sound').addEventListener('change', (e) => { PREFS.sound = e.target.checked; savePrefs(); if (PREFS.sound) sfx('rival'); });
 $('pref-contrast').addEventListener('change', (e) => { PREFS.contrast = e.target.checked; savePrefs(); });
 $('pref-analytics').addEventListener('change', (e) => { PREFS.analytics = e.target.checked; savePrefs(); cloud.setAnalyticsEnabled(PREFS.analytics); });
-$('again-btn').addEventListener('click', () => S.isHost && hostStart());
-$('end-btn').addEventListener('click', () => S.isHost && hostEndGame());
-$('newgame-btn').addEventListener('click', () => S.isHost && hostBackToLobby());
+$('again-btn').addEventListener('click', () => S.isHost && send({ t: 'next' }));
+$('end-btn').addEventListener('click', () => S.isHost && send({ t: 'endGame' }));
+$('newgame-btn').addEventListener('click', () => S.isHost && send({ t: 'lobby' }));
 $('endround-btn').addEventListener('click', () => {
-  if (S.isHost && confirm('End this round now for everyone? Anyone still guessing won’t get the word.')) hostEndRound('host');
+  if (S.isHost && confirm('End this round now for everyone? Anyone still guessing won’t get the word.')) send({ t: 'endRound' });
 });
-$('results-leave-btn').addEventListener('click', () => {
-  if (S.isHost && H.conns.size > 0 && !confirm('Leaving closes the room for everyone. Leave anyway?')) return;
-  leaveRoom();
-});
+$('results-leave-btn').addEventListener('click', () => leaveRoom());
 for (const id of ['rounds-select', 'timer-select']) {
   $(id).addEventListener('change', () => {
-    if (!S.isHost) return;
-    H.room.maxRounds = Number($('rounds-select').value);
-    H.room.timer = Number($('timer-select').value);
-    hostBroadcast();
+    if (S.isHost) hostSettings({ maxRounds: Number($('rounds-select').value), timer: Number($('timer-select').value) });
   });
 }
 
-$('leave-btn').addEventListener('click', () => {
-  if (S.isHost && H.conns.size > 0 && !confirm('Leaving closes the room for everyone. Leave anyway?')) return;
-  leaveRoom();
-});
+$('leave-btn').addEventListener('click', () => leaveRoom());
 
 $('see-boards-btn').addEventListener('click', () => {
   S.resultsClosedRound = S.view?.round || 0;
@@ -1628,87 +1082,9 @@ document.addEventListener('keydown', (e) => {
   else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
 });
 
-// Close connections cleanly on refresh/close so the others find out straight away.
-window.addEventListener('pagehide', () => {
-  S.leaving = true;
-  try { S.peer?.destroy(); } catch {}
-});
-
-window.addEventListener('beforeunload', (e) => {
-  if (S.isHost && H.conns.size > 0) {
-    e.preventDefault();
-    e.returnValue = '';
-  }
-});
-
-/* ---------- word list loading ---------- */
-async function fetchWordList(urls, minWords = 500) {
-  for (const url of urls) {
-    try {
-      const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 20000);
-      const res = await fetch(url, { signal: ctrl.signal });
-      if (!res.ok) {
-        clearTimeout(timer);
-        continue;
-      }
-      const text = await res.text();
-      clearTimeout(timer);
-      // Lists come either as a JSON array or as plain text with one word per line.
-      let raw;
-      try {
-        raw = JSON.parse(text);
-      } catch {
-        raw = text.split(/\s+/);
-      }
-      const list = (Array.isArray(raw) ? raw : [])
-        .map((w) => String(w).trim().toLowerCase())
-        .filter((w) => /^[a-z]{5}$/.test(w));
-      if (list.length >= minWords) return list;
-    } catch {
-      // try the next source
-    }
-  }
-  return null;
-}
-
-let wordsLoading = null;
-function loadWords() {
-  wordsLoading ||= (async () => {
-    const [blocked, answers, ...dicts] = await Promise.all([
-      fetchWordList(WORD_SOURCES.blocked, 1),
-      fetchWordList(WORD_SOURCES.answers),
-      ...WORD_SOURCES.dictionaries.map((urls) => fetchWordList(urls)),
-    ]);
-    for (const w of blocked || []) BLOCKED.add(w);
-    WORDS.answers = (answers || ANSWERS).filter(notBlocked);
-    for (const list of [answers, ...dicts]) {
-      for (const w of list || []) WORDS.valid.add(w);
-    }
-    WORDS.loaded = dicts.filter(Boolean).length;
-    WORDS.big = WORDS.loaded > 0;
-    WORDS.ready = true;
-    if (S.view && S.view.status === 'lobby') renderLobby(S.view);
-  })();
-  return wordsLoading;
-}
-
-function wordStatusText() {
-  if (!WORDS.ready) return 'Loading the word list…';
-  const n = (x) => x.toLocaleString('en-US');
-  if (WORDS.big) {
-    const missing = WORD_SOURCES.dictionaries.length - WORDS.loaded;
-    return `${n(WORDS.valid.size)} words accepted as guesses, ${n(WORDS.answers.length)} can be the answer.` +
-      (missing ? ` (${missing} of the ${WORD_SOURCES.dictionaries.length} dictionaries didn’t load.)` : '');
-  }
-  return `Couldn’t download the full word list, so the built-in ${n(WORDS.valid.size)} words are in use.`;
-}
 
 /* ---------- start-up ---------- */
 (function init() {
-  if (typeof Peer === 'undefined') {
-    homeError('Couldn’t load the connection library. Check your internet and reload the page.');
-  }
   try {
     const saved = localStorage.getItem('wordleparty-name');
     if (saved) $('name-input').value = saved;
@@ -1724,8 +1100,6 @@ function wordStatusText() {
   savePrefs();
   cloud.onUser((u) => {
     renderAccount(u);
-    // A host who signs in mid-room starts saving to their crew straight away.
-    if (S.isHost && H.room && H.room.crew && !H.room.allTime) hostSetCrew(H.room.crew.name);
   });
   cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();
