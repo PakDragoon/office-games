@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Thulla</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🃏</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+<svg id="face-defs" width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false"><defs> <radialGradient id="gShine" cx="35%" cy="25%" r="45%"><stop offset="0" stop-color="#ffffff" stop-opacity="0.55"></stop><stop offset="1" stop-color="#ffffff" stop-opacity="0"></stop></radialGradient> <linearGradient id="gDrop" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bfe6ff"></stop><stop offset="1" stop-color="#3f9be8"></stop></linearGradient> <symbol id="fShine" viewBox="0 0 100 100"><circle cx="50" cy="50" r="46" fill="url(#gShine)"></circle><circle cx="50" cy="50" r="46" fill="none" stroke="#1b1e3a" stroke-width="3"></circle></symbol> <symbol id="fCool" viewBox="0 0 100 100"> <path d="M18 38 h28 v9 a9 9 0 0 1 -9 9 h-10 a9 9 0 0 1 -9 -9 Z M54 38 h28 v9 a9 9 0 0 1 -9 9 h-10 a9 9 0 0 1 -9 -9 Z" fill="#1b1e3a"></path> <path d="M46 41 h8" stroke="#1b1e3a" stroke-width="4"></path> <path d="M24 42 l6 6 M60 42 l6 6" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.8"></path> <path d="M36 68 q14 9 28 -3" fill="none" stroke="#5a3214" stroke-width="4.5" stroke-linecap="round"></path> </symbol> <symbol id="fThrilled" viewBox="0 0 100 100"> <path d="M27 43 q8 -10 17 0 M56 43 q8 -10 17 0" fill="none" stroke="#5a3214" stroke-width="4.5" stroke-linecap="round"></path> <path d="M27 57 q23 32 46 0 Z" fill="#6b1d1d" stroke="#5a3214" stroke-width="3" stroke-linejoin="round"></path> <path d="M30 58 h40 q-2 6 -4 7 h-32 q-2 -1 -4 -7 Z" fill="#ffffff"></path> <ellipse cx="50" cy="75" rx="10" ry="5" fill="#f06a7d"></ellipse> <ellipse cx="22" cy="58" rx="7" ry="4" fill="#ff7f93" opacity="0.55"></ellipse> <ellipse cx="78" cy="58" rx="7" ry="4" fill="#ff7f93" opacity="0.55"></ellipse> </symbol> <symbol id="fHappy" viewBox="0 0 100 100"> <ellipse cx="36" cy="43" rx="5" ry="7" fill="#5a3214"></ellipse><circle cx="37.5" cy="40" r="1.8" fill="#ffffff"></circle> <ellipse cx="64" cy="43" rx="5" ry="7" fill="#5a3214"></ellipse><circle cx="65.5" cy="40" r="1.8" fill="#ffffff"></circle> <path d="M28 33 q8 -5 15 -1 M57 32 q7 -4 15 1" fill="none" stroke="#5a3214" stroke-width="3.5" stroke-linecap="round"></path> <path d="M31 60 q19 18 38 0" fill="none" stroke="#5a3214" stroke-width="4.5" stroke-linecap="round"></path> <ellipse cx="23" cy="58" rx="7" ry="4" fill="#ff7f93" opacity="0.5"></ellipse> <ellipse cx="77" cy="58" rx="7" ry="4" fill="#ff7f93" opacity="0.5"></ellipse> </symbol> <symbol id="fUnsure" viewBox="0 0 100 100"> <ellipse cx="36" cy="45" rx="6" ry="7" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></ellipse><circle cx="39" cy="46" r="3.3" fill="#5a3214"></circle> <ellipse cx="64" cy="45" rx="6" ry="7" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></ellipse><circle cx="67" cy="46" r="3.3" fill="#5a3214"></circle> <path d="M27 31 q9 -7 17 -2 M57 34 h16" fill="none" stroke="#5a3214" stroke-width="3.5" stroke-linecap="round"></path> <path d="M34 68 q6 -5 11 0 t11 0 t11 0" fill="none" stroke="#5a3214" stroke-width="4" stroke-linecap="round"></path> </symbol> <symbol id="fNervous" viewBox="0 0 100 100"> <path d="M27 36 L43 31 M73 36 L57 31" fill="none" stroke="#5a3214" stroke-width="3.5" stroke-linecap="round"></path> <circle cx="36" cy="45" r="7" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></circle><circle cx="36" cy="46" r="3" fill="#5a3214"></circle> <circle cx="64" cy="45" r="7" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></circle><circle cx="64" cy="46" r="3" fill="#5a3214"></circle> <rect x="31" y="60" width="38" height="13" rx="6" fill="#ffffff" stroke="#5a3214" stroke-width="3"></rect> <path d="M31 66.5 h38 M40 60 v13 M50 60 v13 M60 60 v13" stroke="#5a3214" stroke-width="2"></path> <path d="M79 18 q7 10 0 15 q-7 -5 0 -15 Z" fill="url(#gDrop)" stroke="#1b1e3a" stroke-width="1.8"></path> <path d="M17 26 q4 6 0 9 q-4 -3 0 -9 Z" fill="url(#gDrop)" stroke="#1b1e3a" stroke-width="1.5"></path> </symbol> <symbol id="fShocked" viewBox="0 0 100 100"> <path d="M26 28 q9 -9 18 -2 M56 26 q9 -7 18 2" fill="none" stroke="#5a3214" stroke-width="3.5" stroke-linecap="round"></path> <circle cx="36" cy="44" r="9.5" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></circle><circle cx="36" cy="44" r="3.6" fill="#5a3214"></circle> <circle cx="64" cy="44" r="9.5" fill="#ffffff" stroke="#5a3214" stroke-width="2.5"></circle><circle cx="64" cy="44" r="3.6" fill="#5a3214"></circle> <ellipse cx="50" cy="71" rx="8" ry="10" fill="#6b1d1d" stroke="#5a3214" stroke-width="3"></ellipse> <ellipse cx="50" cy="76" rx="5" ry="3" fill="#f06a7d"></ellipse> </symbol> </defs></svg>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="home-top">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <h1 class="logo" aria-label="Thulla">
+      <span class="logo-row" aria-hidden="true">
+        <i class="t" data-s="♠">T</i><i class="t red" data-s="♥">H</i><i class="t" data-s="♣">U</i><i class="t red" data-s="♦">L</i><i class="t" data-s="♠">L</i><i class="t red" data-s="♥">A</i>
+      </span>
+    </h1>
+    <p class="lede">Get rid of your cards before your friends do. Can't follow suit? Hit them with a thulla.</p>
+
+    <label class="field">Your name
+      <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+    </label>
+
+    <div class="choices">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Keep this tab open while you play.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+    </div>
+    <p class="error" id="home-error" role="alert"></p>
+    <button class="btn link" type="button" data-open-rules>How to play</button>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="home-top">
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <p class="muted">Room code</p>
+    <div class="room-code" id="lobby-code">····</div>
+    <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+    <ul class="lobby-players" id="lobby-players"></ul>
+
+    <div id="host-settings" hidden>
+      <div class="match-settings">
+        <label class="select-field">Rounds
+          <select id="set-rounds">
+            <option value="0">Unlimited</option>
+            <option value="3">3</option>
+            <option value="5">5</option>
+            <option value="10">10</option>
+          </select>
+        </label>
+        <label class="select-field">Turn timer
+          <select id="set-timer">
+            <option value="0">Off</option>
+            <option value="15">15 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="60">60 seconds</option>
+          </select>
+        </label>
+      </div>
+      <div class="rule-box">
+        <label class="toggle left"><input type="checkbox" id="set-early"> Play early</label>
+        <p class="muted">Once a trick is led, anyone can throw in a card of that suit before their turn. If someone you skipped gives a thulla, you pick up the trick.</p>
+      </div>
+      <div class="rule-box">
+        <label class="toggle left"><input type="checkbox" id="set-take"> Take the next player's cards</label>
+        <p class="muted">On your turn, ask the next player for their whole hand. If they agree, they're safe and you hold their cards.</p>
+      </div>
+      <div class="crew-field">
+        <label for="set-crew">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+        <div class="crew-row">
+          <input class="text-input" id="set-crew" maxlength="40" placeholder="e.g. office-squad" autocomplete="off">
+          <button class="btn ghost" id="crew-save" type="button">Use</button>
+        </div>
+        <p class="small-note muted" id="crew-note"></p>
+      </div>
+    </div>
+    <ul class="settings-summary" id="guest-settings" hidden></ul>
+
+    <button class="btn primary wide" id="start-btn" type="button" hidden>Start game</button>
+    <p class="muted" id="lobby-wait">Waiting for the host to start…</p>
+    <p class="error" id="lobby-error" role="alert"></p>
+    <button class="btn link" id="lobby-leave" type="button">Leave room</button>
+  </div>
+</main>
+
+<!-- ============ Game ============ -->
+<div id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code">Room <b id="game-code">····</b></span>
+    <span id="game-round" class="muted">Round 1</span>
+    <span class="clock" id="clock" aria-live="off"></span>
+    <button class="btn small ghost" id="end-round-btn" type="button" hidden>End round</button>
+    <button class="btn small ghost" id="scores-btn" type="button">Scores</button>
+    <button class="icon-btn" type="button" data-open-rules aria-label="How to play">?</button>
+    <button class="icon-btn" type="button" data-open-settings aria-label="Settings">⚙️</button>
+    <button class="btn small ghost" id="game-leave" type="button">Leave</button>
+  </header>
+  <div class="arena">
+    <aside class="scoreboard" id="scoreboard" aria-label="Scores"></aside>
+    <section class="play">
+      <div class="table" id="table">
+        <div class="felt"></div>
+        <div class="center">
+          <div class="discard-pile empty" id="discard-pile" aria-hidden="true"><i></i><i></i><i></i></div>
+          <p class="table-note" id="table-note" aria-live="polite"></p>
+        </div>
+        <div class="trick" id="trick"></div>
+        <div id="seats"></div>
+      </div>
+      <div class="hand-wrap">
+        <div class="hand-head">
+          <span class="pill" id="hand-status"></span>
+          <button class="btn small play-sel" id="play-sel-btn" type="button" hidden></button>
+          <button class="btn small" id="take-btn" type="button" hidden>Ask for next player's cards</button>
+          <button class="btn small ghost" id="playfor-btn" type="button" hidden>Play for them</button>
+          <button class="btn small danger" id="giveup-btn" type="button" hidden>Give up</button>
+          <button class="icon-btn chat-btn" id="chat-btn" type="button" aria-label="Quick chat" aria-expanded="false" aria-controls="chat-bar">💬</button>
+        </div>
+        <div class="chat-bar" id="chat-bar" hidden></div>
+        <div class="take-bar" id="take-bar" hidden></div>
+        <div class="hand" id="hand" role="group" aria-label="Your cards"></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ============ Overlays ============ -->
+<div class="overlay" id="round-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="round-title">
+    <h2 id="round-title">Round over</h2>
+    <p class="muted" id="round-sub"></p>
+    <ol class="ranking" id="round-ranking"></ol>
+    <div id="round-host" class="sheet-row" hidden>
+      <button class="btn ghost" id="end-game-btn" type="button">End game</button>
+      <button class="btn primary" id="next-round-btn" type="button">Play next round</button>
+    </div>
+    <p class="muted" id="round-wait">Waiting for the host…</p>
+    <div class="sheet-links"><button class="btn link" id="round-scores" type="button">Scores</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="over-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="over-title">
+    <h2 id="over-title">Game over</h2>
+    <p class="muted" id="over-sub"></p>
+    <ol class="ranking" id="over-ranking"></ol>
+    <div id="over-host" class="sheet-row" hidden>
+      <button class="btn ghost" id="change-settings-btn" type="button">Change settings</button>
+      <button class="btn primary" id="rematch-btn" type="button">Rematch</button>
+    </div>
+    <p class="muted" id="over-wait">Waiting for the host…</p>
+    <div class="sheet-links">
+      <button class="btn link" id="over-scores" type="button">Scores</button>
+      <button class="btn link" id="over-leave" type="button">Leave room</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="scores-overlay" hidden>
+  <div class="sheet scores-sheet" role="dialog" aria-modal="true" aria-label="Scores">
+    <div id="scores-sheet-body"></div>
+    <button class="btn wide" type="button" data-close>Close</button>
+  </div>
+</div>
+
+<div class="overlay" id="take-overlay" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="take-title">
+    <h2 id="take-title">Give your cards?</h2>
+    <p id="take-text"></p>
+    <p class="muted" id="take-clock"></p>
+    <div class="sheet-row">
+      <button class="btn ghost" id="take-decline" type="button">Decline</button>
+      <button class="btn primary" id="take-accept" type="button">Give my cards</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="settings-overlay" hidden>
+  <div class="sheet settings-sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+    <h2 id="settings-title">Settings</h2>
+    <section class="set-section">
+      <div class="account-row" id="account-out">
+        <p class="muted" style="flex:1">Sign in to save your stats and crew scores.</p>
+        <button class="btn primary small" id="sign-in-btn" type="button">Sign in with Google</button>
+      </div>
+      <div class="account-row" id="account-in" hidden>
+        <img class="avatar big" id="account-avatar" alt="">
+        <div class="account-who"><b id="account-name"></b><span class="muted" id="account-email"></span></div>
+        <button class="btn small ghost" id="sign-out-btn" type="button">Sign out</button>
+      </div>
+      <p class="small-note error" id="account-error" style="margin:0;min-height:0"></p>
+    </section>
+    <section class="set-section" id="stats-section" hidden>
+      <b>My stats</b>
+      <div class="stat-grid" id="stat-grid"></div>
+      <p class="stats-note" id="stats-note"></p>
+    </section>
+    <section class="set-section">
+      <label class="toggle left"><input type="checkbox" id="pref-sound"> Sounds</label>
+      <label class="toggle left"><input type="checkbox" id="pref-contrast"> High-contrast colors</label>
+      <label class="toggle left"><input type="checkbox" id="pref-tap"> Play a card with a single tap on phones</label>
+      <label class="toggle left"><input type="checkbox" id="pref-analytics"> Share anonymous usage stats</label>
+      <div class="slap-pref">
+        <label class="select-field">Thulla slap
+          <select id="pref-slapper">
+            <option value="random">Random</option>
+            <option value="cat">Cat 🐱</option>
+            <option value="hippo">Hippo 🦛</option>
+            <option value="off">Off</option>
+          </select>
+        </label>
+        <button class="btn small ghost" id="slap-test" type="button">Try it</button>
+      </div>
+    </section>
+    <button class="btn wide" type="button" data-close>Done</button>
+  </div>
+</div>
+
+<div class="overlay" id="rules-overlay" hidden>
+  <div class="sheet rules-sheet" role="dialog" aria-modal="true" aria-labelledby="rules-title">
+    <h2 id="rules-title">How to play</h2>
+    <div id="rules-body"></div>
+    <button class="btn wide" type="button" data-close>Got it</button>
+  </div>
+</div>
+
+<div class="overlay" id="closed-overlay" hidden>
+  <div class="sheet" role="alertdialog" aria-modal="true" aria-labelledby="closed-title">
+    <h2 id="closed-title">Disconnected</h2>
+    <p id="closed-text"></p>
+    <div class="sheet-row">
+      <button class="btn ghost" id="closed-home" type="button">Home</button>
+      <button class="btn primary" id="closed-retry" type="button">Rejoin</button>
+    </div>
+  </div>
+</div>
+
+<div class="stamp" id="stamp" hidden aria-live="assertive"></div>
+<div class="toast" id="toast" role="status"></div>
+</body>
+</html>
