@@ -1,0 +1,1 @@
+{ "name": "fast-fingers", "private": true, "type": "module", "scripts": { "test": "node test/engine.test.mjs" } }
