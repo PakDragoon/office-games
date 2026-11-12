@@ -859,7 +859,6 @@ function renderAccount(u) {
   }
   $('account-out').hidden = Boolean(u);
   $('account-in').hidden = !u;
-  $('stats-section').hidden = !u;
   if (u) {
     $('account-name').textContent = u.name;
     $('account-email').textContent = u.email;

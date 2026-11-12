@@ -1,5 +1,6 @@
 import type { Env } from '../env';
 import { hmac } from '../auth';
+import { dailyStreakWrites } from '../db/stats';
 import { guesstimateDaily } from './guesstimate';
 import { rottenDaily } from './rotten';
 
@@ -11,6 +12,8 @@ export interface DailyGame<S = unknown> {
   id: string;
   /** 'asc': lower score wins (time). 'desc': higher score wins (points). */
   order: 'asc' | 'desc';
+  /** Keep a day streak (days in a row with a finished daily) as the `streak` / `bestStreak` stats. */
+  streak?: boolean;
   /** Today's puzzle number, as shown in the game. */
   number(day: string): number;
   /** A fresh session for this day. `key` is secret: different from the public date, so nobody can work out tomorrow's puzzle. */
@@ -90,6 +93,7 @@ export async function handleDaily(request: Request, env: Env, game: string, acti
          ON CONFLICT (player_id, game, stat) DO UPDATE SET value = ${daily.order === 'asc' ? 'MIN' : 'MAX'}(value, excluded.value)`,
       ).bind(player, game, res.score),
     );
+    if (daily.streak) stmts.push(...(await dailyStreakWrites(env.DB, player, game, day)));
   }
   if (!row || (action && action !== 'state')) await env.DB.batch(stmts);
   return json({ day, number: daily.number(day), ...daily.view(state, now), ...extra, done: Boolean(res) });

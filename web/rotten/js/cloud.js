@@ -7,7 +7,7 @@ export {
 } from '../../shared/cloud.js';
 export { api };
 
-const emptyStats = () => ({ plays: 0, games: 0, wins: 0, words: 0, splats: 0, longest: 0, dailies: 0, bestDaily: 0 });
+const emptyStats = () => ({ plays: 0, games: 0, wins: 0, words: 0, splats: 0, longest: 0, dailies: 0, bestDaily: 0, practiceBest: 0 });
 
 /** My Rotten stats (signed in, or this browser's guest id). */
 export async function getMyStats() {
@@ -16,3 +16,6 @@ export async function getMyStats() {
 }
 
 export const signedIn = () => Boolean(getUser());
+
+/** Report a practice streak (words in a row) to my own stats; ms = time since the streak's first word. */
+export const savePractice = (streak, ms) => api('/api/rotten/practice', { method: 'POST', body: { streak, ms } });

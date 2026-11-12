@@ -13,8 +13,9 @@ export async function loadProfile() {
   const n = (k) => stats[k] || 0;
   return {
     games: n('rounds'), wins: n('wins'), solved: n('solved'), guessSum: n('guessSum'),
-    streak: '–', bestStreak: '–', bestMs: stats.fastestNeg ? -stats.fastestNeg : null,
+    streak: n('streak'), bestStreak: Math.max(n('bestStreak'), n('streak')), bestMs: stats.fastestNeg ? -stats.fastestNeg : null,
     dist: [1, 2, 3, 4, 5, 6].map((i) => n(`dist${i}`)),
-    openers: {},
+    // "opener:<word>" counters, one per different first guess
+    openers: Object.fromEntries(Object.entries(stats).filter(([k]) => k.startsWith('opener:')).map(([k, v]) => [k.slice(7), v])),
   };
 }

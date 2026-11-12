@@ -31,6 +31,16 @@ export interface GameReport {
     stats: Record<string, number>;
     /** Numbers where the stat keeps the highest value seen (longest word...). */
     max?: Record<string, number>;
+    /**
+     * Running streaks: name -> did this game continue it. A hit adds 1, a miss resets it to 0, and
+     * `best<Name>` (bestStreak for "streak") keeps the highest value the streak ever reached.
+     */
+    streaks?: Record<string, boolean>;
+    /**
+     * Counts per choice, e.g. { opener: 'crane' } adds 1 to "opener:crane". Keys are lower-case
+     * letters/numbers; a player keeps at most 40 different choices per group (see TALLY_MAX).
+     */
+    tally?: Record<string, string>;
   }>;
 }
 

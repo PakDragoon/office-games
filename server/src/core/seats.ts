@@ -317,6 +317,9 @@ export function restoreSeats<P extends Seat>(ctx: RoomCtx, room: BaseRoom<P>): v
   if (room.status === 'lobby') room.players = room.players.filter((p) => p.connected);
 }
 
-export const reportPlayer = (p: Seat, place: number, won: boolean, stats: Record<string, number>, max?: Record<string, number>) => ({
-  name: p.name, uid: p.uid, guest: p.guest, place, won, stats: { games: 1, plays: 1, wins: won ? 1 : 0, ...stats }, ...(max ? { max } : {}),
+export const reportPlayer = (
+  p: Seat, place: number, won: boolean, stats: Record<string, number>, max?: Record<string, number>,
+  extra?: { streaks?: Record<string, boolean>; tally?: Record<string, string> },
+) => ({
+  name: p.name, uid: p.uid, guest: p.guest, place, won, stats: { games: 1, plays: 1, wins: won ? 1 : 0, ...stats }, ...(max ? { max } : {}), ...(extra || {}),
 });
