@@ -13,6 +13,8 @@ export const FREE_SECONDS = [5, 8, 12, 15, 20, 30];
 export const WORD_SECONDS = [20, 30, 45, 60];
 export const CLUE = { maxChars: 24, maxWords: 2 };
 export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 30000 };
+// Time game: seconds to talk it over once everyone has stopped the clock
+export const DISCUSS_SECONDS = [60, 120, 180];
 export const OPTION_COUNT = 12;
 export const MAX_INK = 4000;   // numbers (x, y pairs) allowed in one stroke
 
@@ -170,3 +172,33 @@ function givesAway(clue, word) {
   return String(clue).split(/[\s-]+/).map(clueKey).filter(Boolean)
     .some((t) => t === w || (w.length >= 3 && t.startsWith(w)) || parts.includes(t) || (parts.length > 1 && parts.some((x) => t.startsWith(x))));
 }
+
+// ---------- Time game: stop a hidden clock ----------
+
+// Targets in hundredths of a second, never a whole second (so it always sits inside the
+// liar's range, not on its edge). The liar gets a whole-second range this wide around it.
+export const TIME_GAME = { lo: 301, hi: 1199, span: 6, minStop: 0.12, maxStop: 60 };
+
+// The target (e.g. 6.71) and the liar's range (e.g. 3 to 9), with the target anywhere inside it
+export function pickTime(rnd) {
+  let cents;
+  do cents = TIME_GAME.lo + Math.floor(rnd() * (TIME_GAME.hi - TIME_GAME.lo + 1)); while (cents % 100 === 0);
+  const target = cents / 100;
+  const whole = Math.floor(target);
+  const first = Math.max(1, whole - TIME_GAME.span + 1);
+  const lo = first + Math.floor(rnd() * (whole - first + 1));
+  return { target, lo, hi: lo + TIME_GAME.span };
+}
+
+// How long everyone gets to stop the clock: room to read, press Start and count past the
+// top of the liar's range. Based on the range, not the target, so the clock gives nothing away.
+export const timeLimitMs = (hi) => Math.ceil(hi * 1.5 + 15) * 1000;
+
+// A stop time from another browser: seconds, to the hundredth, or null when it makes no sense
+export function cleanStop(raw) {
+  const n = Number(raw);
+  if (typeof raw !== 'number' || !Number.isFinite(n) || n < TIME_GAME.minStop || n > TIME_GAME.maxStop) return null;
+  return Math.round(n * 100) / 100;
+}
+
+export const fmtSecs = (n) => `${Number(n).toFixed(2)} s`;

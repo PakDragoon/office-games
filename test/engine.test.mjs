@@ -127,4 +127,29 @@ assert.equal(E.clueProblem('leaf', { said: ['leaves'] }), '');
 assert.equal(E.clueProblem('teapot', { word: '' }), '', 'the liar is not checked against the word');
 assert.ok(E.WORD_SECONDS.includes(30));
 
+// 10. Time game: the target sits strictly inside the liar's whole-second range
+const seenLo = new Set(), seenPos = new Set();
+for (let s = 0; s < 20000; s++) {
+  const t = E.pickTime(E.mulberry32(s));
+  assert.ok(t.target >= 3.01 && t.target <= 11.99, `target ${t.target}`);
+  assert.equal(Math.round(t.target * 100) % 100 === 0, false, 'whole-second target');
+  assert.equal(Math.round(t.target * 100) / 100, t.target, 'more than two decimals');
+  assert.ok(Number.isInteger(t.lo) && t.lo >= 1 && t.hi === t.lo + E.TIME_GAME.span);
+  assert.ok(t.lo < t.target && t.target < t.hi, `${t.target} outside ${t.lo}-${t.hi}`);
+  seenLo.add(t.lo);
+  if (t.target >= 7) seenPos.add(Math.floor(t.target) - t.lo);
+}
+assert.ok(seenLo.size >= 10, 'ranges vary');
+assert.equal(seenPos.size, E.TIME_GAME.span, 'the target can be anywhere in the range');
+assert.equal(E.cleanStop(6.7149), 6.71);
+assert.equal(E.cleanStop(0.05), null, 'too quick');
+assert.equal(E.cleanStop(61), null, 'too long');
+assert.equal(E.cleanStop('6.5'), null, 'numbers only');
+assert.equal(E.cleanStop(NaN), null);
+assert.equal(E.cleanStop(null), null);
+assert.equal(E.timeLimitMs(9), 29000);
+assert.equal(E.fmtSecs(6.7), '6.70 s');
+assert.deepEqual(E.DISCUSS_SECONDS, [60, 120, 180]);
+assert.equal(E.outcome({ liar: 'x', accused: 'x', guess: null, word: '' }), 'caught', 'time game: no steal');
+
 console.log(`engine: all checks passed (${total} words in ${CATEGORY_NAMES.length} categories)`);

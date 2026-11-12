@@ -7,7 +7,9 @@ import * as cloud from './cloud.js';
    The Liar
    Everyone gets the same secret word except the liar, who only knows the category.
    Players take turns adding to one shared drawing, or (the Words game) saying one word
-   about it (3 rounds, same order), then vote.
+   about it (3 rounds, same order), then vote. In the Time game everyone stops a hidden
+   clock at a secret time (the liar only knows a range), then the times are shown and
+   everyone talks it over before the vote.
    One player hosts: their browser is the "server". It picks the word and the liar,
    sends each player only their own card, relays the ink live and counts the votes.
    Connections use PeerJS (WebRTC).
@@ -36,11 +38,13 @@ const store = {
   },
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
-const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, categories: [], ...store.get('room', {}) };
+const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, discussSeconds: 60, categories: [], ...store.get('room', {}) };
 if (!E.FREE_SECONDS.includes(ROOM_PREFS.seconds)) ROOM_PREFS.seconds = 8;
 if (!E.WORD_SECONDS.includes(ROOM_PREFS.wordSeconds)) ROOM_PREFS.wordSeconds = 30;
-if (!['draw', 'words'].includes(ROOM_PREFS.play)) ROOM_PREFS.play = 'draw';
+if (!E.DISCUSS_SECONDS.includes(ROOM_PREFS.discussSeconds)) ROOM_PREFS.discussSeconds = 60;
+if (!['draw', 'words', 'time'].includes(ROOM_PREFS.play)) ROOM_PREFS.play = 'draw';
 const wordsGame = (st) => st && st.play === 'words';
+const timeGame = (st) => st && st.play === 'time';
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
@@ -127,7 +131,7 @@ function chime() {
 const S = {
   myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false,
   heard: 0, reconnecting: false, secret: null, gameShown: -1, turnKey: '', phaseKey: '', savedGame: -1,
-  penTimers: [], strokeDone: false, penOn: false,
+  penTimers: [], strokeDone: false, penOn: false, timeStart: null, myStop: null,
 };
 const H = { room: null, conns: new Map(), seen: new Map(), phaseTimer: 0, turnTimer: 0 };
 
@@ -153,7 +157,7 @@ function hostCreate(attempt = 0) {
       players: [newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || '')],
       used: new Set(store.get('seen', [])),
       liar: null, word: '', category: '', order: [], round: 0, turn: 0,
-      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [],
+      turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {},
       votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
       crew: null, crewStatus: '',
     };
@@ -216,6 +220,7 @@ function hostOnMessage(conn, msg) {
     case 'votenow': return hostVoteNow(conn.peer, msg.on === true);
     case 'done': return hostDone(conn.peer);
     case 'clue': return hostClue(conn.peer, msg.text);
+    case 'stop': return hostStop(conn.peer, msg.secs);
     case 'vote': return hostVote(conn.peer, msg.target);
     case 'guess': return hostGuess(conn.peer, msg.word);
     case 'sync': return sendDrawing(conn);
@@ -240,6 +245,7 @@ function hostJoin(conn, rawName, uid, photo, client) {
     if (room.liar === old.id) room.liar = conn.peer;
     for (const s of room.strokes) if (s.pid === old.id) s.pid = conn.peer;
     for (const c of room.clues) if (c.pid === old.id) c.pid = conn.peer;
+    if (old.id in room.stops) { room.stops[conn.peer] = room.stops[old.id]; delete room.stops[old.id]; }
     if (room.votes[old.id]) { room.votes[conn.peer] = room.votes[old.id]; delete room.votes[old.id]; }
     for (const [v, t] of Object.entries(room.votes)) if (t === old.id) room.votes[v] = conn.peer;
     if (room.accused === old.id) room.accused = conn.peer;
@@ -301,6 +307,8 @@ function hostAfterPresence(p) {
     if (room.order[room.turn] === p.id && !active(p)) hostEndTurn();
     else hostCheckVoteNow();
   }
+  if (room.status === 'time') hostCheckStops();
+  if (room.status === 'discuss') hostCheckVoteNow();
   if (room.status === 'vote') hostCheckVotes();
 }
 
@@ -326,6 +334,10 @@ function hostHeartbeat() {
 function secretFor(p) {
   const room = H.room;
   if (!p.inGame) return { t: 'secret', game: room.game, spectator: true, category: room.category };
+  if (room.time) {
+    if (p.id === room.liar) return { t: 'secret', game: room.game, liar: true, category: room.category, range: [room.time.lo, room.time.hi] };
+    return { t: 'secret', game: room.game, liar: false, time: room.time.target, category: room.category };
+  }
   if (p.id === room.liar) return { t: 'secret', game: room.game, liar: true, category: room.category };
   return { t: 'secret', game: room.game, liar: false, word: room.word, category: room.category };
 }
@@ -363,18 +375,22 @@ function hostStartGame() {
   const ids = room.players.map((p) => p.id);
   room.liar = E.pickLiar(ids, room.lastLiar, rnd);
   room.lastLiar = room.liar;
-  const pick = E.pickWord(room.settings.categories, room.used, rnd);
-  Object.assign(room, { word: pick.word, category: pick.category });
-  room.used.add(E.wordKey(pick.category, pick.word));
-  store.set('seen', [...room.used].slice(-700));
+  if (timeGame(room.settings)) {
+    Object.assign(room, { word: '', category: 'Time', time: E.pickTime(rnd) });
+  } else {
+    const pick = E.pickWord(room.settings.categories, room.used, rnd);
+    Object.assign(room, { word: pick.word, category: pick.category, time: null });
+    room.used.add(E.wordKey(pick.category, pick.word));
+    store.set('seen', [...room.used].slice(-700));
+  }
   room.order = E.turnOrder(ids, room.liar, rnd);
   Object.assign(room, {
-    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], strokeSid: null, turnStrokes: 0,
+    game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], stops: {}, strokeSid: null, turnStrokes: 0,
     votes: {}, options: [], accused: null, guess: null, result: null, delta: {},
     deadline: Date.now() + E.TIMES.roleMs,
   });
   H.phaseTimer = setTimeout(hostStartDrawing, E.TIMES.roleMs);
-  cloud.track('game_started', { players: ids.length, mode: wordsGame(room.settings) ? 'words' : room.settings.mode, categories: room.settings.categories.length || 0 });
+  cloud.track('game_started', { players: ids.length, mode: timeGame(room.settings) ? 'time' : wordsGame(room.settings) ? 'words' : room.settings.mode, categories: room.settings.categories.length || 0 });
   hostSendSecrets();
   hostBroadcast();
 }
@@ -398,6 +414,7 @@ function hostStartDrawing() {
   const room = H.room;
   if (!room || room.status !== 'role') return;
   clearTimers();
+  if (room.time) return hostStartTiming();
   room.status = 'draw';
   room.round = 0;
   room.turn = 0;
@@ -503,10 +520,54 @@ function hostAdvance() {
   hostBeginTurn();
 }
 
+/* ---------- Time game ---------- */
+
+// Everyone stops their own hidden clock at once. Stop times stay with the host until all
+// are in (or time runs out), so the liar can't copy anyone.
+function hostStartTiming() {
+  const room = H.room;
+  const limit = E.timeLimitMs(room.time.hi);
+  Object.assign(room, { status: 'time', stops: {}, deadline: Date.now() + limit });
+  H.phaseTimer = setTimeout(hostStartDiscuss, limit + 300);
+  hostBroadcast();
+}
+
+function hostStop(pid, secs) {
+  const room = H.room;
+  const p = byId(pid);
+  const clean = E.cleanStop(secs);
+  if (!room || room.status !== 'time' || !p || !p.inGame || pid in room.stops || clean === null) return;
+  room.stops[pid] = clean;
+  if (!hostCheckStops()) hostBroadcast();
+}
+
+function hostCheckStops() {
+  const room = H.room;
+  if (room.status !== 'time') return false;
+  const timers = inGame().filter(active);
+  if (timers.length && timers.every((p) => p.id in room.stops)) {
+    hostStartDiscuss();
+    return true;
+  }
+  return false;
+}
+
+// The times go up for everyone; talk it over, then vote (early if everyone but one is ready)
+function hostStartDiscuss() {
+  const room = H.room;
+  if (!room || room.status !== 'time') return;
+  clearTimers();
+  const ms = room.settings.discussSeconds * 1000;
+  for (const p of room.players) p.voteNow = false;
+  Object.assign(room, { status: 'discuss', deadline: Date.now() + ms });
+  H.phaseTimer = setTimeout(() => { if (H.room === room && room.status === 'discuss') hostStartVote(); }, ms + 300);
+  hostBroadcast();
+}
+
 function hostVoteNow(pid, on) {
   const room = H.room;
   const p = byId(pid);
-  if (room.status !== 'draw' || !p || !p.inGame) return;
+  if ((room.status !== 'draw' && room.status !== 'discuss') || !p || !p.inGame) return;
   p.voteNow = on;
   if (!hostCheckVoteNow()) hostBroadcast();
 }
@@ -518,7 +579,7 @@ function voteNowCounts() {
 
 function hostCheckVoteNow() {
   const room = H.room;
-  if (room.status !== 'draw') return false;
+  if (room.status !== 'draw' && room.status !== 'discuss') return false;
   const { have, need } = voteNowCounts();
   if (have >= need && have > 0) {
     hostStartVote();
@@ -559,7 +620,8 @@ function hostCloseVote() {
   if (!room || room.status !== 'vote') return;
   clearTimers();
   room.accused = E.tally(room.votes).accused;
-  if (room.accused && room.accused === room.liar) {
+  // Time game: the times already show roughly where the target is, so no last chance
+  if (room.accused && room.accused === room.liar && !room.time) {
     // Caught: one last chance to steal the win by naming the word
     room.status = 'guess';
     room.options = E.liarOptions(room.category, room.word, E.mulberry32(E.randomSeed()));
@@ -613,7 +675,7 @@ function hostSaveCrew() {
   room.crewStatus = 'Saving this game…';
   const liar = byId(room.liar);
   cloud.saveCrewGame(crew.name, {
-    room: room.code, word: room.word, category: room.category, liar: liar ? liar.name : '', result: room.result,
+    room: room.code, word: room.time ? E.fmtSecs(room.time.target) : room.word, category: room.category, liar: liar ? liar.name : '', result: room.result,
     players: inGame().map((p) => ({ name: p.name, points: room.delta[p.id] || 0, liar: p.id === room.liar })),
   }).then((saved) => {
     if (H.room !== room) return;
@@ -662,7 +724,8 @@ function publicView() {
   const room = H.room;
   const now = Date.now();
   const reveal = room.status === 'result';
-  const { have, need } = room.status === 'draw' ? voteNowCounts() : { have: 0, need: 0 };
+  const { have, need } = room.status === 'draw' || room.status === 'discuss' ? voteNowCounts() : { have: 0, need: 0 };
+  const timesOut = ['discuss', 'vote', 'result'].includes(room.status);
   return {
     t: 'state',
     code: room.code, status: room.status, settings: room.settings, game: room.game,
@@ -674,11 +737,14 @@ function publicView() {
     strokeLive: Boolean(room.strokeSid),
     strokeCount: room.strokes.length,
     clues: room.status === 'lobby' ? [] : room.clues,
+    // Time game: who has stopped while the clock runs, everyone's times once all are in
+    stops: timesOut ? room.stops : {},
+    time: reveal && room.time ? room.time : null,
     voteNowHave: have, voteNowNeed: need,
     players: room.players.map((p) => ({
       id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
       connected: p.connected, away: p.away, inGame: p.inGame, ready: p.ready, voteNow: p.voteNow,
-      voted: Boolean(room.votes[p.id]), score: p.score,
+      voted: Boolean(room.votes[p.id]), stopped: p.id in room.stops, score: p.score,
     })),
     accused: room.status === 'guess' || reveal ? room.accused : null,
     options: room.status === 'guess' || reveal ? room.options : [],
@@ -879,6 +945,8 @@ function applyState(v) {
     S.phaseKey = '';
     S.myVote = null;
     S.voteNowOn = false;
+    S.timeStart = null;
+    S.myStop = null;
     // Keep a drawing that just arrived for this game (joining mid-game); otherwise clean paper
     if (S.drawingGame !== v.game) sheet.clear();
     S.drawingGame = v.game;
@@ -902,7 +970,8 @@ let litId = null;
 function highlight(id) {
   litId = id;
   sheet.highlight(id);
-  $('clue-board').querySelectorAll('[data-pid]').forEach((el) => el.classList.toggle('dim', Boolean(id) && el.dataset.pid !== id));
+  [$('clue-board'), $('time-results')].forEach((board) => board.querySelectorAll('[data-pid]')
+    .forEach((el) => el.classList.toggle('dim', Boolean(id) && el.dataset.pid !== id)));
 }
 let clockTimer = 0;
 
@@ -932,7 +1001,7 @@ function runClock(endsAt, totalMs) {
   clockTimer = setInterval(tick, 200);
 }
 
-const PHASE_LABEL = { role: 'Your card', draw: '', vote: 'Vote', guess: 'Last chance', result: 'Result' };
+const PHASE_LABEL = { role: 'Your card', draw: '', time: 'Stop the clock', discuss: 'Talk it over', vote: 'Vote', guess: 'Last chance', result: 'Result' };
 
 function renderGame(v) {
   const mine = me(v);
@@ -941,18 +1010,22 @@ function renderGame(v) {
   $('bar-phase').textContent = v.status === 'draw' ? `Round ${v.round + 1} of ${E.ROUNDS}` : PHASE_LABEL[v.status];
   $('category').textContent = v.category;
   $('spectator-note').hidden = !spectator;
-  // Progress: three rounds and the vote
-  const stage = v.status === 'role' ? -1 : v.status === 'draw' ? v.round : 3;
-  $('progress').innerHTML = [0, 1, 2, 3].map((i) => `<i class="${i < stage ? 'done' : i === stage ? 'now' : ''}${i === 3 ? ' vote' : ''}"></i>`).join('');
+  const words = wordsGame(v.settings);
+  const timed = timeGame(v.settings);
+  // Progress: three rounds and the vote (Time: the clock, the talk and the vote)
+  const steps = timed ? 3 : 4;
+  const stage = v.status === 'role' ? -1 : v.status === 'draw' ? v.round : v.status === 'time' ? 0 : v.status === 'discuss' ? 1 : steps - 1;
+  $('progress').innerHTML = Array.from({ length: steps }, (_, i) => `<i class="${i < stage ? 'done' : i === stage ? 'now' : ''}${i === steps - 1 ? ' vote' : ''}"></i>`).join('');
 
   // The clock follows whatever deadline the phase has
   const phaseKey = `${v.game}:${v.status}:${v.round}:${v.turn}:${v.strokeLive}`;
   if (S.phaseKey !== phaseKey) {
     S.phaseKey = phaseKey;
-    if (v.endsIn > 0) {
+    // No clock while people count in their heads: it would give the rhythm away
+    if (v.endsIn > 0 && v.status !== 'time') {
       const total = v.status === 'draw'
         ? wordsGame(v.settings) ? v.settings.wordSeconds * 1000 : (v.settings.mode === 'stroke' ? (v.strokeLive ? E.STROKE.maxMs : E.STROKE.startMs) : v.settings.seconds * 1000)
-        : { role: E.TIMES.roleMs, vote: E.TIMES.voteMs, guess: E.TIMES.guessMs }[v.status];
+        : { role: E.TIMES.roleMs, vote: E.TIMES.voteMs, guess: E.TIMES.guessMs, discuss: v.settings.discussSeconds * 1000 }[v.status];
       runClock(performance.now() + v.endsIn, total);
     } else {
       stopClock();
@@ -960,22 +1033,24 @@ function renderGame(v) {
   }
 
   $('role-overlay').hidden = v.status !== 'role';
-  $('draw-panel').hidden = v.status !== 'draw';
+  $('draw-panel').hidden = !['draw', 'time', 'discuss'].includes(v.status);
   $('vote-panel').hidden = v.status !== 'vote';
   $('guess-panel').hidden = v.status !== 'guess';
   $('result-panel').hidden = v.status !== 'result';
   $('my-card').hidden = spectator || v.status === 'result' || v.status === 'role';
   $('sheet-host').classList.toggle('voting', v.status === 'vote');
-  const words = wordsGame(v.settings);
-  $('sheet-host').hidden = words;
+  $('sheet-host').hidden = words || timed;
   $('clue-board').hidden = !words;
-  $('result-tools').hidden = words;
-  $('vote-tip').textContent = words ? 'Point at a name to see only their words.' : 'Point at a name to see only their lines.';
+  $('time-board').hidden = !timed;
+  $('result-tools').hidden = words || timed;
+  $('vote-tip').textContent = timed ? 'Point at a name to see only their time.' : words ? 'Point at a name to see only their words.' : 'Point at a name to see only their lines.';
   if (words) renderClues(v);
+  if (timed) renderTime(v);
   if (!(words && v.status === 'draw' && v.drawer === S.myId)) $('clue-form').hidden = true;
 
   if (v.status === 'role') renderRole(v);
   if (v.status === 'draw') renderDraw(v);
+  else if (v.status === 'time' || v.status === 'discuss') { stopPen(); $('handoff').hidden = true; renderTimePanel(v); }
   else { stopPen(); $('handoff').hidden = true; $('sheet-host').classList.remove('my-turn'); $('clue-board').classList.remove('my-turn'); }
   if (v.status === 'vote') renderVote(v);
   if (v.status === 'guess') renderGuess(v);
@@ -989,6 +1064,8 @@ function renderGame(v) {
 function cardHTML(secret) {
   if (!secret) return '';
   if (secret.spectator) return '<span class="card-k">Watching</span><b>You’ll play next game</b>';
+  if (secret.range) return `<span class="card-k">You are</span><b class="liar-word">the liar</b><span class="card-cat">The time is between ${secret.range[0]} and ${secret.range[1]} s</span>`;
+  if (typeof secret.time === 'number') return `<span class="card-k">Your time</span><b>${esc(E.fmtSecs(secret.time))}</b><span class="card-cat">Stop the clock exactly then</span>`;
   if (secret.liar) return `<span class="card-k">You are</span><b class="liar-word">the liar</b><span class="card-cat">Category: ${esc(secret.category)}</span>`;
   return `<span class="card-k">Your word</span><b>${esc(secret.word)}</b><span class="card-cat">Category: ${esc(secret.category)}</span>`;
 }
@@ -997,8 +1074,15 @@ function renderCard() {
   const html = cardHTML(S.secret);
   $('card-secret').innerHTML = html;
   $('role-secret').innerHTML = html;
+  $('time-secret').innerHTML = html;
   const liarTip = S.secret && S.secret.liar;
   const words = S.view && wordsGame(S.view.settings);
+  if (S.view && timeGame(S.view.settings)) {
+    $('role-tip').textContent = liarTip
+      ? 'Nobody knows but you. You only know the range: stop somewhere believable and blend in when the times go up.'
+      : 'One player only knows a rough range. Count carefully: a stop far from the others looks like the liar.';
+    return;
+  }
   $('role-tip').textContent = liarTip
     ? (words ? 'Nobody knows but you. Listen to the others’ words and blend in. Don’t get caught.' : 'Nobody knows but you. Watch what the others draw and blend in. Don’t get caught.')
     : (words ? 'One player doesn’t know this word. Give a word that shows you know it, but not so obvious the liar can work it out.' : 'One player doesn’t know this word. Draw enough to show you know it, but not so much the liar can copy you.');
@@ -1015,6 +1099,7 @@ function holdToPeek(btn) {
 }
 holdToPeek($('card-peek'));
 holdToPeek($('role-peek'));
+holdToPeek($('time-peek'));
 
 /* ---------- Role card ---------- */
 function renderRole(v) {
@@ -1213,9 +1298,108 @@ $('turn-done').addEventListener('click', () => {
 
 $('vote-now').addEventListener('click', () => {
   const v = S.view;
-  if (!v || v.status !== 'draw') return;
+  if (!v || (v.status !== 'draw' && v.status !== 'discuss')) return;
   toHost({ t: 'votenow', on: !me(v).voteNow });
 });
+
+/* ---------- Time game: the hidden clock and the times ---------- */
+function renderTime(v) {
+  const mine = me(v);
+  const playing = v.status === 'time';
+  $('time-play').hidden = !playing;
+  $('time-results').hidden = playing;
+  if (playing) {
+    const stopped = mine.stopped || S.myStop !== null;
+    const players = v.players.filter((p) => p.inGame);
+    const done = players.filter((p) => p.stopped).length;
+    const btn = $('time-btn');
+    btn.className = `time-btn pc${mine.color}${S.timeStart !== null && !stopped ? ' running' : ''}`;
+    btn.hidden = !mine.inGame;
+    $('time-peek').hidden = !mine.inGame;
+    btn.disabled = stopped;
+    btn.textContent = stopped ? 'Stopped' : S.timeStart !== null ? 'Stop' : 'Start';
+    $('time-k').textContent = mine.inGame ? 'Stop the clock at the time on your card' : 'The others are stopping their clocks';
+    // Who has stopped only shows once you have, so nobody can time themselves off the others
+    $('time-status').textContent = !mine.inGame ? `${done} of ${players.length} done`
+      : stopped ? `${S.myStop !== null ? `You stopped at ${E.fmtSecs(S.myStop)}. ` : ''}${done} of ${players.length} done`
+        : S.timeStart !== null ? 'Counting… press Stop when you think it’s time' : 'Press Start, then count in your head. No clock is shown.';
+    return;
+  }
+  renderTimeResults(v);
+}
+
+// Everyone's stop as a bar. At the result the target and the liar's range go on top.
+function renderTimeResults(v) {
+  const players = v.players.filter((p) => p.inGame);
+  const stops = v.stops || {};
+  const t = v.time;
+  const values = Object.values(stops);
+  const max = Math.max(1, ...values, ...(t ? [t.target, t.hi] : [])) * 1.08;
+  const pct = (n) => `${Math.min(100, (n / max) * 100).toFixed(2)}%`;
+  const order = [...players].sort((a, b) => (stops[a.id] ?? Infinity) - (stops[b.id] ?? Infinity));
+  // At the result every track carries the liar's range and the target line
+  const marks = t ? `<i class="tr-range" style="left:${pct(t.lo)};width:calc(${pct(t.hi)} - ${pct(t.lo)})"></i><i class="tr-target" style="left:${pct(t.target)}"></i>` : '';
+  const rows = order.map((p) => {
+    const st = stops[p.id];
+    const has = typeof st === 'number';
+    const diff = t && has ? st - t.target : null;
+    const off = diff === null ? '' : `<span class="tr-off">${diff >= 0 ? '+' : '−'}${Math.abs(diff).toFixed(2)}</span>`;
+    return `<li class="pc${p.color}" data-pid="${esc(p.id)}">
+      <span class="tr-name"><i class="pen-dot"></i><span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
+      <span class="tr-track">${marks}${has ? `<i class="tr-bar" style="width:${pct(st)}"></i>` : ''}</span>
+      <span class="tr-val">${has ? esc(E.fmtSecs(st)) : '<em>no stop</em>'}${off}</span></li>`;
+  }).join('');
+  const head = t ? `<li class="tr-head" aria-hidden="true"><span></span><span class="tr-track bare">
+      <span class="tr-chip range" style="left:clamp(4.5rem, ${pct((t.lo + t.hi) / 2)}, calc(100% - 4.5rem))">Liar’s range ${t.lo}–${t.hi} s</span></span><span></span></li>
+    <li class="tr-head" aria-hidden="true"><span></span><span class="tr-track bare">
+      <span class="tr-chip target" style="left:clamp(3rem, ${pct(t.target)}, calc(100% - 3rem))">target ${esc(E.fmtSecs(t.target))}</span></span><span></span></li>` : '';
+  $('time-results').innerHTML = `<p class="time-k">${t ? 'The times' : 'Everyone’s stop. Who doesn’t fit?'}</p>
+    <ul class="tr-list">${head}${rows}</ul>`;
+  highlight(litId);
+}
+
+function renderTimePanel(v) {
+  const mine = me(v);
+  const talking = v.status === 'discuss';
+  const box = $('turn-status');
+  box.className = `turn-status pc${mine.color}`;
+  $('turn-title').textContent = talking ? 'Talk it over' : mine.inGame ? 'Stop your clock' : 'Everyone is timing';
+  $('turn-sub').textContent = talking ? 'Who stopped like they didn’t know the time? Then vote.'
+    : 'The times go up when everyone has stopped';
+  $('turn-done').hidden = true;
+  $('order-list').innerHTML = '';
+  const vn = $('vote-now');
+  vn.hidden = !talking || !mine.inGame;
+  vn.setAttribute('aria-pressed', String(Boolean(mine.voteNow)));
+  vn.querySelector('b').textContent = mine.voteNow ? 'Waiting for the others' : 'Ready to vote';
+  $('vote-now-count').textContent = `${v.voteNowHave} of ${v.voteNowNeed} needed`;
+}
+
+// Times come from the moment the browser registered the press (event.timeStamp),
+// so a busy page can't add delay to anyone's stop.
+function timePress(ts) {
+  const v = S.view;
+  if (!v || v.status !== 'time' || !me(v).inGame || me(v).stopped || S.myStop !== null) return;
+  if (S.timeStart === null) {
+    S.timeStart = ts;
+  } else {
+    if (ts - S.timeStart < 120) return;   // ignore an accidental double tap
+    S.myStop = Math.round((ts - S.timeStart) / 10) / 100;
+    toHost({ t: 'stop', secs: S.myStop });
+  }
+  renderTime(v);
+}
+$('time-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); timePress(e.timeStamp); });
+$('time-btn').addEventListener('keydown', (e) => {
+  if ((e.key !== 'Enter' && e.key !== ' ') || e.repeat) return;
+  e.preventDefault();
+  timePress(e.timeStamp);
+});
+['pointerover', 'focusin'].forEach((ev) => $('time-results').addEventListener(ev, (e) => {
+  const li = e.target.closest('[data-pid]');
+  if (li && S.view && ['vote', 'result'].includes(S.view.status)) highlight(li.dataset.pid);
+}));
+$('time-results').addEventListener('pointerleave', () => highlight(null));
 
 /* ---------- Voting ---------- */
 function renderVote(v) {
@@ -1269,8 +1453,9 @@ function renderResult(v) {
   const liarName = nameOf(v, v.liar);
   const isLiar = v.liar === S.myId;
   const mine = me(v);
+  const timed = timeGame(v.settings);
   const head = {
-    caught: ['Caught!', `${liarName} was the liar and couldn’t name the word.`],
+    caught: ['Caught!', timed ? `${liarName} was the liar.` : `${liarName} was the liar and couldn’t name the word.`],
     stolen: ['Stolen!', `${liarName} was caught but named the word.`],
     escaped: ['The liar got away', v.accused ? `You voted out ${nameOf(v, v.accused)}. ${liarName} was the liar.` : `The vote was split. ${liarName} was the liar.`],
   }[v.result];
@@ -1278,7 +1463,8 @@ function renderResult(v) {
   $('result-head').className = `result-head ${mine.inGame ? (won ? 'won' : 'lost') : ''}`;
   $('result-title').textContent = head[0];
   $('result-sub').textContent = head[1];
-  $('result-word').textContent = cap(v.word);
+  $('result-word-label').textContent = timed ? 'The time' : 'The word';
+  $('result-word').textContent = timed ? (v.time ? E.fmtSecs(v.time.target) : '') : cap(v.word);
   $('result-liar').innerHTML = `<span class="pen-dot pc${colorOf(v, v.liar)}"></span>${esc(liarName)}${isLiar ? ' (you)' : ''}`;
   const rows = v.players.filter((p) => p.inGame).map((p) => {
     const target = v.votes[p.id];
@@ -1359,6 +1545,7 @@ const paintPlay = segment($('set-play'), () => ROOM_PREFS.play, (v) => { ROOM_PR
 const paintMode = segment($('set-mode'), () => ROOM_PREFS.mode, (v) => { ROOM_PREFS.mode = v; roomSettingsChanged(); });
 $('set-word-seconds').addEventListener('change', (e) => { ROOM_PREFS.wordSeconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-seconds').addEventListener('change', (e) => { ROOM_PREFS.seconds = Number(e.target.value); roomSettingsChanged(); });
+$('set-discuss').addEventListener('change', (e) => { ROOM_PREFS.discussSeconds = Number(e.target.value); roomSettingsChanged(); });
 const paintAllCats = segment($('set-cats-all'), () => (ROOM_PREFS.categories.length ? 'pick' : 'all'), (v) => {
   ROOM_PREFS.categories = v === 'all' ? [] : (ROOM_PREFS.categories.length ? ROOM_PREFS.categories : [...CATEGORY_NAMES]);
   roomSettingsChanged();
@@ -1389,10 +1576,14 @@ function paintRoomSettings() {
   paintMode();
   paintAllCats();
   const words = ROOM_PREFS.play === 'words';
-  $('mode-setting').hidden = words;
+  const timed = ROOM_PREFS.play === 'time';
+  $('mode-setting').hidden = words || timed;
   $('word-seconds-field').hidden = !words;
   $('set-word-seconds').value = String(ROOM_PREFS.wordSeconds);
-  $('seconds-field').hidden = words || ROOM_PREFS.mode !== 'free';
+  $('discuss-field').hidden = !timed;
+  $('set-discuss').value = String(ROOM_PREFS.discussSeconds);
+  $('cats-setting').hidden = timed;
+  $('seconds-field').hidden = words || timed || ROOM_PREFS.mode !== 'free';
   $('set-seconds').value = String(ROOM_PREFS.seconds);
   const picking = ROOM_PREFS.categories.length > 0;
   $('cat-picks').hidden = !picking;
@@ -1401,6 +1592,12 @@ function paintRoomSettings() {
 }
 
 function settingsLines(st) {
+  if (timeGame(st)) {
+    return [
+      '<li><b>Time: stop a hidden clock at your secret time</b></li>',
+      `<li>${st.discussSeconds} seconds to talk, then the vote</li>`,
+    ].join('');
+  }
   const cats = st.categories.length ? `${plural(st.categories.length, 'category')}: ${st.categories.join(', ')}` : 'All categories';
   return [
     `<li><b>${wordsGame(st) ? `Words: say a word each turn, ${st.wordSeconds} seconds` : st.mode === 'stroke' ? 'Draw: one line per turn' : `Draw: free draw, ${st.seconds} seconds a turn`}</b></li>`,

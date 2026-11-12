@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="Everyone draws the same secret word, or gives a word about it, in turns. One of you doesn't know it. Find the liar.">
+  <meta name="description" content="Everyone draws the same secret word, gives a word about it, or stops a hidden clock at a secret time. One of you doesn't know it. Find the liar.">
   <title>The Liar</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><path d='M7 21c4-9 8 3 12-6 2-4 5-2 6 0' fill='none' stroke='%23e0566e' stroke-width='3' stroke-linecap='round'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,7 +35,7 @@
         <span class="logo-row" id="logo-row" aria-hidden="true"></span>
         <span class="logo-sub" aria-hidden="true">draw it or say it, one of you is lying</span>
       </h1>
-      <p class="lede">Everyone gets the same secret word and takes turns to draw it, or to say one word about it. One of you doesn’t know it and is bluffing every turn. Find the liar.</p>
+      <p class="lede">Everyone gets the same secret word and takes turns to draw it, or to say one word about it, or the same secret time to stop a hidden clock at. One of you doesn’t know it and is bluffing. Find the liar.</p>
       <label class="field">Your name
         <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
       </label>
@@ -85,9 +85,10 @@
       <div id="host-settings" class="host-settings" hidden>
         <div class="setting">
           <span class="setting-label">Game</span>
-          <div class="seg two" id="set-play" role="group" aria-label="Game">
+          <div class="seg" id="set-play" role="group" aria-label="Game">
             <button type="button" data-value="draw"><b>Draw</b><small>Add to one shared drawing</small></button>
             <button type="button" data-value="words"><b>Words</b><small>Type a word about it</small></button>
+            <button type="button" data-value="time"><b>Time</b><small>Stop a hidden clock</small></button>
           </div>
         </div>
         <div class="setting" id="mode-setting">
@@ -105,6 +106,13 @@
             <option value="60">60 seconds</option>
           </select>
         </label>
+        <label class="select-field" id="discuss-field">Time to talk before the vote
+          <select id="set-discuss">
+            <option value="60">60 seconds</option>
+            <option value="120">120 seconds</option>
+            <option value="180">180 seconds</option>
+          </select>
+        </label>
         <label class="select-field" id="seconds-field">Seconds per turn
           <select id="set-seconds">
             <option value="5">5 seconds</option>
@@ -115,7 +123,7 @@
             <option value="30">30 seconds</option>
           </select>
         </label>
-        <div class="setting">
+        <div class="setting" id="cats-setting">
           <span class="setting-label">Words from</span>
           <div class="seg two" id="set-cats-all" role="group" aria-label="Words from">
             <button type="button" data-value="all"><b>All categories</b></button>
@@ -167,6 +175,18 @@
       <div class="sheet-card">
         <div class="sheet-host" id="sheet-host"></div>
         <div class="clue-board" id="clue-board" hidden></div>
+        <div class="time-board" id="time-board" hidden>
+          <div class="time-play" id="time-play">
+            <p class="time-k" id="time-k">Stop the clock at the time on your card</p>
+            <button class="peek" id="time-peek" type="button" aria-label="Hold to see your card">
+              <span class="peek-cover"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>Hold to see your card</span>
+              <span class="peek-secret" id="time-secret"></span>
+            </button>
+            <button class="time-btn" id="time-btn" type="button">Start</button>
+            <p class="time-status" id="time-status" aria-live="polite"></p>
+          </div>
+          <div class="time-results" id="time-results" hidden></div>
+        </div>
         <div class="handoff" id="handoff" hidden>
           <span class="handoff-name" id="handoff-name"></span>
           <span class="handoff-sub" id="handoff-sub"></span>
@@ -229,7 +249,7 @@
           <p id="result-sub"></p>
         </div>
         <div class="reveal-row">
-          <div><span class="muted">The word</span><b class="reveal-word" id="result-word"></b></div>
+          <div><span class="muted" id="result-word-label">The word</span><b class="reveal-word" id="result-word"></b></div>
           <div><span class="muted">The liar</span><b class="reveal-liar" id="result-liar"></b></div>
         </div>
         <ul class="vote-results" id="result-votes"></ul>
@@ -268,17 +288,20 @@
 <section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <p>3 to 8 players. Everyone gets the same secret word, except one player: <b>the liar</b>, who only sees the category.</p>
-  <p>The host picks the game: <b>Draw</b> or <b>Words</b>.</p>
+  <p>The host picks the game: <b>Draw</b>, <b>Words</b> or <b>Time</b>.</p>
   <h3>Draw</h3>
   <p>Players take turns adding to one shared drawing, in an order picked at random (the liar is never first). There are 3 rounds in the same order. Depending on the room, a turn is <b>one line</b> (pen down, draw, lift) or <b>free drawing</b> for a set time (press <b>Done drawing</b> to finish early). Every player draws in their own colour.</p>
   <p>Draw enough to prove you know the word, but not so much that the liar can work it out.</p>
   <h3>Words</h3>
   <p>Same turns and rounds, but instead of drawing you type <b>a word about the secret word</b> (one or two words). Everyone sees it on the board. You can’t use the word itself (or a word made from it, like <i>teapot</i> for <i>tea</i>) or repeat a word someone already said. Run out of time and your turn is passed, which looks suspicious.</p>
   <p>Too obvious and the liar works out the word; too vague and you look like the liar.</p>
+  <h3>Time</h3>
+  <p>Instead of a word, everyone gets a secret time, like <b>6.71 s</b>. The liar only gets a range it’s somewhere in, like <b>3 to 9 s</b>. Everyone presses <b>Start</b>, counts in their head (no clock is shown) and presses <b>Stop</b> at their time.</p>
+  <p>When everyone has stopped, all the times go up and you get 60, 120 or 180 seconds (host setting) to talk it over. Press <b>Ready to vote</b> to cut it short (everyone but one is enough). The liar’s stop is a guess, so look for the odd one out, but people who know the time miss too. There’s no last chance in Time: a caught liar is caught.</p>
   <h3>Voting</h3>
   <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. Point at a name to see only their lines or words. The most votes is accused; a tie means nobody is.</p>
   <h3>Last chance</h3>
-  <p>If the liar is caught, they get one try to pick the secret word from 12 options. Right, and they steal the win.</p>
+  <p>If the liar is caught, they get one try to pick the secret word from 12 options. Right, and they steal the win. (Not in Time.)</p>
   <h3>Points</h3>
   <ul class="rule-points">
     <li><b>Liar caught:</b> everyone else gets 2.</li>

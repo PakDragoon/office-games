@@ -1,6 +1,6 @@
 # The Liar
 
-A bluffing game for 3 to 8 colleagues, in the browser. Everyone gets the same secret word and takes turns to draw it (**Draw**) or to say a word about it (**Words**). One of you doesn't know it and is bluffing every turn. Find the liar.
+A bluffing game for 3 to 8 colleagues, in the browser. Everyone gets the same secret word and takes turns to draw it (**Draw**) or to say a word about it (**Words**), or gets the same secret time to stop a hidden clock at (**Time**). One of you doesn't know it and is bluffing. Find the liar.
 
 Play at `https://pakdragoon.github.io/the-liar/`.
 
@@ -21,11 +21,13 @@ Draw enough to prove you know the word, but not so much that the liar can work i
 
 **Words** (host setting). The same turns and rounds, but instead of drawing you type a word about the secret word (one or two words, 20, 30, 45 or 60 seconds). Everyone sees it on a board with a row per player and a column per round. You can't use the word itself, a word made from it (*teapot* for *tea*) or the main part of a two-word answer (*cricket* for *cricket bat*), and you can't repeat a word someone already said. Run out of time and your turn shows as **passed**. The liar's words are never checked against the secret word, so a refusal can't tell them what it is (and if they happen to type it, it simply counts).
 
+**Time** (host setting). Instead of a word, everyone gets a secret time to the hundredth of a second, like **6.71 s** (somewhere from 3 to 12 s). The liar only gets a whole-second range 6 seconds wide that it sits inside, like **3 to 9 s** (the target can be anywhere in the range). Everyone presses **Start** at their own pace, counts in their head and presses **Stop**. No clock is shown, and you only see how many people are done once you've stopped, so nobody can time themselves off the others. When everyone has stopped (or the time runs out; anyone who didn't stop shows **no stop**), all the times go up as bars and you get **60, 120 or 180 seconds** (host setting) to talk it over, then the vote. **Ready to vote** cuts the talk short. The result shows the target and the liar's range over everyone's bars. There's no last chance in Time (the times already give the target away), so a caught liar is simply caught.
+
 **Ready to vote.** Anyone can press it at any time. When everyone but one has pressed it, the drawing stops and the vote starts. Otherwise the vote starts after round 3.
 
 **The vote.** Pick who you think the liar is (45 seconds). Point at a name to see only that player's lines (or words). The most votes is accused; a tie accuses nobody.
 
-**Last chance.** If the liar is accused, they pick the secret word from 12 options in its category (30 seconds). Pick right, and they steal the win.
+**Last chance** (Draw and Words). If the liar is accused, they pick the secret word from 12 options in its category (30 seconds). Pick right, and they steal the win.
 
 **Points.**
 

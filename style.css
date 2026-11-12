@@ -291,6 +291,59 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
   .clue-grid .who { font-size: 0.9rem; }
 }
 
+/* Time game: stop a hidden clock, then everyone's times as bars */
+.time-board {
+  aspect-ratio: 4 / 3; border-radius: 9px; background: var(--paper);
+  padding: clamp(0.8rem, 2.5vw, 1.6rem); display: grid; align-content: center;
+}
+.time-play { display: grid; justify-items: center; gap: 1rem; text-align: center; width: min(420px, 100%); margin: 0 auto; }
+.time-k { margin: 0; font-weight: 800; font-size: clamp(1.05rem, 2.2vw, 1.3rem); letter-spacing: -0.01em; }
+.time-play .peek { min-height: 84px; }
+.time-btn {
+  font: inherit; font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; letter-spacing: -0.01em;
+  width: min(260px, 100%); aspect-ratio: 2.4 / 1; border-radius: 999px; cursor: pointer;
+  border: 2px solid var(--pc, var(--ink)); background: var(--surface); color: var(--pc, var(--ink));
+  touch-action: manipulation; user-select: none; -webkit-user-select: none;
+}
+.time-btn.running { background: var(--pc, var(--ink)); color: var(--surface); }
+.time-btn:disabled { opacity: 0.55; cursor: default; }
+.time-status { margin: 0; min-height: 1.5rem; color: var(--muted); font-weight: 600; }
+.time-results { display: grid; gap: 0.9rem; align-content: center; }
+.tr-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.tr-list li {
+  display: grid; grid-template-columns: minmax(5rem, 8rem) minmax(0, 1fr) auto; align-items: center; gap: 0.6rem;
+  transition: opacity 0.2s ease;
+}
+.tr-list li.dim { opacity: 0.18; }
+.tr-name { display: flex; align-items: center; gap: 0.45rem; font-weight: 800; color: var(--pc); min-width: 0; }
+.tr-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tr-track { position: relative; height: 1.5rem; border-radius: 6px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tr-bar {
+  position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px;
+  background: color-mix(in srgb, var(--pc) 70%, transparent); animation: tr-grow 0.6s ease both;
+}
+@keyframes tr-grow { from { width: 0 !important; } }
+.tr-val { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 4.6rem; text-align: right; display: grid; justify-items: end; line-height: 1.15; }
+.tr-val em { font-style: italic; font-weight: 600; color: var(--muted); }
+.tr-off { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.tr-range {
+  position: absolute; top: -0.25rem; bottom: -0.25rem; background: color-mix(in srgb, var(--liar) 10%, transparent);
+  border-left: 1px dashed color-mix(in srgb, var(--liar) 60%, transparent);
+  border-right: 1px dashed color-mix(in srgb, var(--liar) 60%, transparent);
+}
+.tr-target { position: absolute; top: -0.25rem; bottom: -0.25rem; border-left: 2px solid var(--ink); z-index: 1; }
+.tr-head .tr-track.bare { background: none; height: 1.3rem; }
+.tr-chip {
+  position: absolute; top: 0; transform: translateX(-50%); font-size: 0.75rem; font-weight: 800; white-space: nowrap;
+  border-radius: 999px; padding: 0 0.5rem; line-height: 1.3rem;
+}
+.tr-chip.target { background: var(--ink); color: var(--paper); }
+.tr-chip.range { color: var(--liar); }
+@media (max-width: 560px) {
+  .time-board { aspect-ratio: auto; min-height: 17rem; }
+  .tr-list li { grid-template-columns: minmax(4rem, 6rem) minmax(0, 1fr) auto; gap: 0.4rem; }
+}
+
 .handoff {
   position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
   display: grid; justify-items: center; gap: 0.1rem;
