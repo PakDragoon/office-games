@@ -91,7 +91,8 @@ describe.each(GAMES)('public toggle: %s', (game) => {
     expect(await isPublic(host)).toBe(true);
     expect(await quick(game, code)).toBe(code);
     host.send({ t: 'public', on: false });
-    expect(await isPublic(host)).toBe(false);
+    // Wait for the view that carries the change: rated games send an extra view once ratings load
+    expect(viewOf(await host.state((s) => viewOf(s).public === false)).public).toBe(false);
     expect(await quick(game, null)).toBeNull();
     host.close();
   });
