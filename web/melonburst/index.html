@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A word-guessing party game. Every wrong letter snaps another rubber band round your watermelon. Guess the word before it bursts.">
+  <title>Melon Burst</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><ellipse cx='16' cy='17' rx='14' ry='11' fill='%232f8f4e' stroke='%23174d2b' stroke-width='1.5'/><path d='M4 13c8 2 16 2 24 0M4 21c8-2 16-2 24 0' stroke='%231d6236' stroke-width='2' fill='none'/><path d='M14 6.5c3 4 3 17 0 21' stroke='%23e8453c' stroke-width='2.4' fill='none'/><path d='M18 6.5c3 4 3 17 0 21' stroke='%23f2b630' stroke-width='2.4' fill='none'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Melon Burst">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-sub" aria-hidden="true">guess the word before it pops</span>
+      </h1>
+      <p class="lede">Guess a hidden word one letter at a time. Every wrong letter snaps another rubber band round your watermelon. One band too many and it bursts.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+      <p class="credit">🍉 Game idea by <a href="https://www.linkedin.com/in/rijja-farhan-011381214/" target="_blank" rel="noopener noreferrer">Rijja</a></p>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Race on the computer’s words (2 to 8), or pick words for each other (1 vs 1 or 2 vs 2).</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice solo-card">
+        <div class="solo-head">
+          <h2>On your own</h2>
+          <span class="daily-tag" id="daily-tag"></span>
+        </div>
+        <p id="daily-note">One word for everyone today, 6 bands to spare. Or practise as long as you like.</p>
+        <div class="setting">
+          <span class="setting-label">Practice words</span>
+          <div class="seg four" id="pr-length" role="group" aria-label="Practice words">
+            <button type="button" data-value="short"><b>Short</b><small>4–6</small></button>
+            <button type="button" data-value="medium"><b>Medium</b><small>6–8</small></button>
+            <button type="button" data-value="long"><b>Long</b><small>8–12</small></button>
+            <button type="button" data-value="any"><b>Any</b></button>
+          </div>
+        </div>
+        <div class="solo-buttons">
+          <button class="btn primary" id="daily-btn" type="button">Daily word</button>
+          <button class="btn ghost" id="practice-btn" type="button">Practice</button>
+        </div>
+      </section>
+      <section class="choice steps">
+        <h2>How a round goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 23h5M13 23h5M21 23h5"/><path d="M14 9l2-3 2 3M15 8h2"/></svg><b>A hidden word</b><span>Picked by the computer, or by your opponent.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="9" width="9" height="9" rx="2"/><rect x="18" y="9" width="9" height="9" rx="2"/><path d="M8 25h16"/></svg><b>Guess letters</b><span>Right ones fill in, everywhere they appear.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="16" rx="12" ry="9"/><path d="M14 7c2 3 2 15 0 18M18 7c2 3 2 15 0 18"/></svg><b>Wrong? Snap!</b><span>Another rubber band round your melon.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 4l2 7 7-3-4 6 7 2-7 2 4 6-7-3-2 7-2-7-7 3 4-6-7-2 7-2-4-6 7 3z"/></svg><b>Don’t let it burst</b><span>Solve it with bands to spare to score more.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div class="mode-cards" id="mode-cards">
+        <button class="mode-card" type="button" data-mode="race"><b>Race</b><span>The computer picks a word; everyone races to solve it on their own melon. 2 to 8 players.</span></button>
+        <button class="mode-card" type="button" data-mode="pick"><b>Pick words</b><span>Pick a word for the other side, then guess theirs. 1 vs 1, or 2 vs 2 in teams.</span></button>
+      </div>
+      <div id="teams-box" hidden>
+        <div class="setting" id="teams-setting">
+          <span class="setting-label">Sides</span>
+          <div class="seg two" id="set-teams" role="group" aria-label="Sides">
+            <button type="button" data-value="1v1"><b>1 vs 1</b></button>
+            <button type="button" data-value="2v2"><b>2 vs 2</b><small>teammates take turns picking</small></button>
+          </div>
+        </div>
+        <div class="team-cards" id="team-cards"></div>
+      </div>
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Bands before it bursts</span>
+          <div class="seg" id="set-bands" role="group" aria-label="Bands before it bursts">
+            <button type="button" data-value="8"><b>8</b><small>easy</small></button>
+            <button type="button" data-value="6"><b>6</b><small>normal</small></button>
+            <button type="button" data-value="5"><b>5</b><small>tense</small></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label" id="rounds-label">Rounds</span>
+          <div class="seg" id="set-rounds" role="group" aria-label="Rounds"></div>
+        </div>
+        <div class="setting" id="length-setting">
+          <span class="setting-label">Word length</span>
+          <div class="seg four" id="set-length" role="group" aria-label="Word length">
+            <button type="button" data-value="short"><b>Short</b><small>4–6</small></button>
+            <button type="button" data-value="medium"><b>Medium</b><small>6–8</small></button>
+            <button type="button" data-value="long"><b>Long</b><small>8–12</small></button>
+            <button type="button" data-value="any"><b>Any</b></button>
+          </div>
+        </div>
+        <details class="more" id="more-settings">
+          <summary>More settings</summary>
+          <div class="select-grid">
+            <label class="select-field">Time to guess
+              <select id="set-time"><option value="off">No limit</option><option value="60">60 seconds</option><option value="90">90 seconds</option><option value="120">2 minutes</option><option value="180">3 minutes</option></select>
+            </label>
+            <label class="select-field" id="words-field">The computer’s words
+              <select id="set-words"><option value="all">Everyday and more (26,000)</option><option value="common">Everyday only (8,000)</option></select>
+            </label>
+          </div>
+        </details>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start game</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game (rooms, daily and practice) ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="play" id="play">
+      <div class="round-line" id="round-line"></div>
+
+      <!-- Guessing -->
+      <div id="guess-view" class="play" hidden>
+        <div class="melon-host" id="melon-host"></div>
+        <div class="band-count" id="band-count" aria-hidden="true"></div>
+        <div class="word" id="word" aria-live="polite"></div>
+        <div class="wrong-letters" id="wrong-letters"></div>
+        <p class="small-note muted center" id="guess-note"></p>
+        <div class="kbd" id="kbd"></div>
+      </div>
+
+      <!-- Picking a word for the other side -->
+      <div id="pick-view" class="card-panel" hidden></div>
+
+      <!-- Between rounds and at the end -->
+      <div id="reveal-view" class="card-panel" hidden></div>
+
+      <div class="countdown" id="countdown" hidden></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel">
+        <div class="panel-head"><h2 id="players-title">Players</h2><span class="muted small-note" id="round-tag"></span></div>
+        <ul class="players" id="players"></ul>
+        <p class="small-note muted" id="watching"></p>
+      </section>
+      <section class="panel" id="host-actions" hidden>
+        <div class="action-row">
+          <button class="btn ghost" id="end-round" type="button">End round now</button>
+          <button class="btn ghost" id="end-game" type="button">End game</button>
+        </div>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+<div class="flash" id="flash" aria-live="polite"></div>
+<div class="screen-splat" id="screen-splat" aria-hidden="true"></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound (snaps, pops, letters)</label>
+  <label class="toggle"><input type="checkbox" id="vibrate-toggle"> Vibrate on a snap (phones)</label>
+  <label class="select-field">Burst animation
+    <select id="anim-select"><option value="on">On, with juice</option><option value="reduced">Reduced</option><option value="off">Off</option></select>
+  </label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>There’s a hidden word, shown as blanks. Guess it one letter at a time: tap a key or type on your keyboard.</p>
+  <ul class="rule-points">
+    <li>A <b>right letter</b> fills in every place it appears.</li>
+    <li>A <b>wrong letter</b> snaps another rubber band round your watermelon. It gets squeezed, nervous, then cracks.</li>
+    <li>Your melon survives a set number of bands (6 unless the room changes it). <b>One more and it bursts</b>, and that word scores nothing.</li>
+  </ul>
+  <h3>Points</h3>
+  <p>Solving a word is worth <b>10</b>, plus <b>1 for every band you had to spare</b>. In a race, the first three to solve also get <b>3, 2 and 1</b> extra.</p>
+  <h3>Race</h3>
+  <p>The computer picks a word and everyone guesses it at the same time, each on their own melon. You can see how the others are doing (how many letters, how many bands) but not their letters.</p>
+  <h3>Pick words</h3>
+  <p>Two sides, 1 vs 1 or 2 vs 2. Each round, each side picks a secret word for the other side (in teams, teammates take turns picking). Then everyone guesses the other side’s word on their own melon, and gets to watch the other side struggle with theirs. Team points add up.</p>
+  <p>Words must be real English words of 4 to 12 letters. Stuck for one? Press <b>Suggest one</b>.</p>
+  <h3>On your own</h3>
+  <ul class="rule-points">
+    <li><b>Daily word:</b> the same everyday word for everyone today. One go, then share your result.</li>
+    <li><b>Practice:</b> word after word, as long as you like. Keep your streak going.</li>
+  </ul>
+  <p class="credit">🍉 Game idea by <a href="https://www.linkedin.com/in/rijja-farhan-011381214/" target="_blank" rel="noopener noreferrer">Rijja</a>. Thank you!</p>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
