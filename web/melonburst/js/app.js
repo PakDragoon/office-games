@@ -12,7 +12,8 @@ import { createMelon } from './melon.js';
    Pick words: two sides (1 vs 1 or 2 vs 2) pick words for each other, then guess.
    One player hosts: their browser is the "server". It holds the words, checks every guess and
    sends each player their own view (nobody gets letters they shouldn't see). Connections use
-   PeerJS (WebRTC). The daily word and practice run the same host code locally, alone.
+   PeerJS (WebRTC). Practice runs the same host code locally, alone. The daily word runs on the server
+   (server/src/daily/melonburst.ts): this page only sends letters and draws what it answers.
    ========================================================= */
 
 const SOLO_ID = 'me';
@@ -30,6 +31,9 @@ const store = {
   },
   set(key, value) {
     try { localStorage.setItem(`melonburst.${key}`, JSON.stringify(value)); } catch { /* not saved */ }
+  },
+  remove(key) {
+    try { localStorage.removeItem(`melonburst.${key}`); } catch { /* nothing to remove */ }
   },
 };
 const PREFS = { sound: true, vibrate: true, anim: 'on', analytics: true, ...store.get('prefs', {}) };
@@ -171,8 +175,8 @@ const SOUND = {
 };
 
 /* =========================================================
-   The daily word and practice run the game here, in this browser (rooms run on the server,
-   server/src/games/melonburst.ts, from the same code)
+   Practice runs the game here, in this browser (rooms run on the server, server/src/games/melonburst.ts,
+   from the same code; the daily word is on the server too, see "The daily word" below)
    ========================================================= */
 const S = {
   myName: '', myId: null, isHost: false, code: '', view: null, creating: false,
@@ -272,7 +276,7 @@ function setTimer(ms, fn) {
   H.timer = setTimeout(fn, Math.max(0, ms));
 }
 
-const totalRounds = (room) => (room.solo === 'practice' ? Infinity : room.solo === 'daily' ? 1 : room.settings.rounds);
+const totalRounds = (room) => (room.solo === 'practice' ? Infinity : room.settings.rounds);
 
 function startProblem(room) {
   if (room.solo) return '';
@@ -333,8 +337,7 @@ function hostStartRound() {
     hostBroadcast();
     return;
   }
-  if (room.solo === 'daily') room.word = E.dailyWord(WORDS.lex, room.day);
-  else if (room.solo === 'practice') room.word = E.pickWord(WORDS.lex, { length: PRACTICE.length, words: 'all' }, H.rnd, room.used);
+  if (room.solo === 'practice') room.word = E.pickWord(WORDS.lex, { length: PRACTICE.length, words: 'all' }, H.rnd, room.used);
   else room.word = E.pickWord(WORDS.lex, st, H.rnd, room.used);
   room.used.add(room.word);
   hostCountdown();
@@ -362,16 +365,6 @@ function hostBeginGuess() {
   room.phase = 'guess';
   room.guessStart = Date.now();
   for (const pid of participants()) room.guesses[pid] = E.newGuess(targetWord(pid));
-  // The daily word picks up where you left off after a refresh
-  if (room.solo === 'daily') {
-    const saved = store.get('daily', null);
-    if (saved && saved.day === room.day && Array.isArray(saved.guessed)) {
-      let g = room.guesses[SOLO_ID];
-      for (const ch of saved.guessed) { const r = E.guess(g, ch, room.settings.bands); if (r) g = r.g; }
-      g.ms = saved.ms || 0;
-      room.guesses[SOLO_ID] = g;
-    }
-  }
   const ms = room.solo ? 0 : E.timeMs(room.settings);
   room.phaseEnd = ms ? Date.now() + ms : 0;
   if (ms) setTimer(ms, () => hostEndRound());
@@ -434,7 +427,6 @@ function hostGuess(pid, ch) {
     } else next.pts = 0;
   }
   room.guesses[pid] = next;
-  if (room.solo === 'daily') store.set('daily', { day: room.day, guessed: next.guessed, ms: next.ms || 0, done: E.isDone(next) });
   hostBroadcast();
   hostCheckRoundDone();
 }
@@ -519,7 +511,7 @@ function hostBackToLobby() {
   hostBroadcast();
 }
 
-/* ---------- Solo: the daily word and practice ---------- */
+/* ---------- Practice (runs here) ---------- */
 
 async function startSolo(kind) {
   closeRoom();
@@ -532,19 +524,9 @@ async function startSolo(kind) {
   if (kind === 'practice') S.streak = 0;
   H.rnd = E.mulberry32(E.randomSeed());
   const room = newRoom('', kind, { ...E.DEFAULT_SETTINGS, bands: E.DAILY_BANDS, time: 'off' });
-  room.day = E.todayStr();
   room.players.push({ ...newPlayer(SOLO_ID, S.myName || 'You', true, 0), inGame: true });
   H.room = room;
-  cloud.track(kind === 'daily' ? 'daily_started' : 'practice_started');
-  // A finished daily goes straight to its result
-  const saved = store.get('daily', null);
-  if (kind === 'daily' && saved && saved.day === room.day && saved.done) {
-    room.status = 'play';
-    room.game = 1;
-    room.word = E.dailyWord(WORDS.lex, room.day);
-    hostBeginGuess();
-    return;
-  }
+  cloud.track('practice_started');
   hostStartGame();
 }
 
@@ -605,7 +587,7 @@ function viewFor(viewer) {
     standings: room.status === 'over' ? room.standings : null,
     winners: room.status === 'over' ? room.winners : [],
     streak: room.solo === 'practice' ? S.streak : 0,
-    day: room.solo === 'daily' ? room.day : '',
+    day: '',
     crewName: room.crew ? room.crew.name : '',
     crewStatus: room.crewStatus,
   };
@@ -646,17 +628,20 @@ const link = createRoomLink('melonburst', {
   },
 });
 
-// In a room the server runs the game; the daily word and practice run it here
+// In a room, and in the daily, the server runs the game; practice runs it here
 const playingSolo = () => Boolean(H.room && H.room.solo);
 
 function toHost(msg) {
-  if (playingSolo()) hostOnMessage(msg);
+  if (isDaily()) { if (msg && msg.t === 'guess') dailyGuess(msg.ch); }
+  else if (playingSolo()) hostOnMessage(msg);
   else link.send(msg);
 }
 
 function closeRoom() {
   link.close();
   clearTimeout(H.timer);
+  DAILY.token++;
+  DAILY.queue.length = 0;
   Object.assign(S, { view: null, isHost: false, code: '', reconnecting: false, creating: false, roundKey: '', focus: null });
   H.room = null;
   for (const el of rowEls.values()) el.remove();
@@ -674,6 +659,144 @@ function roomSetCrew(rawName) {
   if (name && name.toLowerCase().replace(/[^a-z0-9]/g, '').length < 3) return toast('Crew names need at least 3 letters or numbers');
   store.set('crew', name);
   toHost({ t: 'crew', name });
+}
+
+/* =========================================================
+   The daily word (global, run by the server)
+   The server holds the word and the session: it answers each letter with the masked word and the
+   bands used, and only sends the word itself once you've solved it or burst. One try a day, one
+   word for everyone, a new one at 00:00 UTC. This page turns its answers into the same view the
+   practice and room games draw.
+   ========================================================= */
+const DAILY = { token: 0, data: null, queue: [], sending: false, board: '', day: '', number: 0 };
+
+const dailyApi = (action, body = {}) =>
+  cloud.api(`/api/melonburst/daily/${action}`, { method: 'POST', body: { name: cleanName($('name-input').value) || store.get('name', '') || 'Player', ...body } });
+const isDaily = () => Boolean(S.view && S.view.solo === 'daily');
+
+// What the server says, shaped like a room's view so the same screens draw it
+function dailyView(d) {
+  const mask = d.mask || '';
+  const done = Boolean(d.done);
+  const g = d.started || done ? {
+    len: d.len, wrong: d.wrong, solved: d.solved, burst: d.burst, done, revealed: mask.split('').filter((c) => c !== '_').length,
+    pts: d.points || 0, place: 0, ms: d.ms || 0, mask, guessed: d.guessed || [], ...(done ? { word: d.word } : {}),
+  } : null;
+  return {
+    t: 'state', code: '', solo: 'daily', status: done ? 'over' : 'play', settings: { ...E.DEFAULT_SETTINGS, bands: d.bands, time: 'off' }, game: 1,
+    round: 0, rounds: 1, phase: done ? '' : d.started ? 'guess' : 'countdown', phaseLeft: done || d.started ? 0 : 1500,
+    players: [{ id: SOLO_ID, name: S.myName || 'You', color: 0, isHost: true, photo: '', connected: true, away: false, inGame: true, score: d.points || 0, solved: d.solved ? 1 : 0, ms: d.ms || 0, wins: 0, side: null, g }],
+    teams: { A: [], B: [] }, pickers: null, picked: null, sideWord: null, watchWords: null, last: null, standings: null, winners: [],
+    streak: 0, day: d.day, crewName: '', crewStatus: '', dailyMs: d.ms || 0,
+  };
+}
+
+// Remember enough to word the home card without asking the server
+function saveDailyCard(d) {
+  store.set('daily2', { day: d.day, started: Boolean(d.started), done: Boolean(d.done), solved: Boolean(d.solved), wrong: d.wrong || 0, ms: d.done ? d.ms || 0 : 0 });
+}
+
+function applyDaily(d) {
+  DAILY.data = d;
+  DAILY.day = d.day;
+  DAILY.number = d.number;
+  saveDailyCard(d);
+  applyState(dailyView(d));
+  if (!d.started && !d.done) {
+    // The clock only starts after the countdown, and only the server's clock counts
+    const token = DAILY.token;
+    setTimeout(() => { if (token === DAILY.token) dailyStart(token); }, 1500);
+  } else if (d.done && DAILY.fresh) {
+    DAILY.fresh = false;
+    cloud.track('daily_finished', { solved: d.solved, wrong: d.wrong });
+  }
+}
+
+async function dailyStart(token) {
+  try {
+    const d = await dailyApi('next');
+    if (token === DAILY.token) applyDaily(d);
+  } catch (err) {
+    if (token === DAILY.token) toast(cloud.errorText(err));
+  }
+}
+
+async function startDaily() {
+  closeRoom();
+  const token = ++DAILY.token;
+  Object.assign(DAILY, { data: null, queue: [], sending: false, board: '', fresh: false });
+  Object.assign(S, { myId: SOLO_ID, isHost: true, code: '', overSeen: -1, roundKey: '' });
+  $('daily-btn').disabled = true;
+  try {
+    const d = await dailyApi('state');
+    if (token !== DAILY.token) return;
+    store.remove('daily');    // progress from the old in-browser daily: its word is gone
+    if (!d.started && !d.done) cloud.track('daily_started');
+    DAILY.fresh = !d.done;
+    applyDaily(d);
+  } catch (err) {
+    if (token === DAILY.token) toast(cloud.errorText(err));
+  } finally {
+    $('daily-btn').disabled = false;
+  }
+}
+
+// One letter at a time, in the order they were typed
+function dailyGuess(ch) {
+  DAILY.queue.push(ch);
+  if (!DAILY.sending) dailyDrain();
+}
+async function dailyDrain() {
+  const token = DAILY.token;
+  DAILY.sending = true;
+  try {
+    while (DAILY.queue.length && token === DAILY.token) {
+      const ch = DAILY.queue.shift();
+      const d = DAILY.data;
+      if (!d || d.done || (d.guessed || []).includes(ch)) continue;
+      let r;
+      try {
+        r = await dailyApi('guess', { ch });
+      } catch (err) {
+        if (token === DAILY.token) { toast(cloud.errorText(err)); S.sent.delete(ch); if (S.view) renderKeyboard(S.view, myGuess(S.view)); }
+        DAILY.queue.length = 0;
+        break;
+      }
+      if (token !== DAILY.token) break;
+      if (r.error === 'busy') toast('Another tab moved first. Showing where things stand.');
+      S.sent.delete(ch);
+      applyDaily(r);
+    }
+  } finally {
+    if (token === DAILY.token) DAILY.sending = false;
+  }
+}
+
+async function renderDailyBoard() {
+  const token = DAILY.token;
+  const el = $('daily-board');
+  if (!el) return;
+  if (DAILY.board) { el.innerHTML = DAILY.board; return; }
+  el.innerHTML = '<p class="muted small">Loading today’s leaderboard…</p>';
+  let html;
+  try {
+    const b = await cloud.api('/api/melonburst/daily/board');
+    const mine = b.me ? `You’re <b>#${b.me.rank}</b> of ${plural(b.players, 'player')} today.` : '';
+    html = (mine ? `<p class="board-me">${mine}</p>` : '')
+      + `<ol class="board">${b.top.slice(0, 10).map((r) => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>`
+      + `<span class="nm">${esc(r.name)}</span><span class="res">${esc(dailyResultText(r.score))}</span></li>`).join('')}</ol>`;
+    DAILY.board = html;
+  } catch {
+    html = '<p class="muted small">Couldn’t load today’s leaderboard.</p>';
+  }
+  if (token === DAILY.token && $('daily-board')) $('daily-board').innerHTML = html;
+}
+
+// "0 wrong · 0:42", or "burst · 2 letters left"
+function dailyResultText(score) {
+  const p = E.dailyParts(score);
+  const time = E.formatMs(p.ms);
+  return p.solved ? `${p.wrong} wrong · ${time}` : `burst · ${plural(p.hidden, "letter")} hidden · ${time}`;
 }
 
 /* =========================================================
@@ -812,12 +935,18 @@ function renderGame(v) {
   $('end-round').hidden = v.phase !== 'guess';
 }
 
+// The server's clock for the daily: its time at the last answer, plus what has passed here since
+const dailyElapsed = (v) => Math.floor(((v.dailyMs || 0) + (performance.now() - S.viewAt)) / 1000) * 1000;
+
 function phaseLeft(v) { return Math.max(0, v.phaseLeft - (performance.now() - S.viewAt)); }
 
 function renderRoundLine(v) {
   const parts = [];
   if (v.solo === 'practice') parts.push(`<span>Streak <b class="who-word">${v.streak}</b> · best ${Math.max(v.streak, store.get('best', 0))}</span>`);
-  else if (v.solo === 'daily') parts.push('<span>Today’s word</span>');
+  else if (v.solo === 'daily') {
+    parts.push('<span>Today’s word</span>');
+    if (v.phase === 'guess') parts.push(`<span class="timer-chip" id="daily-clock">${E.formatMs(dailyElapsed(v))}</span>`);
+  }
   else parts.push(`<span>Round <b class="who-word">${Math.min(v.round + 1, v.rounds)}</b> of ${v.rounds}</span>`);
   if (isPick(v) && v.phase === 'guess' && myGuess(v)) {
     const mySide = me(v).side;
@@ -1061,9 +1190,12 @@ function renderReveal(v) {
     if (!g) { box.innerHTML = ''; return; }
     html = `<div class="result-banner ${g.solved ? 'good' : 'bad'}">${g.solved ? spareText(v, g) : `It burst! The word was ${esc((g.word || '').toUpperCase())}`}</div>
       ${meaningLine(g.word || '')}
+      <p class="small-note">${plural(g.wrong, 'wrong letter')} · ${E.formatMs(g.ms)}</p>
       <div class="result-actions"><button class="btn primary" type="button" id="share-btn">Share result</button><button class="btn ghost" type="button" id="home-btn">Back to home</button></div>
-      <p class="small-note muted">A new word tomorrow.</p>`;
+      <div id="daily-board" class="daily-board" aria-live="polite"></div>
+      <p class="small-note muted">Ranked by: solved first, then fewest wrong letters, then fastest time. A burst melon ranks below every solved one. One try a day; a new word at midnight UTC.</p>`;
     box.innerHTML = html;
+    renderDailyBoard();
     return;
   }
   if (v.solo === 'practice') {
@@ -1158,6 +1290,7 @@ $('reveal-view').addEventListener('click', async (e) => {
     const v = S.view;
     const g = myGuess(v);
     const text = E.shareText(E.dayNumber(v.day), { ...g, word: g.word || '' }, v.settings.bands);
+    cloud.track('share_result');
     try { await navigator.clipboard.writeText(`${text}\n${location.origin}${location.pathname}`); toast('Copied. Paste it to your team.'); } catch { toast(text); }
   }
 });
@@ -1288,6 +1421,7 @@ setInterval(() => {
     chip.classList.toggle('urgent', s <= 10);
     if (s <= 5 && s > 0 && S.lastTick !== s && v.phase === 'guess' && myGuess(v) && !myGuess(v).done) { S.lastTick = s; SOUND.tick(); }
   }
+  if (v.solo === 'daily' && v.phase === 'guess' && $('daily-clock')) $('daily-clock').textContent = E.formatMs(dailyElapsed(v));
   if (v.phase === 'countdown') renderCountdown(v);
   if (v.phase === 'reveal') updateNextIn();
   if (v.phase === 'pick') document.querySelectorAll('.pick-left').forEach((el) => { el.textContent = s; });
@@ -1477,14 +1611,20 @@ function logoHtml() {
 const paintPrLength = segment($('pr-length'), () => PRACTICE.length, (v) => { PRACTICE.length = v; store.set('practice', PRACTICE); }, () => true);
 
 function renderDailyCard() {
-  const day = E.todayStr();
-  const n = E.dayNumber(day);
-  $('daily-tag').textContent = `#${n}`;
-  const saved = store.get('daily', null);
-  const done = saved && saved.day === day && saved.done;
-  $('daily-btn').textContent = done ? 'See today’s result' : saved && saved.day === day ? 'Continue today’s word' : 'Daily word';
+  const day = E.utcDayStr();
+  $('daily-tag').textContent = `#${E.dayNumber(day)}`;
+  const saved = store.get('daily2', null);
+  const mine = saved && saved.day === day ? saved : null;
+  // Progress from the old in-browser daily (its word came from the local date and is gone)
+  const old = store.get('daily', null);
+  if (old && ![E.todayStr(), day].includes(old.day)) store.remove('daily');
+  const oldToday = old && [E.todayStr(), day].includes(old.day) && !mine;
+  $('daily-btn').textContent = mine && mine.done ? 'See today’s result' : mine && mine.started ? 'Continue today’s word' : 'Daily word';
   const best = store.get('best', 0);
-  $('daily-note').textContent = `One word for everyone today, ${E.DAILY_BANDS} bands to spare. Or practise as long as you like${best ? ` (best streak ${best})` : ''}.`;
+  const practice = `Or practise as long as you like${best ? ` (best streak ${best})` : ''}.`;
+  if (mine && mine.done) $('daily-note').textContent = `Today’s done: ${mine.solved ? `solved with ${plural(mine.wrong, 'wrong letter')}` : 'burst'}, ${E.formatMs(mine.ms)}. New word at midnight UTC. ${practice}`;
+  else if (oldToday) $('daily-note').textContent = `The daily word now comes from the server, with a global leaderboard, so today’s word is a new one even if you already played. One try. ${practice}`;
+  else $('daily-note').textContent = `One word for everyone today, ${E.DAILY_BANDS} bands to spare, one try, global leaderboard. ${practice}`;
   paintPrLength();
 }
 
@@ -1493,7 +1633,7 @@ function soloName() {
   if (name) store.set('name', name);
   return name || 'You';
 }
-$('daily-btn').addEventListener('click', () => { S.myName = soloName(); startSolo('daily'); });
+$('daily-btn').addEventListener('click', () => { S.myName = soloName(); startDaily(); });
 $('practice-btn').addEventListener('click', () => { S.myName = soloName(); startSolo('practice'); });
 
 function cleanName(n) {
@@ -1608,7 +1748,7 @@ async function renderSettings() {
         <div><b>${st.solved}</b><span>Words solved</span></div>
         <div><b>${st.points}</b><span>Points</span></div>
         <div><b>${st.dailies}</b><span>Dailies</span></div>
-        <div><b>${st.dailySolved}</b><span>Dailies solved</span></div>
+        <div><b>${st.bestDaily}</b><span>Best daily</span></div>
       </div>`;
   } catch (err) {
     $('my-stats').innerHTML = `<p class="muted">${esc(cloud.errorText(err))}</p>`;

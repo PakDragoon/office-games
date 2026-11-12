@@ -1,5 +1,5 @@
 // Melon Burst rooms on the server: the host code from web/melonburst/js/app.js, moved here (the daily
-// word and practice still run that code in the browser). Each player is sent their own view, so
+// word and practice run in the browser; the global daily word is server/src/daily/melonburst.ts). Each player is sent their own view, so
 // nobody receives a word or letters they shouldn't see.
 import * as E from '../../../web/melonburst/js/engine.js';
 import COMMON_TEXT from '../../../web/melonburst/words/common.txt';
@@ -46,7 +46,7 @@ interface Room extends BaseRoom<Player> {
 
 // The word lists, loaded once per isolate. The big dictionary is searched in place (no Set).
 let LEX: { common: string[]; more: string[]; valid: { has(w: string): boolean } } | null = null;
-function lexicon() {
+export function lexicon() {
   if (!LEX) {
     const common = COMMON_TEXT.split('\n').filter(Boolean);
     const more = MORE_TEXT.split('\n').filter(Boolean);

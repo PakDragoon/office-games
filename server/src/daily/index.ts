@@ -1,6 +1,7 @@
 import type { Env } from '../env';
 import { hmac } from '../auth';
 import { guesstimateDaily } from './guesstimate';
+import { melonburstDaily } from './melonburst';
 import { rottenDaily } from './rotten';
 
 /**
@@ -26,6 +27,7 @@ export interface DailyGame<S = unknown> {
 export const DAILIES: Record<string, DailyGame> = {
   rotten: rottenDaily as DailyGame,
   guesstimate: guesstimateDaily as DailyGame,
+  melonburst: melonburstDaily as DailyGame,
 };
 
 export const utcDay = (d = new Date()) => d.toISOString().slice(0, 10);
@@ -67,31 +69,49 @@ export async function handleDaily(request: Request, env: Env, game: string, acti
     state = out.state;
     extra = out.extra || {};
   }
-  const stmts = [
-    env.DB.prepare(
-      `INSERT INTO daily_sessions (game, day, player_id, state, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
-       ON CONFLICT (game, day, player_id) DO UPDATE SET state = excluded.state, updated_at = excluded.updated_at`,
-    ).bind(game, day, player, JSON.stringify(state), now),
-  ];
+  const acting = Boolean(action && action !== 'state');
+  // The session is saved only if nobody else changed it since we read it. Two requests at once
+  // (two tabs, a script firing every letter in parallel) can't both be applied, so a player can't
+  // learn answers from a request whose result is then thrown away. Everything after it in the batch
+  // only runs when that save took (`changes()` is the save's row count, then each insert's).
+  const save = row
+    ? env.DB.prepare('UPDATE daily_sessions SET state = ?1, updated_at = ?2 WHERE game = ?3 AND day = ?4 AND player_id = ?5 AND state = ?6').bind(
+        JSON.stringify(state), now, game, day, player, row.state,
+      )
+    : env.DB.prepare(
+        `INSERT INTO daily_sessions (game, day, player_id, state, updated_at) VALUES (?1, ?2, ?3, ?4, ?5)
+         ON CONFLICT (game, day, player_id) DO NOTHING`,
+      ).bind(game, day, player, JSON.stringify(state), now);
+  const stmts = [save];
   const res = daily.result(state);
   if (res) {
     const name = typeof body.name === 'string' ? body.name.replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 16) : '';
     stmts.push(
       env.DB.prepare(
-        `INSERT INTO daily_results (game, day, player_id, name, score, detail, at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+        `INSERT INTO daily_results (game, day, player_id, name, score, detail, at) SELECT ?1, ?2, ?3, ?4, ?5, ?6, ?7 WHERE changes() > 0
          ON CONFLICT (game, day, player_id) DO NOTHING`,
       ).bind(game, day, player, name || 'Player', res.score, res.detail, now),
       env.DB.prepare(
-        `INSERT INTO player_stats (player_id, game, stat, value) VALUES (?1, ?2, 'dailies', 1)
+        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, 'dailies', 1 WHERE changes() > 0
          ON CONFLICT (player_id, game, stat) DO UPDATE SET value = value + 1`,
       ).bind(player, game),
       env.DB.prepare(
-        `INSERT INTO player_stats (player_id, game, stat, value) VALUES (?1, ?2, 'bestDaily', ?3)
+        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, 'bestDaily', ?3 WHERE changes() > 0
          ON CONFLICT (player_id, game, stat) DO UPDATE SET value = ${daily.order === 'asc' ? 'MIN' : 'MAX'}(value, excluded.value)`,
       ).bind(player, game, res.score),
     );
   }
-  if (!row || (action && action !== 'state')) await env.DB.batch(stmts);
+  if (!row || acting) {
+    const out = await env.DB.batch(stmts);
+    if (acting && out[0].meta.changes === 0) {
+      // Someone else moved first: show where things really stand
+      const fresh = await env.DB.prepare('SELECT state FROM daily_sessions WHERE game = ?1 AND day = ?2 AND player_id = ?3')
+        .bind(game, day, player)
+        .first<{ state: string }>();
+      const current = fresh ? JSON.parse(fresh.state) : state;
+      return json({ day, number: daily.number(day), error: 'busy', ...daily.view(current, now), done: Boolean(daily.result(current)) });
+    }
+  }
   return json({ day, number: daily.number(day), ...daily.view(state, now), ...extra, done: Boolean(res) });
 }
 

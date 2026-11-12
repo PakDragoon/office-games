@@ -140,29 +140,53 @@ export function rank(rows) {
 export const pickerIndex = (round, perSide) => round % perSide;
 
 /* ---------- Daily word ---------- */
+// The daily word is global and run by the server (server/src/daily/melonburst.ts): one day = UTC,
+// the word comes from a secret seed, and the board ranks solved first, then fewest wrong letters,
+// then the fastest time.
 
 export function dayNumber(dateStr) {
   const [y, m, d] = dateStr.split('-').map(Number);
   const [y0, m0, d0] = DAY_ONE.split('-').map(Number);
   return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y0, m0 - 1, d0)) / 86400000) + 1;
 }
+/** The player's own calendar date (only used to spot progress saved by the old, in-browser daily). */
 export function todayStr(now = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
 }
-/** Everyone gets the same everyday word, 5 to 9 letters, on the same local date. */
-export function dailyWord(lex, dateStr) {
+/** The daily's day: UTC, the same for everyone. */
+export const utcDayStr = (now = new Date()) => now.toISOString().slice(0, 10);
+/** Everyone gets the same everyday word, 5 to 9 letters. `seed` is any string (the server passes its secret key). */
+export function dailyWord(lex, seed) {
   const pool = lex.common.filter((w) => w.length >= 5 && w.length <= 9);
   if (!pool.length) return '';
-  const rnd = mulberry32(hashString(`melonburst:${dateStr}`));
+  const rnd = mulberry32(hashString(`melonburst:${seed}`));
   rnd(); rnd();
   return pool[Math.floor(rnd() * pool.length)];
 }
 export const DAILY_BANDS = 6;
 
-/** 🍉 Melon Burst #3 · 2 bands … then one square per guess, in order. */
+// One number ranks a finished daily, lower is better: solved first (fewest wrong letters, then the
+// fastest), then burst melons (fewest letters still hidden, then the fastest).
+//   solved: wrong * 1e7 + time        burst: 1e8 + hiddenLetters * 1e7 + time        (time in tenths of a second)
+const DAILY_BURST = 1e8, DAILY_STEP = 1e7, DAILY_MAX_DS = DAILY_STEP - 1;
+export function dailyScore(g) {
+  const ds = Math.min(Math.round((g.ms || 0) / 100), DAILY_MAX_DS);
+  if (g.solved) return g.wrong * DAILY_STEP + ds;
+  return DAILY_BURST + (g.word.length - revealed(g)) * DAILY_STEP + ds;
+}
+/** Read a daily score back: { solved, wrong (when solved), hidden (when burst), ms }. */
+export function dailyParts(score) {
+  const solved = score < DAILY_BURST;
+  const rest = solved ? score : score - DAILY_BURST;
+  const k = Math.floor(rest / DAILY_STEP);
+  return { solved, wrong: solved ? k : null, hidden: solved ? 0 : k, ms: (rest % DAILY_STEP) * 100 };
+}
+
+/** 🍉 Melon Burst #3 · solved with 2/6 bands · 0:42 … then one square per guess, in order. */
 export function shareText(day, g, bands) {
-  const head = g.solved ? `🍉 Melon Burst #${day}: solved with ${g.wrong}/${bands} bands` : `💥 Melon Burst #${day}: burst`;
+  const time = g.ms ? ` in ${formatMs(g.ms)}` : '';
+  const head = g.solved ? `🍉 Melon Burst #${day}: solved with ${g.wrong}/${bands} bands${time}` : `💥 Melon Burst #${day}: burst${time}`;
   const row = g.guessed.map((ch) => (g.word.includes(ch) ? '🟩' : '🟥')).join('');
   return `${head}\n${row}`;
 }

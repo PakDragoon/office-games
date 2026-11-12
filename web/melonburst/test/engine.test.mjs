@@ -167,6 +167,44 @@ test('share text', () => {
   let g = E.newGuess('melon');
   for (const ch of 'ezmlon') g = E.guess(g, ch, 6).g;
   eq(E.shareText(3, g, 6), '🍉 Melon Burst #3: solved with 1/6 bands\n🟩🟥🟩🟩🟩🟩');
+  eq(E.shareText(3, { ...g, ms: 42300 }, 6), '🍉 Melon Burst #3: solved with 1/6 bands in 42.3s\n🟩🟥🟩🟩🟩🟩');
+  let b = E.newGuess('melon');
+  for (const ch of 'zxqwjk') b = E.guess(b, ch, 5)?.g || b;
+  b = { ...b, ms: 75000 };
+  ok(b.burst);
+  eq(E.shareText(4, b, 5), '💥 Melon Burst #4: burst in 1:15\n🟥🟥🟥🟥🟥🟥');
+});
+
+test('daily: the seed can be any string, the word depends only on it', () => {
+  eq(E.dailyWord(lex, 'abc'), E.dailyWord(lex, 'abc'));
+  const words = new Set(['k1', 'k2', 'k3', 'k4', 'k5', 'k6', 'k7', 'k8'].map((k) => E.dailyWord(lex, k)));
+  ok(words.size >= 6, `seeds give different words: ${words.size}`);
+  eq(E.utcDayStr(new Date('2026-11-13T23:59:59Z')), '2026-11-13');
+  eq(E.utcDayStr(new Date('2026-11-14T00:00:00Z')), '2026-11-14');
+});
+
+test('daily score: solved beats burst, then fewer wrong, then faster; reads back', () => {
+  const played = (word, letters, ms, bands = 6) => {
+    let g = E.newGuess(word);
+    for (const ch of letters) { const r = E.guess(g, ch, bands); if (r) g = r.g; }
+    return { ...g, ms };
+  };
+  const clean = played('melon', 'melon', 30000);
+  const slowClean = played('melon', 'melon', 90000);
+  const twoWrong = played('melon', 'zxmelon', 10000);
+  const burstClose = played('melon', 'melzxqwjkv', 5000);       // 7 wrong, two letters hidden
+  const burstFar = played('melon', 'zxqwjkv', 5000);           // 7 wrong, nothing found
+  ok(clean.solved && twoWrong.solved && burstClose.burst && burstFar.burst, 'setup');
+  ok(E.dailyScore(clean) < E.dailyScore(slowClean), 'faster wins a tie');
+  ok(E.dailyScore(slowClean) < E.dailyScore(twoWrong), 'fewer wrong beats faster');
+  ok(E.dailyScore(twoWrong) < E.dailyScore(burstClose), 'any solve beats any burst');
+  ok(E.dailyScore(burstClose) < E.dailyScore(burstFar), 'closer burst ranks higher');
+  eq(E.dailyParts(E.dailyScore(clean)), { solved: true, wrong: 0, hidden: 0, ms: 30000 });
+  eq(E.dailyParts(E.dailyScore(twoWrong)), { solved: true, wrong: 2, hidden: 0, ms: 10000 });
+  eq(E.dailyParts(E.dailyScore(burstClose)), { solved: false, wrong: null, hidden: 2, ms: 5000 });
+  // A forgotten tab can't overflow into the next column
+  const huge = played('melon', 'melon', 1e12);
+  eq(E.dailyParts(E.dailyScore(huge)).wrong, 0);
 });
 
 console.log(`${passed} passed, ${failed} failed`);

@@ -12,7 +12,7 @@ Game idea by [Rijja](https://www.linkedin.com/in/rijja-farhan-011381214/). Thank
 | --- | --- | --- |
 | **Race** (room) | 2 to 8 | The computer picks one word; everyone races to solve it, each on their own melon |
 | **Pick words** (room) | 1 vs 1, or 2 vs 2 | Each side picks a secret word for the other side every round, then everyone guesses the other side's word |
-| **Daily word** | You | The same everyday word for everyone today; one go, then share |
+| **Daily word** | You | The same everyday word for everyone today (server-run, UTC day, secret seed); one go, global leaderboard, then share |
 | **Practice** | You | Word after word (short, medium, long or any length); keep your streak going |
 
 ### The melon
@@ -67,11 +67,11 @@ SCOWL ([wordlist-english](https://www.npmjs.com/package/wordlist-english)) is sp
 - **Two people with the same name:** the second becomes "Sara 2". A seat is only taken over by the same browser tab, the same Google account, or once the original seat has gone offline.
 - **Away / left:** a player silent for 9 seconds is shown as Away; rounds stop waiting for players who are away or have left.
 - **Dropped connection:** a player who stops hearing from the host reconnects by themselves. Only if the host has really gone do they see "The room closed".
-- **The daily word** is saved after every letter, so a refresh carries on where you were.
+- **The daily word** runs on the server: it keeps your session (a refresh carries on, the clock keeps running) and never sends the word until you've solved or burst. Ranked: solved first, then fewest wrong letters, then fastest time.
 
 ## How it works
 
-There's no server of our own. The host's browser runs the game: it holds the words, checks every guess and pick, and sends **each player their own view**, so nobody's browser receives letters or words they shouldn't see (the host's own browser does know them; see Known limits). Other players connect straight to the host with PeerJS (WebRTC). The daily word and practice run the same host code locally, with no connection.
+There's no server of our own. The host's browser runs the game: it holds the words, checks every guess and pick, and sends **each player their own view**, so nobody's browser receives letters or words they shouldn't see (the host's own browser does know them; see Known limits). Other players connect straight to the host with PeerJS (WebRTC). Practice runs the same host code locally; the daily word runs on the server (`server/src/daily/melonburst.ts`).
 
 | File | What it does |
 | --- | --- |
