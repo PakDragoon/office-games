@@ -1,6 +1,7 @@
 import type { GameModule } from '../core/game';
 import { guesstimate } from './guesstimate';
 import { liar } from './liar';
+import { melonburst } from './melonburst';
 import { rotten } from './rotten';
 import { thulla } from './thulla';
 
@@ -10,4 +11,5 @@ export const GAMES: Record<string, GameModule> = {
   'the-liar': liar,
   thulla,
   guesstimate,
+  melonburst,
 };

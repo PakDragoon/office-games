@@ -1,5 +1,6 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
+import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { createMelon } from './melon.js';
 
 /* =========================================================
@@ -13,12 +14,6 @@ import { createMelon } from './melon.js';
    PeerJS (WebRTC). The daily word and practice run the same host code locally, alone.
    ========================================================= */
 
-const PREFIX = 'melonburst-v1-';
-const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
-const PEER_OPTIONS = { debug: 1 };
-const PING_MS = 2000;
-const AWAY_MS = 9000;
-const LOST_MS = 12000;
 const SOLO_ID = 'me';
 const SIDES = ['A', 'B'];
 const otherSide = (t) => (t === 'A' ? 'B' : 'A');
@@ -43,15 +38,6 @@ if (!E.LENGTHS[PRACTICE.length]) PRACTICE.length = 'medium';
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
-// Identifies this tab to the host: survives a refresh, different for every person
-const CLIENT_ID = (() => {
-  const fresh = () => Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
-  try {
-    let id = sessionStorage.getItem('melonburst.client');
-    if (!id) { id = fresh(); sessionStorage.setItem('melonburst.client', id); }
-    return id;
-  } catch { return fresh(); }
-})();
 
 /* ---------- Word lists ---------- */
 // common + more (the computer's words) load first; valid (what players may pick) is big and loads after
@@ -184,20 +170,16 @@ const SOUND = {
 };
 
 /* =========================================================
-   Hosting (rooms, and the daily word and practice on your own)
+   The daily word and practice run the game here, in this browser (rooms run on the server,
+   server/src/games/melonburst.ts, from the same code)
    ========================================================= */
 const S = {
-  myName: '', myId: null, isHost: false, peer: null, hostConn: null, code: '', view: null, leaving: false,
-  heard: 0, reconnecting: false, viewAt: 0, savedGame: -1, focus: null, sent: new Set(), roundKey: '',
+  myName: '', myId: null, isHost: false, code: '', view: null, creating: false,
+  reconnecting: false, viewAt: 0, focus: null, sent: new Set(), roundKey: '',
   myPrev: null, overSeen: -1, pickDraft: '', pickError: '', meaningFor: '', streak: 0,
 };
-const H = { room: null, conns: new Map(), seen: new Map(), timer: 0, rnd: Math.random };
+const H = { room: null, timer: 0, rnd: Math.random };
 
-function randomCode() {
-  let c = '';
-  for (let i = 0; i < 4; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return c;
-}
 
 function newRoom(code, solo, settings) {
   return {
@@ -210,42 +192,6 @@ function newRoom(code, solo, settings) {
   };
 }
 
-function hostCreate(attempt = 0) {
-  const code = randomCode();
-  const peer = new Peer(PREFIX + code, PEER_OPTIONS);
-  let opened = false;
-  peer.on('open', (id) => {
-    opened = true;
-    Object.assign(S, { peer, myId: id, isHost: true, code, leaving: false });
-    H.conns.clear();
-    H.rnd = E.mulberry32(E.randomSeed());
-    const u = cloud.getUser();
-    H.room = newRoom(code, null, ROOM_PREFS);
-    H.room.players.push(newPlayer(id, S.myName, true, 0, u?.uid || null, u?.photo || ''));
-    hostAutoSeat();
-    peer.on('connection', hostOnConnection);
-    cloud.track('room_created');
-    setBusy(false);
-    hostBroadcast();
-    const savedCrew = store.get('crew', '');
-    if (savedCrew) hostSetCrew(savedCrew);
-  });
-  peer.on('error', (err) => {
-    if (!opened && err.type === 'unavailable-id' && attempt < 5) {
-      peer.destroy();
-      hostCreate(attempt + 1);
-      return;
-    }
-    if (!opened) {
-      setBusy(false);
-      homeError(peerErrorText(err));
-      peer.destroy();
-    } else {
-      console.warn('PeerJS error', err);
-    }
-  });
-  peer.on('disconnected', () => { if (!S.leaving && !peer.destroyed) peer.reconnect(); });
-}
 
 function newPlayer(id, name, isHost, color, uid = null, photo = '') {
   return {
@@ -254,113 +200,18 @@ function newPlayer(id, name, isHost, color, uid = null, photo = '') {
   };
 }
 
-function cleanPhoto(url) {
-  const s = String(url || '');
-  return /^https:\/\/[a-z0-9.-]+\.googleusercontent\.com\//i.test(s) ? s.slice(0, 500) : '';
+
+
+
+// Solo only: this browser's own moves
+function hostOnMessage(msg) {
+  if (!msg || typeof msg !== 'object' || !H.room) return;
+  if (msg.t === 'guess') hostGuess(SOLO_ID, msg.ch);
 }
 
-function freeColor() {
-  const used = new Set(H.room.players.map((p) => p.color));
-  for (let c = 0; c < E.MAX_PLAYERS; c++) if (!used.has(c)) return c;
-  return 0;
-}
 
-function hostOnConnection(conn) {
-  conn.on('data', (msg) => hostOnMessage(conn, msg));
-  conn.on('close', () => hostOnClose(conn));
-  conn.on('error', () => hostOnClose(conn));
-}
 
-function hostOnMessage(conn, msg) {
-  if (!msg || typeof msg !== 'object') return;
-  H.seen.set(conn.peer, Date.now());
-  const room = H.room;
-  if (!room) return;
-  const back = room.players.find((p) => p.id === conn.peer && p.away);
-  if (back) { back.away = false; hostBroadcast(); }
-  if (msg.t !== 'join' && !byId(conn.peer)) return;
-  switch (msg.t) {
-    case 'join': return hostJoin(conn, msg.name, msg.uid, msg.photo, msg.client);
-    case 'guess': return hostGuess(conn.peer, msg.ch);
-    case 'pick': return hostPick(conn.peer, msg.word);
-    case 'sit': return hostSit(conn.peer, msg.side, Number(msg.slot));
-    case 'stand': return hostStand(conn.peer);
-    default: return undefined;
-  }
-}
 
-function hostJoin(conn, rawName, uid, photo, client) {
-  const room = H.room;
-  if (room.solo) return;
-  const name = cleanName(rawName) || 'Player';
-  const cleanUid = typeof uid === 'string' ? uid.slice(0, 128) : null;
-  const clientId = typeof client === 'string' ? client.slice(0, 40) : '';
-  // Same tab (refresh), same Google account, or an offline seat: take the seat back.
-  const old = room.players.find((p) => !p.isHost && p.name.toLowerCase() === name.toLowerCase()
-    && ((clientId && p.clientId === clientId) || (cleanUid && p.uid === cleanUid) || !p.connected));
-  if (old) {
-    const oldConn = H.conns.get(old.id);
-    H.conns.delete(old.id);
-    if (oldConn && oldConn !== conn) oldConn.close();
-    renameId(old.id, conn.peer);
-    Object.assign(old, { connected: true, away: false, offlineAt: 0, clientId: clientId || old.clientId, uid: cleanUid || old.uid, photo: cleanPhoto(photo) || old.photo });
-    H.conns.set(conn.peer, conn);
-    H.seen.set(conn.peer, Date.now());
-    send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-    hostBroadcast();
-    return;
-  }
-  if (room.players.length >= E.MAX_PLAYERS) room.players = room.players.filter((p) => p.connected || isSeated(p.id) || p.inGame);
-  if (room.players.length >= E.MAX_PLAYERS) return reject(conn, `This room is full (${E.MAX_PLAYERS} people).`);
-  let finalName = name;
-  for (let n = 2; room.players.some((p) => p.name.toLowerCase() === finalName.toLowerCase()); n++) finalName = `${name} ${n}`;
-  const seat = newPlayer(conn.peer, finalName, false, freeColor(), cleanUid, cleanPhoto(photo));
-  seat.clientId = clientId;
-  room.players.push(seat);
-  if (room.status === 'lobby') hostAutoSeat();
-  H.conns.set(conn.peer, conn);
-  H.seen.set(conn.peer, Date.now());
-  send(conn, { t: 'welcome', id: conn.peer, code: room.code });
-  hostBroadcast();
-}
-
-// A player came back on a new connection: everything that pointed at the old id follows
-function renameId(from, to) {
-  const room = H.room;
-  const p = byId(from);
-  if (p) p.id = to;
-  for (const t of SIDES) {
-    room.teams[t] = room.teams[t].map((x) => (x === from ? to : x));
-    if (room.pickers[t] === from) room.pickers[t] = to;
-  }
-  if (room.guesses[from]) { room.guesses[to] = room.guesses[from]; delete room.guesses[from]; }
-  room.solvedOrder = room.solvedOrder.map((x) => (x === from ? to : x));
-  if (room.last) for (const r of room.last.rows) if (r.id === from) r.id = to;
-  room.winners = room.winners.map((x) => (x === from ? to : x));
-}
-
-function reject(conn, reason) {
-  send(conn, { t: 'reject', reason });
-  setTimeout(() => conn.close(), 500);
-}
-
-function hostOnClose(conn) {
-  const room = H.room;
-  if (!room) return;
-  const p = room.players.find((x) => x.id === conn.peer);
-  H.conns.delete(conn.peer);
-  if (!p) return;
-  if (room.status === 'lobby') {
-    room.players = room.players.filter((x) => x !== p);
-    for (const t of SIDES) room.teams[t] = room.teams[t].map((x) => (x === p.id ? null : x));
-    hostAutoSeat();
-  } else {
-    p.connected = false;
-    p.offlineAt = Date.now();
-  }
-  hostAfterPresence();
-  hostBroadcast();
-}
 
 const active = (p) => p.connected && !p.away;
 const byId = (id) => H.room.players.find((p) => p.id === id);
@@ -376,19 +227,6 @@ function participants() {
   return room.players.filter((p) => p.inGame).map((p) => p.id);
 }
 
-function hostHeartbeat() {
-  const room = H.room;
-  if (!room || !S.isHost || room.solo) return;
-  for (const conn of H.conns.values()) send(conn, { t: 'hb' });
-  const now = Date.now();
-  let changed = false;
-  for (const p of room.players) {
-    if (p.isHost || !p.connected) continue;
-    const away = now - (H.seen.get(p.id) || 0) > AWAY_MS;
-    if (away !== p.away) { p.away = away; changed = true; }
-  }
-  if (changed) { hostAfterPresence(); hostBroadcast(); }
-}
 
 // Someone left or went quiet: the round may not need to wait for them any more
 function hostAfterPresence() {
@@ -423,30 +261,8 @@ function hostAutoSeat() {
   }
 }
 
-function hostSit(pid, side, slot) {
-  const room = H.room;
-  if (room.solo || room.status !== 'lobby' || room.settings.mode !== 'pick') return;
-  if (!SIDES.includes(side) || !(slot >= 0 && slot < perSide())) return;
-  const holder = room.teams[side][slot] && byId(room.teams[side][slot]);
-  if (holder && holder.id !== pid && holder.connected) return;
-  for (const t of SIDES) room.teams[t] = room.teams[t].map((x) => (x === pid ? null : x));
-  room.teams[side][slot] = pid;
-  hostBroadcast();
-}
 
-function hostStand(pid) {
-  const room = H.room;
-  if (room.solo || room.status !== 'lobby') return;
-  for (const t of SIDES) room.teams[t] = room.teams[t].map((x) => (x === pid ? null : x));
-  hostBroadcast();
-}
 
-function hostSwapSides() {
-  const room = H.room;
-  if (room.solo || room.status !== 'lobby') return;
-  [room.teams.A, room.teams.B] = [room.teams.B, room.teams.A];
-  hostBroadcast();
-}
 
 /* ---------- A game ---------- */
 
@@ -483,11 +299,6 @@ function startProblem(room) {
 
 function hostStartGame() {
   const room = H.room;
-  if (room.status === 'lobby' && !room.solo) {
-    room.settings = { ...ROOM_PREFS };
-    const typedCrew = $('crew-input').value.replace(/\s+/g, ' ').trim();
-    if (typedCrew !== (room.crew ? room.crew.name : '')) hostSetCrew(typedCrew);
-  }
   const problem = startProblem(room);
   if (problem) { toast(problem); return; }
   room.players = room.players.filter((p) => p.connected || isSeated(p.id));
@@ -692,8 +503,6 @@ function hostGameOver() {
     room.winners = top && top.score > 0 ? ranked.filter((r) => r.score === top.score && r.solved === top.solved && r.ms === top.ms).map((r) => r.id) : [];
   }
   for (const id of room.winners) { const p = byId(id); if (p) p.wins++; }
-  cloud.track('game_finished', { mode: st.mode, players: participants().length });
-  hostSaveCrew();
   hostBroadcast();
 }
 
@@ -718,7 +527,7 @@ async function startSolo(kind) {
     await loadBase();
     if (!WORDS.base) { toast('Couldn’t load the word lists. Check your internet and try again.'); return; }
   }
-  Object.assign(S, { myId: SOLO_ID, isHost: true, code: '', leaving: false, savedGame: -1, overSeen: -1, roundKey: '' });
+  Object.assign(S, { myId: SOLO_ID, isHost: true, code: '', overSeen: -1, roundKey: '' });
   if (kind === 'practice') S.streak = 0;
   H.rnd = E.mulberry32(E.randomSeed());
   const room = newRoom('', kind, { ...E.DEFAULT_SETTINGS, bands: E.DAILY_BANDS, time: 'off' });
@@ -740,57 +549,7 @@ async function startSolo(kind) {
 
 /* ---------- Crews ---------- */
 
-function hostSaveCrew() {
-  const room = H.room;
-  if (!room.crew) return;
-  if (!cloud.getUser()) {
-    room.crewStatus = 'This game wasn’t saved. Sign in with Google (gear icon) to save crew scores.';
-    return;
-  }
-  room.crewStatus = 'Saving this game…';
-  const players = participants().map(byId).filter(Boolean).map((p) => ({ name: p.name, points: p.score, solved: p.solved, won: room.winners.includes(p.id) }));
-  cloud.saveCrewGame(room.crew.name, { room: room.code, mode: room.settings.mode, rounds: room.settings.rounds, players })
-    .then((saved) => {
-      if (H.room !== room) return;
-      room.crewStatus = `Saved to ${saved.name}. ${plural(saved.games, 'game')} played as this crew.`;
-      hostBroadcast();
-    }).catch((err) => {
-      console.warn('Saving to crew failed', err);
-      if (H.room !== room) return;
-      room.crewStatus = `This game wasn’t saved. ${cloud.errorText(err)}`;
-      hostBroadcast();
-    });
-}
 
-async function hostSetCrew(rawName) {
-  const room = H.room;
-  if (!room || room.solo) return;
-  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-  store.set('crew', name);
-  if (!name) {
-    Object.assign(room, { crew: null, crewStatus: '' });
-    hostBroadcast();
-    return;
-  }
-  if (cloud.crewId(name).length < 3) return toast('Crew names need at least 3 letters or numbers');
-  room.crew = { name };
-  if (!cloud.getUser()) {
-    room.crewStatus = 'Sign in with Google (gear icon) to save crew scores.';
-    hostBroadcast();
-    return;
-  }
-  room.crewStatus = 'Connecting to saved scores…';
-  hostBroadcast();
-  try {
-    const data = await cloud.getCrew(name);
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.crewStatus = data && data.games ? `${plural(data.games, 'game')} played as this crew so far.` : 'New crew. Scores save after the first game.';
-  } catch (err) {
-    if (H.room !== room || room.crew?.name !== name) return;
-    room.crewStatus = cloud.errorText(err);
-  }
-  hostBroadcast();
-}
 
 /* ---------- What each player may see ---------- */
 
@@ -853,119 +612,67 @@ function viewFor(viewer) {
 
 function hostBroadcast() {
   if (!H.room) return;
-  for (const [id, conn] of H.conns) send(conn, viewFor(id));
   onMessage(viewFor(S.myId));
 }
 
 function tell(pid, msg) {
   if (pid === S.myId) onMessage(msg);
-  else send(H.conns.get(pid), msg);
 }
 
 /* =========================================================
-   Joining and staying connected
+   Rooms on the server
    ========================================================= */
-function joinRoom(code, { quiet = false } = {}) {
-  const peer = new Peer(PEER_OPTIONS);
-  let connected = false;
-  let failed = false;
-  const fail = (text) => {
-    if (failed || connected) return;
-    failed = true;
-    clearTimeout(timer);
-    peer.destroy();
-    if (quiet) {
-      S.reconnecting = false;
-      closeRoom();
-      goHome();
-      showNotice('The room closed', 'The host left or lost their connection. Ask them to host a new room.');
-      return;
-    }
+const link = createRoomLink('melonburst', {
+  hello: () => {
+    const u = cloud.getUser();
+    return { name: S.myName, photo: u?.photo || '' };
+  },
+  message: onMessage,
+  reconnecting: () => {
+    S.reconnecting = true;
+    toast('Connection lost. Reconnecting…');
+  },
+  gone: (reason) => {
+    closeRoom();
+    goHome();
+    showNotice('The room closed', reason || 'Everyone left, so the room was closed. Host a new one.');
+  },
+  failed: (text) => {
+    closeRoom();
     setBusy(false);
+    showScreen('home');
     homeError(text);
-  };
-  const timer = setTimeout(() => fail('Could not reach that room. Check the code, or ask the host to keep their tab open.'), 15000);
-  peer.on('open', (id) => {
-    Object.assign(S, { peer, myId: id, isHost: false, leaving: false });
-    if (!quiet) Object.assign(S, { savedGame: -1, overSeen: -1 });
-    const conn = peer.connect(PREFIX + code, { reliable: true });
-    conn.on('open', () => {
-      connected = true;
-      clearTimeout(timer);
-      S.hostConn = conn;
-      S.code = code;
-      S.heard = Date.now();
-      const u = cloud.getUser();
-      send(conn, { t: 'join', name: S.myName, uid: u?.uid || null, photo: u?.photo || '', client: CLIENT_ID });
-    });
-    conn.on('data', (msg) => { S.heard = Date.now(); onMessage(msg); });
-    conn.on('close', () => {
-      if (S.leaving || !connected || S.hostConn !== conn) return;
-      reconnect();
-    });
-  });
-  peer.on('error', (err) => {
-    if (err.type === 'peer-unavailable') fail(`There’s no room ${code} right now. Check the code with your host.`);
-    else if (!connected) fail(peerErrorText(err));
-    else console.warn('PeerJS error', err);
-  });
-}
-
-function reconnect() {
-  if (S.isHost || !S.code || S.reconnecting) return;
-  S.reconnecting = true;
-  toast('Connection lost. Reconnecting…');
-  const code = S.code;
-  S.leaving = true;
-  S.hostConn = null;
-  S.peer?.destroy();
-  S.leaving = false;
-  joinRoom(code, { quiet: true });
-}
-
-setInterval(() => {
-  if (S.isHost) { hostHeartbeat(); return; }
-  if (!S.hostConn || S.reconnecting) return;
-  send(S.hostConn, { t: 'ping' });
-  if (!document.hidden && Date.now() - S.heard > LOST_MS) reconnect();
-}, PING_MS);
-document.addEventListener('visibilitychange', () => {
-  if (!document.hidden && !S.isHost && S.hostConn && !S.reconnecting && Date.now() - S.heard > LOST_MS) reconnect();
-});
-window.addEventListener('pagehide', () => {
-  if (!S.peer) return;
-  S.leaving = true;
-  S.peer.destroy();
+  },
 });
 
-function peerErrorText(err) {
-  if (err.type === 'browser-incompatible') return 'This browser can’t do live connections. Try Chrome, Firefox, Edge or Safari.';
-  if (err.type === 'network' || err.type === 'server-error' || err.type === 'socket-error')
-    return 'Couldn’t reach the connection server. Check your internet and try again.';
-  return `Connection failed (${err.type || 'unknown error'}). Try again.`;
-}
-
-function send(conn, msg) {
-  if (conn && conn.open) conn.send(msg);
-}
+// In a room the server runs the game; the daily word and practice run it here
+const playingSolo = () => Boolean(H.room && H.room.solo);
 
 function toHost(msg) {
-  if (S.isHost) hostOnMessage({ peer: S.myId }, msg);
-  else send(S.hostConn, msg);
+  if (playingSolo()) hostOnMessage(msg);
+  else link.send(msg);
 }
 
 function closeRoom() {
-  if (!S.peer && !H.room) return;
-  S.leaving = true;
+  link.close();
   clearTimeout(H.timer);
-  S.peer?.destroy();
-  Object.assign(S, { peer: null, hostConn: null, view: null, isHost: false, code: '', reconnecting: false, roundKey: '', focus: null });
+  Object.assign(S, { view: null, isHost: false, code: '', reconnecting: false, creating: false, roundKey: '', focus: null });
   H.room = null;
-  H.conns.clear();
-  H.seen.clear();
   for (const el of rowEls.values()) el.remove();
   rowEls.clear();
   miniMelons.clear();
+}
+
+// The host's buttons in a room (the server only acts on them from whoever is host right now)
+function roomStart() {
+  toHost({ t: 'start', settings: { ...ROOM_PREFS }, crew: $('crew-input').value.replace(/\s+/g, ' ').trim() });
+}
+
+function roomSetCrew(rawName) {
+  const name = String(rawName || '').replace(/\s+/g, ' ').trim().slice(0, 40);
+  if (name && name.toLowerCase().replace(/[^a-z0-9]/g, '').length < 3) return toast('Crew names need at least 3 letters or numbers');
+  store.set('crew', name);
+  toHost({ t: 'crew', name });
 }
 
 /* =========================================================
@@ -978,7 +685,7 @@ function onMessage(msg) {
       S.myId = msg.id;
       S.code = msg.code;
       if (S.reconnecting) toast('Reconnected');
-      else if (!S.isHost) cloud.track('room_joined');
+      else cloud.track('room_joined');
       S.reconnecting = false;
       setBusy(false);
       break;
@@ -993,6 +700,9 @@ function onMessage(msg) {
       S.pickSent = false;
       SOUND.nope();
       if (S.view) renderPick(S.view);
+      break;
+    case 'toast':
+      toast(String(msg.text || ''));
       break;
     case 'state':
       applyState(msg);
@@ -1017,7 +727,19 @@ function applyState(v) {
   const prev = S.view;
   S.view = v;
   S.viewAt = performance.now();
-  if (!me(v)) return;
+  const mine = me(v);
+  if (!mine) return;
+  if (!v.solo) {
+    S.isHost = Boolean(mine.isHost);
+    S.code = v.code;
+    if (S.creating && S.isHost) {
+      // A room we just opened: bring this browser's saved settings and crew
+      S.creating = false;
+      toHost({ t: 'settings', settings: { ...ROOM_PREFS } });
+      const savedCrew = store.get('crew', '');
+      if (savedCrew) roomSetCrew(savedCrew);
+    }
+  }
   if (v.status === 'lobby') {
     renderLobby(v);
     if ($('lobby').hidden) showScreen('lobby');
@@ -1341,10 +1063,6 @@ function renderReveal(v) {
       <div class="result-actions"><button class="btn primary" type="button" id="share-btn">Share result</button><button class="btn ghost" type="button" id="home-btn">Back to home</button></div>
       <p class="small-note muted">A new word tomorrow.</p>`;
     box.innerHTML = html;
-    if (S.savedGame !== `daily-${v.day}` && cloud.getUser()) {
-      S.savedGame = `daily-${v.day}`;
-      cloud.saveMyDaily(v.day, g.solved, g.wrong).catch((err) => { if (err?.code !== 'already-saved') toast(`Your stats weren’t saved. ${cloud.errorText(err)}`); });
-    }
     return;
   }
   if (v.solo === 'practice') {
@@ -1419,10 +1137,6 @@ function renderStandings(v) {
 
 function saveMyGame(v) {
   const mine = me(v);
-  if (!mine || !mine.inGame || !cloud.getUser() || S.savedGame === v.game) return;
-  S.savedGame = v.game;
-  cloud.saveMyGame({ won: v.winners.includes(S.myId), points: mine.score, solved: mine.solved, rounds: v.rounds })
-    .catch((err) => toast(`Your stats weren’t saved. ${cloud.errorText(err)}`));
 }
 
 function updateNextIn() {
@@ -1435,10 +1149,9 @@ function updateNextIn() {
 
 $('reveal-view').addEventListener('click', async (e) => {
   const id = e.target.id;
-  if (id === 'next-now' && S.isHost) hostNextRound();
-  if (id === 'next-word' && S.isHost) hostNextRound();
-  if (id === 'again-btn' && S.isHost) hostStartGame();
-  if (id === 'lobby-btn' && S.isHost) hostBackToLobby();
+  if ((id === 'next-now' || id === 'next-word') && S.isHost) { if (playingSolo()) hostNextRound(); else toHost({ t: 'next' }); }
+  if (id === 'again-btn' && S.isHost) { if (playingSolo()) hostStartGame(); else roomStart(); }
+  if (id === 'lobby-btn' && S.isHost) toHost({ t: 'lobby' });
   if (id === 'home-btn') { closeRoom(); goHome(); }
   if (id === 'share-btn') {
     const v = S.view;
@@ -1559,8 +1272,8 @@ $('guess-note').addEventListener('click', (e) => {
   if (S.view) renderGuess(S.view);
 });
 
-$('end-round').addEventListener('click', () => { if (S.isHost) hostEndRound(); });
-$('end-game').addEventListener('click', () => { if (S.isHost) hostBackToLobby(); });
+$('end-round').addEventListener('click', () => { if (S.isHost) toHost({ t: 'endRound' }); });
+$('end-game').addEventListener('click', () => { if (S.isHost) toHost({ t: 'lobby' }); });
 $('quit-btn').addEventListener('click', () => { closeRoom(); goHome(); });
 
 // Timers tick on every screen without waiting for the host
@@ -1621,10 +1334,8 @@ function roomSettingsChanged() {
   ROOM_PREFS = E.cleanSettings(ROOM_PREFS);
   saveRoomPrefs();
   if (ROOM_PREFS.mode === 'pick') loadFull();
-  if (!S.isHost || !H.room || H.room.solo || H.room.status !== 'lobby') { paintRoomSettings(); return; }
-  H.room.settings = { ...ROOM_PREFS };
-  hostAutoSeat();
-  hostBroadcast();
+  if (!S.isHost || playingSolo() || !S.view || S.view.status !== 'lobby') { paintRoomSettings(); return; }
+  toHost({ t: 'settings', settings: { ...ROOM_PREFS } });
 }
 
 function paintRoomSettings(st = ROOM_PREFS) {
@@ -1692,8 +1403,8 @@ function renderLobby(v) {
 }
 
 function renderStartButton() {
-  if (!S.isHost || !H.room || H.room.status !== 'lobby') return;
-  const problem = startProblem(H.room);
+  if (!S.isHost || !S.view || S.view.status !== 'lobby') return;
+  const problem = S.view.startProblem || '';
   $('start-btn').disabled = Boolean(problem);
   $('start-note').textContent = problem;
 }
@@ -1707,15 +1418,15 @@ $('team-cards').addEventListener('click', (e) => {
   const sit = e.target.closest('[data-sit]');
   if (sit) toHost({ t: 'sit', side: sit.dataset.sit, slot: Number(sit.dataset.slot) });
   if (e.target.closest('[data-stand]')) toHost({ t: 'stand' });
-  if (e.target.closest('[data-swap]') && S.isHost) hostSwapSides();
+  if (e.target.closest('[data-swap]') && S.isHost) toHost({ t: 'swap' });
 });
 $('copy-link').addEventListener('click', async () => {
   const url = `${location.origin}${location.pathname}?room=${S.code}`;
   try { await navigator.clipboard.writeText(url); toast('Invite link copied'); } catch { toast(url); }
 });
-$('crew-save').addEventListener('click', () => hostSetCrew($('crew-input').value));
-$('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') hostSetCrew($('crew-input').value); });
-$('start-btn').addEventListener('click', () => { if (S.isHost) hostStartGame(); });
+$('crew-save').addEventListener('click', () => roomSetCrew($('crew-input').value));
+$('crew-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') roomSetCrew($('crew-input').value); });
+$('start-btn').addEventListener('click', () => { if (S.isHost) roomStart(); });
 $('leave-lobby').addEventListener('click', () => { closeRoom(); goHome(); });
 
 /* =========================================================
@@ -1799,6 +1510,7 @@ function readName() {
 
 function setBusy(busy) {
   $('host-btn').disabled = busy;
+  $('quick-btn').disabled = busy;
   $('join-btn').disabled = busy;
   $('join-btn').textContent = busy ? 'Connecting…' : 'Join room';
 }
@@ -1812,11 +1524,11 @@ $('host-btn').addEventListener('click', () => {
   const name = readName();
   if (!name) return;
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   setBusy(true);
   loadFull();
-  hostCreate();
+  S.creating = true;
+  link.host(false);
 });
 
 function join() {
@@ -1829,13 +1541,30 @@ function join() {
     return;
   }
   homeError('');
-  if (typeof Peer === 'undefined') return homeError('Couldn’t load the connection library. Check your internet and reload the page.');
   S.myName = name;
   setBusy(true);
   loadFull();
-  joinRoom(code);
+  link.join(code);
 }
 $('join-btn').addEventListener('click', join);
+
+// Quick Play: a public room that's waiting for players, or a new public one
+$('quick-btn').addEventListener('click', async () => {
+  const name = readName();
+  if (!name) return;
+  homeError('');
+  S.myName = name;
+  setBusy(true);
+  loadFull();
+  try {
+    const code = await quickPlay('melonburst');
+    if (code) link.join(code);
+    else { S.creating = true; link.host(true); }
+  } catch (err) {
+    setBusy(false);
+    homeError(err.message);
+  }
+});
 $('code-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') join(); });
 
 /* =========================================================
@@ -1857,7 +1586,7 @@ async function renderSettings() {
   const u = cloud.getUser();
   $('account-box').innerHTML = u
     ? `${u.photo ? `<img class="avatar" src="${esc(u.photo)}" alt="">` : ''}<span class="who"><b>${esc(u.name)}</b><span>${esc(u.email)}</span></span><button class="btn ghost" id="sign-out" type="button">Sign out</button>`
-    : '<span class="who"><b>Playing as a guest</b><span>Sign in to keep your stats and save crew scores.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
+    : '<span class="who"><b>Playing as a guest</b><span>Your stats are kept in this browser. Sign in to keep them on any device.</span></span><button class="btn primary" id="sign-in" type="button">Sign in with Google</button>';
   $('sign-in')?.addEventListener('click', signIn);
   $('sign-out')?.addEventListener('click', () => cloud.signOutUser());
   $('sound-toggle').checked = PREFS.sound !== false;
@@ -1865,12 +1594,10 @@ async function renderSettings() {
   $('anim-select').value = PREFS.anim;
   $('analytics-row').hidden = !cloud.analyticsConfigured();
   $('analytics-toggle').checked = PREFS.analytics !== false;
-  $('my-stats').innerHTML = '';
-  if (!u) return;
   $('my-stats').innerHTML = '<p class="muted">Loading your stats…</p>';
   try {
     const st = await cloud.getMyStats();
-    if (cloud.getUser()?.uid !== u.uid) return;
+    if ((cloud.getUser()?.uid || null) !== (u?.uid || null)) return;
     $('my-stats').innerHTML = `
       <div class="stat-grid">
         <div><b>${st.games}</b><span>Room games</span></div>
@@ -1894,7 +1621,7 @@ $('analytics-toggle').addEventListener('change', (e) => {
 });
 
 // Test hook: with ?debug in the address, automated tests can inspect the state.
-if (new URLSearchParams(location.search).has('debug')) window.__melonburst = { S, H, E, WORDS };
+if (new URLSearchParams(location.search).has('debug')) window.__melonburst = { S, H, link, E, WORDS };
 
 /* =========================================================
    Start
@@ -1915,7 +1642,6 @@ if (new URLSearchParams(location.search).has('debug')) window.__melonburst = { S
   loadBase();
   cloud.onUser((u) => {
     renderAccount(u);
-    if (S.isHost && H.room && H.room.crew) hostSetCrew(H.room.crew.name);
   });
   cloud.initAnalytics(PREFS.analytics !== false);
   cloud.restore();
