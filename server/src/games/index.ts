@@ -1,4 +1,5 @@
 import type { GameModule } from '../core/game';
+import { flipchip } from './flipchip';
 import { guesstimate } from './guesstimate';
 import { liar } from './liar';
 import { melonburst } from './melonburst';
@@ -12,4 +13,5 @@ export const GAMES: Record<string, GameModule> = {
   thulla,
   guesstimate,
   melonburst,
+  flipchip,
 };
