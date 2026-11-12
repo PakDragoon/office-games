@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Count the dots, track the ball, eyeball the angle, split the line. Closest guess wins.">
+  <title>Guesstimate</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231b1e3a'/><circle cx='16' cy='16' r='8.5' fill='none' stroke='%2348a868' stroke-width='2.5'/><path d='M16 3v7M16 22v7M3 16h7M22 16h7' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js" integrity="sha384-nlUQ8ZqCbvStErob+biJNzSgltf6urV3VGqhfIfzhmg9RXmpeRm76ELw0pYnKlTR" crossorigin="anonymous"></script>
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="https://pakdragoon.github.io/office-games/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Guesstimate">
+        <span class="logo-row" id="logo-row" aria-hidden="true"></span>
+        <span class="logo-word" aria-hidden="true">guesstimate</span>
+      </h1>
+      <p class="lede">No rulers, no counting on your fingers. Everyone gets the same puzzle at the same moment, then the reveal measures whose eye was sharpest.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Host a room</h2>
+        <p>Your browser runs the game. Keep this tab open while you play.</p>
+        <button class="btn primary" id="host-btn" type="button">Host a room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice daily" id="daily-card">
+        <div class="solo-head">
+          <h2>Daily puzzle</h2>
+          <span class="day-no" id="day-no"></span>
+        </div>
+        <p id="daily-status">The same puzzles for everyone today.</p>
+        <button class="btn primary" id="daily-btn" type="button">Play today’s puzzle</button>
+      </section>
+      <section class="choice">
+        <h2>Practice</h2>
+        <div class="seg" id="difficulty" role="group" aria-label="Practice difficulty">
+          <button type="button" data-value="easy">Easy</button>
+          <button type="button" data-value="normal">Normal</button>
+          <button type="button" data-value="hard">Hard</button>
+        </div>
+        <div class="kind-picks" id="practice-kinds" role="group" aria-label="Tests to practise"></div>
+        <button class="btn" id="practice-btn" type="button">Start practice</button>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+   <div class="lobby-room">
+    <p class="muted">Room code</p>
+    <div class="room-code" id="lobby-code">····</div>
+    <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+    <ul class="roster" id="lobby-players"></ul>
+    <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+   </div>
+   <div class="lobby-setup">
+
+    <div id="host-settings" class="host-settings" hidden>
+      <div class="seg" id="room-difficulty" role="group" aria-label="Difficulty">
+        <button type="button" data-value="easy">Easy</button>
+        <button type="button" data-value="normal">Normal</button>
+        <button type="button" data-value="hard">Hard</button>
+      </div>
+      <div class="kind-picks" id="room-kinds" role="group" aria-label="Tests"></div>
+      <div class="match-settings">
+        <label class="select-field">Rounds of each test
+          <select id="set-laps">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label class="select-field">Time to answer
+          <select id="set-timer">
+            <option value="0">No limit</option>
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds</option>
+            <option value="45">45 seconds</option>
+          </select>
+        </label>
+      </div>
+      <div class="crew-field">
+        <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+        <div class="crew-row">
+          <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+          <button class="btn ghost" id="crew-save" type="button">Use</button>
+        </div>
+        <p class="small-note muted" id="crew-status"></p>
+      </div>
+      <button class="btn primary wide" id="start-btn" type="button">Start game</button>
+    </div>
+    <div id="guest-settings" hidden>
+      <ul class="settings-summary" id="settings-summary"></ul>
+      <p class="muted">Waiting for the host to start.</p>
+    </div>
+   </div>
+  </div>
+</main>
+
+<!-- ============ Play ============ -->
+<main id="play" class="screen play" hidden>
+  <header class="game-bar">
+    <span class="bar-mode" id="bar-mode"></span>
+    <span class="bar-round" id="bar-round"></span>
+    <span class="clock" id="clock" hidden>
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="clock-track" cx="18" cy="18" r="15"/><circle class="clock-fill" id="clock-fill" cx="18" cy="18" r="15" pathLength="1"/></svg>
+      <b id="clock-text"></b>
+    </span>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+  <div class="arena" id="arena">
+    <section class="desk">
+      <div class="ask-row">
+        <span class="kind-badge" id="kind-badge"></span>
+        <h2 class="ask" id="play-ask"></h2>
+      </div>
+      <div class="sheet">
+        <div class="board-wrap">
+          <div class="stage" id="stage"></div>
+          <div class="countdown" id="countdown" hidden><span id="countdown-n">3</span></div>
+        </div>
+        <div class="title-block" id="title-block" aria-hidden="true">
+          <span><i>Test</i><b id="tb-kind"></b></span>
+          <span><i>Level</i><b id="tb-level"></b></span>
+          <span><i>Sheet</i><b id="tb-sheet"></b></span>
+          <span><i>Ref</i><b id="tb-ref"></b></span>
+        </div>
+      </div>
+    </section>
+    <aside class="scoreboard" id="scoreboard" hidden>
+      <h2>Scores</h2>
+      <ol class="score-list" id="score-list"></ol>
+    </aside>
+    <section class="side">
+      <div class="brief" id="brief">
+        <span class="kind-badge" id="brief-badge"></span>
+        <span><b id="brief-name"></b><span id="brief-how"></span></span>
+      </div>
+      <p class="hint" id="play-hint" aria-live="polite"></p>
+      <div class="controls" id="controls"></div>
+      <div class="actions">
+        <button class="btn primary wide" id="go-btn" type="button" hidden>Start round</button>
+        <button class="btn primary wide" id="lock-btn" type="button" hidden>Lock in</button>
+      </div>
+      <p class="waiting muted" id="waiting" aria-live="polite"></p>
+      <button class="btn link end-round" id="end-round-btn" type="button" hidden>End round now</button>
+      <section class="result" id="result" hidden aria-live="polite">
+        <div class="result-head">
+          <span class="result-score" id="result-score"></span>
+          <div>
+            <span class="result-verdict" id="result-verdict"></span>
+            <span class="result-answer muted" id="result-answer"></span>
+          </div>
+        </div>
+        <table class="round-table" id="round-table" hidden>
+          <thead><tr><th scope="col">Player</th><th scope="col">Guess</th><th scope="col">Pts</th><th scope="col">Total</th></tr></thead>
+          <tbody id="round-rows"></tbody>
+        </table>
+        <button class="btn primary wide" id="next-btn" type="button">Next round</button>
+        <p class="muted small-note" id="next-note"></p>
+      </section>
+    </section>
+  </div>
+</main>
+
+<!-- ============ Standings (room game over) ============ -->
+<main id="over" class="screen over" hidden>
+  <div class="over-inner">
+    <p class="muted" id="over-sub">Final standings</p>
+    <h2 class="over-title" id="over-title"></h2>
+    <ol class="standings" id="standings"></ol>
+    <p class="small-note muted" id="over-crew"></p>
+    <div class="over-actions" id="over-host" hidden>
+      <button class="btn primary" id="rematch-btn" type="button">Rematch</button>
+      <button class="btn ghost" id="lobby-btn" type="button">Change settings</button>
+    </div>
+    <p class="muted" id="over-guest" hidden>The host can start a rematch.</p>
+    <button class="btn link" id="leave-over" type="button">Leave room</button>
+  </div>
+</main>
+
+<!-- ============ Summary (practice and daily) ============ -->
+<main id="summary" class="screen summary" hidden>
+  <div class="summary-inner">
+   <div class="sum-score">
+    <p class="muted" id="sum-sub">Average score</p>
+    <div class="sum-dial" id="sum-dial"></div>
+    <p class="sum-verdict" id="sum-verdict"></p>
+    <p class="muted" id="sum-note"></p>
+   </div>
+   <div class="sum-detail">
+    <ol class="sum-rounds" id="sum-rounds"></ol>
+    <button class="btn primary wide" id="share-btn" type="button" hidden>Share result</button>
+    <button class="btn primary wide" id="again-btn" type="button">Play again</button>
+    <button class="btn ghost wide" id="home-btn" type="button">Home</button>
+   </div>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name, practice settings and daily results stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="rules-tests" id="rules-tests"></div>
+  <h3>Scoring</h3>
+  <p>Every round is scored from 0 to 100. Exact is 100, and each test has a miss that scores 50: 20% off on Count, 8% of the wall on Track, 6° on Angle, 3% of the line on Split. On Timing it depends on the target: 1 second off scores about 53 on a 5 s target and 84 on a 15 s one. Small misses cost little (half that miss still scores 78), bigger ones fall away fast (double scores 14, triple about 3).</p>
+  <h3>Rooms</h3>
+  <p>One person hosts and shares the 4-letter code. Everyone sees the same puzzle at the same moment and locks in a guess; the round ends when everyone has answered or time runs out. The reveal puts every guess on one drawing, and the highest total at the end wins.</p>
+  <h3>Daily puzzle</h3>
+  <p>One puzzle of each test, the same for everyone, new each day at midnight. You get one go.</p>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+{
+  "name": "guesstimate",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/rounds.test.mjs" }
+}
