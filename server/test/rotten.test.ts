@@ -93,7 +93,8 @@ describe('rooms', () => {
   it('drops a connection that floods the room', async () => {
     const { host } = await hostRoom();
     for (let i = 0; i < 200; i++) host.send({ t: 'type', text: 'a' });
-    await sleep(300);
+    // Wait for the drop rather than a fixed time: a busy machine can take longer than 300 ms
+    for (let waited = 0; !host.closed && waited < 5000; waited += 50) await sleep(50);
     expect(host.closed?.code).toBe(4008);
   });
 });

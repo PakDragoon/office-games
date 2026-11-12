@@ -26,8 +26,6 @@
   },
   "allowScripts": {
     "workerd@1.20261110.1": true,
-    "esbuild@0.18.20": true,
-    "esbuild@0.25.12": true,
     "esbuild@0.28.2": true,
     "sharp@0.35.2": true,
     "sharp@0.35.5": true
