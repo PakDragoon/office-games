@@ -584,3 +584,16 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 /* On your own, the result sits under a smaller melon */
 .play.solo-done .melon-host { width: min(100%, 220px, calc(100dvh - 520px)); min-width: 150px; }
 .players li[data-id] { cursor: pointer; }
+
+/* Daily: today's global leaderboard */
+.daily-board { margin: 0.5rem 0 0.25rem; width: 100%; text-align: left; }
+.daily-board .board-me { margin: 0 0 0.5rem; color: var(--ink); }
+.daily-board .board { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.daily-board .board li {
+  display: grid; grid-template-columns: 2rem 1fr auto; gap: 0.6rem; align-items: center;
+  padding: 0.35rem 0; border-bottom: 1px solid var(--line); font-size: 0.95rem;
+}
+.daily-board .board li.me { font-weight: 700; color: var(--accent); }
+.daily-board .rk { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daily-board .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-board .res { font-variant-numeric: tabular-nums; font-size: 0.88rem; text-align: right; }
