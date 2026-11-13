@@ -1,0 +1,374 @@
+aam
+acai
+ackee
+acorn squash
+adrak
+ajwain
+alfalfa
+almond
+aloe vera
+aloo bukhara
+alu bukhara
+amla
+amrood
+anar
+angoor
+anise
+apple
+apricot
+arbi
+artichoke
+arugula
+arvi
+asparagus
+aubergine
+avocado
+babaco
+baingan
+banana
+basil
+bathua
+bean
+bean sprouts
+beans
+beet
+beetroot
+bell pepper
+bhindi
+bilberry
+bitter gourd
+bitter melon
+black bean
+black currant
+blackberry
+blueberry
+bok choy
+boysenberry
+breadfruit
+brinjal
+broad bean
+broccoli
+brussels sprouts
+butter bean
+butternut squash
+cabbage
+cactus pear
+cantaloupe
+capsicum
+carambola
+cardamom
+carrot
+cashew apple
+cassava
+cauliflower
+celeriac
+celery
+chana
+chard
+chayote
+cherries
+cherry
+cherry tomato
+chestnut
+chickpea
+chicory
+chikoo
+chiku
+chili
+chilli
+chinese cabbage
+chives
+choti elaichi
+cilantro
+citron
+clementine
+clementines
+cluster beans
+coconut
+collard greens
+coriander
+corn
+courgette
+cranberry
+cress
+cucumber
+currant
+custard apple
+daikon
+dal
+damson
+dandelion
+date
+dates
+dewberry
+dhaniya
+dill
+dragon fruit
+drumstick
+dudhi
+durian
+edamame
+eddoe
+eggplant
+elderberry
+elephant apple
+endive
+escarole
+farmers pea
+fava bean
+feijoa
+fennel
+fenugreek
+fiddlehead
+fig
+finger lime
+flax
+french bean
+gajar
+galangal
+gandhari
+garlic
+ghia tori
+ginger
+gobi
+gooseberry
+gourd
+gram
+grape
+grapefruit
+grapes
+green bean
+green chili
+green chilli
+green onion
+green pepper
+greengage
+guava
+habanero
+hazelnut
+hog plum
+honeydew
+horseradish
+hubbard squash
+huckleberry
+ice apple
+iceberg lettuce
+imli
+indian gooseberry
+indian plum
+ivy gourd
+jackfruit
+jaggery plum
+jalapeno
+jamun
+java plum
+jerusalem artichoke
+jicama
+jujube
+juniper berry
+kachnar
+kakdi
+kale
+karela
+karonda
+kasuri methi
+kela
+kheera
+kidney bean
+kinnow
+kiwi
+kiwi fruit
+kohlrabi
+kumquat
+lady finger
+ladyfinger
+lasoda
+lauki
+leek
+lemon
+lentil
+lettuce
+lima bean
+lime
+lingonberry
+litchi
+lobia
+loganberry
+longan
+loquat
+lotus root
+lychee
+macadamia
+maize
+malay apple
+malta
+mandarin
+mango
+mangosteen
+marrow
+masoor
+matar
+melon
+methi
+mint
+mirabelle
+mooli
+moong
+mosambi
+mulberry
+mung bean
+mushroom
+muskmelon
+mustard
+mustard greens
+nariyal
+naseberry
+nashi pear
+navy bean
+nectarine
+neem
+nettle
+nimbu
+nutmeg
+ogden melon
+okra
+olive
+onion
+orange
+orange pepper
+oregano
+oyster mushroom
+pak choi
+palak
+papaya
+parsley
+parsnip
+passion fruit
+pea
+peach
+peanut
+pear
+pearl onion
+peas
+pecan
+peeli
+pepper
+persimmon
+phalsa
+pineapple
+pinto bean
+pistachio
+plantain
+plum
+pomegranate
+pomelo
+potato
+pudina
+pumpkin
+purple cabbage
+pyaz
+quandong
+queen apple
+quince
+quinoa
+radicchio
+radish
+raisin
+rajma
+rambutan
+raspberry
+raw banana
+raw mango
+red cabbage
+red currant
+red onion
+redcurrant
+rhubarb
+ridge gourd
+rocket
+romaine
+runner bean
+rutabaga
+saag
+santol
+sapodilla
+sapota
+sarson
+satsuma
+shaljam
+shallot
+shimla mirch
+singhara
+snow pea
+sorrel
+soursop
+soybean
+spaghetti squash
+spinach
+spring onion
+squash
+star fruit
+starfruit
+strawberry
+sugar cane
+sugarcane
+sultana
+swede
+sweet corn
+sweet potato
+swiss chard
+tamarillo
+tamarind
+tangelo
+tangerine
+taro
+tayberry
+thistle
+thyme
+tinda
+tomatillo
+tomato
+toor
+tori
+turmeric
+turnip
+ube
+ugli fruit
+umbrella mushroom
+urad
+uva
+vanilla
+vegetable marrow
+velvet bean
+vine leaf
+vine tomato
+walnut
+wampi
+water apple
+water chestnut
+watercress
+watermelon
+wax apple
+wheat
+white currant
+white radish
+wild garlic
+winter melon
+wolfberry
+wood apple
+xanthosoma
+xigua
+ximenia
+xoconostle
+yacon
+yam
+yardlong bean
+yellow pepper
+yellow squash
+youngberry
+yuzu
+zante currant
+zapote
+zest
+ziziphus
+zucchini

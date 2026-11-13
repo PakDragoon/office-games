@@ -1,0 +1,26 @@
+aqua, aquamarine, amber, amethyst, apricot, ash, azure, almond, apple green, avocado, aubergine, auburn, army green, alabaster, apricot orange, anthracite, arctic blue, asparagus, antique white
+baby blue, baby pink, beige, bisque, black, blue, blush, bone, bordeaux, brass, bronze, brown, burgundy, burnt orange, burnt sienna, buff, butter, bright green, bright red, brick red, bubblegum, banana yellow, blue green, blue grey, blueberry, british racing green, brunette, bottle green
+camel, canary yellow, candy, caramel, cardinal red, carmine, carnation, carrot, celadon, cerise, cerulean, champagne, charcoal, chartreuse, cherry, chestnut, chocolate, cinnamon, citrine, claret, clay, cobalt, coffee, copper, coral, corn, cornflower, cotton candy, cream, crimson, cyan, cadet blue, camouflage, cocoa, coffee brown, cool grey, cornflower blue, cranberry, cyber yellow
+dandelion, dark blue, dark green, dark grey, dark red, denim, desert sand, dodger blue, dove grey, dusty pink, dusk, drab, duck egg blue, deep blue, deep purple, deep red, dark orange, dark brown
+earth, ebony, ecru, eggplant, eggshell, electric blue, electric green, electric purple, emerald, espresso, eucalyptus, evergreen, eton blue
+fawn, fern green, fire engine red, firebrick, flame, flamingo, forest green, french blue, fuchsia, fuschia, fern, flax, frost, fluorescent green, fluorescent pink, fuchsia pink
+gainsboro, gamboge, garnet, gold, golden, golden brown, goldenrod, grape, grass green, graphite, gray, green, green yellow, grey, gunmetal, ginger, glaucous, gunmetal grey, granite, green apple
+heather, heliotrope, honey, honeydew, hot pink, hunter green, harlequin, hazel, henna, hazelnut, hooker green
+ice blue, icterine, indigo, ink, iris, iron, ivory, imperial blue, international orange, iceberg, indian red, iron grey
+jade, jasmine, jet black, jonquil, jungle green, jasper, jam, jean blue, juniper
+kelly green, khaki, kiwi, kombu green, khaki green, kingfisher blue
+lapis lazuli, lavender, lawn green, lemon, lemon yellow, light blue, light green, light grey, light pink, lilac, lime, lime green, linen, liver, lagoon, leaf green, lavender blue, lemon chiffon, lead, lipstick red
+magenta, mahogany, maize, malachite, mango, maroon, mauve, melon, midnight blue, mint, mint green, misty rose, moccasin, moss green, mustard, mulberry, mocha, mauve pink, marigold, metallic gold, metallic silver, millennial pink, mud, mushroom, magnolia, mandarin, maple
+navy, navy blue, neon, neon green, neon pink, neon yellow, nude, nutmeg, nickel, nile blue, nyanza, night blue, nude pink, naples yellow, neon blue, neon orange
+ochre, off white, olive, olive green, onyx, opal, orange, orchid, oxblood, oyster, ocean blue, oatmeal, old gold, old rose, olive drab, orange red, orange peel
+pale blue, pale green, pale yellow, papaya, pastel blue, pastel green, pastel pink, pastel yellow, pea green, peach, pear, pearl, periwinkle, persian blue, pewter, pine green, pink, pistachio, platinum, plum, powder blue, puce, pumpkin, purple, peacock blue, prussian blue, poppy, parakeet green, pearl white, pale pink, pink lemonade, primrose, patina, paprika
+quartz, quicksilver, quince, quill grey, quartz pink, queen blue, quinacridone
+raspberry, raw umber, red, red orange, red violet, rose, rose gold, rosewood, royal blue, royal purple, ruby, rust, russet, rose pink, regal blue, redwood, rosy brown, razzmatazz, roman silver
+saffron, sage, salmon, sand, sandy brown, sapphire, scarlet, sea blue, sea green, seashell, sepia, shamrock, sienna, silver, sky blue, slate, slate blue, slate grey, smoke, snow, soft pink, spring green, steel blue, straw, sunflower, sunset orange, sunshine yellow, sea foam, shocking pink, sepia brown, spearmint, sangria, stone, sunglow, smalt, sandstone, sulfur, sky
+tan, tangerine, taupe, tea green, teal, terracotta, thistle, tiffany blue, tomato, topaz, torquoise, tropical green, true blue, turquoise, turmeric, tawny, titanium, trout, tuscan red, tulip, tea rose, tyrian purple
+ultramarine, umber, ube, unbleached, ultra violet, university red, upsdell red, urobilin, ultramarine blue, ultra pink
+vanilla, verdigris, vermilion, violet, viridian, volt, vivid red, vivid blue, vegas gold, venetian red, vine green
+walnut, wheat, white, wine, wisteria, watermelon, wenge, windsor tan, willow green, wild blueberry, woodland green, warm grey, whiskey
+xanadu, xanthic, xanthous
+yellow, yellow green, yellow orange, yale blue, yellow ochre, yinmn blue, yam, yolk, young green
+zaffre, zomp, zucchini, zinc, zinc yellow, zafferano, zebra white

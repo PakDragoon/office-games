@@ -1,0 +1,601 @@
+achaar
+achar
+alfredo
+almond milk
+aloo bukhara chutney
+aloo gobi
+aloo keema
+aloo paratha
+aloo samosa
+aloo tikki
+american pie
+anchovies
+anda burger
+anda paratha
+appam
+apple crumble
+apple juice
+apple pie
+apple sauce
+arancini
+avocado toast
+ayran
+bagel
+baingan bharta
+bakar khani
+bakarkhani
+bakery biscuits
+baklava
+balushahi
+banana bread
+bao
+barbecue
+barfi
+batter
+bbq
+beans on toast
+beef burger
+beef stew
+beef tikka
+bhaji
+bhatura
+bhel
+bhel puri
+bhindi masala
+bhuna gosht
+biryani
+biscuit
+bisque
+bolognese
+boti
+bread
+breakfast
+brioche
+brownie
+bruschella
+bruschetta
+bun
+bun kabab
+buns
+burfi
+burger
+burrito
+butter
+butter chicken
+butter naan
+buttermilk
+caesar salad
+cake
+calzone
+cannelloni
+caramel
+carbonara
+chaat
+chai
+cham cham
+chana chaat
+chana masala
+chana pulao
+channay
+chapati
+chapli kabab
+chargha
+cheela
+cheese
+cheese naan
+cheeseburger
+cheesecake
+chicken
+chicken biryani
+chicken handi
+chicken karahi
+chicken korma
+chicken malai boti
+chicken nuggets
+chicken pie
+chicken pulao
+chicken roll
+chicken sajji
+chicken shawarma
+chicken tandoori
+chicken tikka
+chicken white karahi
+chicken wings
+chili con carne
+chilli chicken
+chilli paneer
+chips
+chocolate
+cholay
+chow mein
+chum chum
+churros
+chutney
+ciabatta
+cinnamon roll
+clam chowder
+club sandwich
+coleslaw
+cookie
+cornflakes
+couscous
+cream roll
+crepe
+crisps
+croissant
+croquette
+crumpet
+cupcake
+curry
+custard
+daal
+daal chawal
+daal mash
+dahi
+dahi baray
+dahi bhalla
+dal
+dal chawal
+dal makhani
+dal tadka
+dalia
+danish
+dessert
+dhokla
+dim sum
+dinner
+dolma
+doner
+donut
+doodh jalebi
+doodh patti
+dosa
+doughnut
+dum aloo
+dum biryani
+dumpling
+eclair
+egg
+egg curry
+egg fried rice
+egg paratha
+egg roll
+egg sandwich
+eggnog
+eggs benedict
+eintopf
+empanada
+enchilada
+english breakfast
+espresso
+fajita
+falafel
+falooda
+faluda
+fatayer
+feta
+finger chips
+firni
+fish and chips
+fish curry
+fish fingers
+fish fry
+fish tikka
+focaccia
+fondue
+frankfurter
+french fries
+french toast
+fried chicken
+fried fish
+fried rice
+fries
+frittata
+fruit chaat
+fruit salad
+fudge
+gajar halwa
+galouti kabab
+garlic bread
+gazpacho
+gelatin
+gelato
+ghee
+gnocchi
+gol gappa
+gola ganda
+golgappa
+golgappay
+goulash
+granola
+gravy
+grilled cheese
+guacamole
+gulab jamun
+gulgula
+gumbo
+gur
+gyoza
+gyro
+haggis
+hakka noodles
+haleem
+halva
+halwa
+halwa puri
+ham
+hamburger
+handi
+hara bhara kabab
+harira
+hash browns
+honey
+hot dog
+hot pot
+hummus
+ice cream
+ice cream sandwich
+ice lolly
+iced tea
+icing
+idli
+imarti
+imli chutney
+instant noodles
+irish stew
+iskender
+italian sausage
+jacket potato
+jalebi
+jalfrezi
+jam
+jambalaya
+jeera rice
+jelly
+jelly roll
+jerky
+jhatpat
+jollof rice
+juice
+kabab
+kabuli pulao
+kachori
+kadhi
+kaleji
+kalori
+karahi
+karhai
+kashmiri chai
+katlama
+kebab
+kebab roll
+kedgeree
+keema
+keema naan
+keema paratha
+keema samosa
+ketchup
+ketchup chips
+kheema
+kheer
+khichdi
+khichri
+kimchi
+kofta
+kofta curry
+korma
+kulcha
+kulfi
+kunafa
+kunafeh
+kunna
+lachha paratha
+laddu
+ladoo
+lahori chana
+lahori chargha
+lahori fish
+lamb biryani
+lamb chops
+lamb curry
+lasagna
+lassi
+lemon tart
+lemonade
+lentil soup
+linguine
+liver
+lobster roll
+lollipop
+lunch
+mac and cheese
+macaroni
+macaroni cheese
+makki di roti
+malai boti
+malai kofta
+malpua
+mango lassi
+mango shake
+margarita
+marshmallow
+masala dosa
+mash dal
+maska bun
+masoor dal
+matar pulao
+mattar paneer
+mayonnaise
+meatballs
+meatloaf
+meethi roti
+milkshake
+minestrone
+mint chutney
+mithai
+mixed grill
+mixed vegetable
+mochi
+mohan thaal
+momos
+mooli paratha
+moong dal
+moussaka
+muffin
+murgh cholay
+mutter paneer
+mutton biryani
+mutton chops
+mutton karahi
+mutton korma
+mutton pulao
+mutton stew
+naan
+naan kabab
+naan khatai
+nachos
+namak para
+namkeen
+nankhatai
+nargisi kofta
+nasi goreng
+nigiri
+nihari
+nimco
+nimki
+noodles
+nuggets
+nut roast
+nutella
+nutmeg tea
+oatmeal
+oden
+okra fry
+olive oil
+omelet
+omelette
+onion bhaji
+onion rings
+orange juice
+oreo
+osso buco
+oyster sauce
+paan
+pad thai
+paella
+pakora
+pakora kadhi
+pakoray
+pancake
+paneer
+pani
+pani puri
+parantha
+paratha
+pasanda
+pasta
+pastry
+pate
+pathoray
+patties
+patty
+pav bhaji
+paya
+paye
+peanut butter
+peda
+penne
+pepperoni
+pesto
+phirni
+pho
+pie
+pilaf
+pilau
+pinni
+pita
+pitta
+pizza
+pizza roll
+pizza slice
+popcorn
+popcorn chicken
+porridge
+pot roast
+potato salad
+prawn curry
+pretzel
+pudding
+pulao
+pulav
+puri
+qeema
+qeema naan
+qorma
+quail
+quail eggs
+quarter pounder
+quesadilla
+quiche
+quinoa salad
+rabri
+raita
+rajma
+rajma chawal
+ramen
+ras malai
+rasgulla
+rasmalai
+ratatouille
+ravioli
+red velvet cake
+reshmi kabab
+reshmi tikka
+rice
+rice krispies
+rice pudding
+risotto
+roast beef
+roast chicken
+rogan josh
+roll paratha
+rolls
+rosti
+roti
+rump roast
+rusk
+russian salad
+sabzi
+sajji
+salad
+salami
+salmon
+samosa
+samosay
+sandwich
+sandwiches
+sausage
+schnitzel
+scone
+scrambled eggs
+seekh kabab
+sev
+shahi paneer
+shahi tukray
+shakshuka
+shami
+shami kabab
+shawarma
+sheer khurma
+sheermal
+shepherds pie
+sherbet
+sizzler
+sloppy joe
+smoothie
+smores
+sooji halwa
+sorbet
+soup
+souvlaki
+spaghetti
+spicy chicken
+spring roll
+steak
+stew
+sticky rice
+stir fry
+strudel
+sub
+suji halwa
+sundae
+sushi
+sweet and sour
+taco
+tacos
+tadka
+tahini
+tamale
+tandoori
+tandoori chicken
+tandoori roti
+tarka
+tart
+tawa chicken
+tawa pulao
+tea
+tehri
+tempura
+teriyaki
+thali
+tikka
+tikka boti
+tikka masala
+tiramisu
+toast
+toffee
+tofu
+tom yum
+tomato soup
+tortellini
+tortilla
+trail mix
+trifle
+tuna salad
+turkey
+turkish delight
+tzatziki
+udon
+unagi
+upma
+urad dal
+usal
+uthappam
+uttapam
+vada
+vada pav
+vanilla ice cream
+veal
+veg pulao
+vegetable curry
+vegetable soup
+veggie burger
+vermicelli
+vichyssoise
+victoria sponge
+vindaloo
+wada
+waffle
+waffles
+walnut cake
+welsh rarebit
+wheat roti
+whipped cream
+white karahi
+white rice
+whopper
+wings
+wonton
+wrap
+xacuti
+xiao long bao
+xiaolongbao
+xinjiang noodles
+yakhni
+yakhni pulao
+yakisoba
+yakitori
+yam fries
+yellow curry
+yellow dal
+yoghurt
+yogurt
+yorkshire pudding
+zabaglione
+zarda
+zeera rice
+zeppole
+zinger
+zinger burger
+ziti
+zucchini fritters

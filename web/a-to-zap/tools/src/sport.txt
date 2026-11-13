@@ -1,0 +1,26 @@
+aerobics, aikido, air hockey, alpine skiing, american football, angling, archery, arm wrestling, artistic gymnastics, athletics, aqua jogging, acrobatics, aquathlon, aussie rules, abseiling, airsoft, axe throwing, adventure racing
+badminton, baseball, basketball, beach volleyball, billiards, biathlon, bmx, bobsleigh, bocce, bodybuilding, bowling, boxing, bowls, breaststroke, backstroke, bandy, base jumping, bike polo, ball hockey, banger racing, boogie boarding, bridge, buzkashi, butterfly, baton, bouldering
+camogie, canoeing, canoe polo, caving, checkers, chess, climbing, cricket, croquet, cross country, curling, cycling, cue sports, carrom, carom, calisthenics, cheerleading, clay shooting, combat sports, crossfit, cyclocross, canyoning, capoeira, cornhole, competitive eating, car racing, cricket t20
+darts, decathlon, discus, discus throw, diving, dodgeball, dressage, drag racing, dragon boat, drone racing, duathlon, dancesport, deadlift, downhill skiing, dirt biking
+equestrian, esports, endurance riding, enduro, eventing, exercise, extreme sports, eskrima
+fencing, field hockey, figure skating, fishing, flag football, floorball, football, formula one, formula 1, freestyle, free climbing, frisbee, futsal, freediving, flying disc, fives, fistball
+gaelic football, go kart, go karting, golf, gymnastics, glider, grappling, greco roman wrestling, gliding, goalball, gridiron, ghulli danda, gatka, gilli danda
+handball, high jump, hiking, hockey, horse racing, horse riding, hurdles, hurling, hammer throw, hang gliding, heptathlon, hot air ballooning, hunting, hopscotch, hackysack, horseshoes, hapkido, hot rod
+ice dancing, ice hockey, ice skating, indoor cricket, inline skating, iron man, ironman, indoor football, irish dance, ice climbing, ice yachting, innertube water polo
+javelin, javelin throw, jet skiing, jiu jitsu, judo, jogging, jump rope, juggling, jai alai, jujitsu, jousting, jeet kune do, jumping
+kabaddi, karate, kayaking, kendo, kickboxing, kite surfing, kitesurfing, korfball, kho kho, kite flying, krav maga, kung fu, kneeboarding, kettlebell, kenjutsu, kabbadi
+lacrosse, land sailing, long jump, luge, lawn bowls, lawn tennis, leapfrog, longboarding, log rolling, laser tag, lifesaving, limbo
+marathon, martial arts, motocross, motorcycling, motor racing, motorsport, mountaineering, mountain biking, muay thai, mma, mixed martial arts, modern pentathlon, mallakhamb, mud running, minigolf, mini golf, marbles, mountain climbing, motorboating, motorball
+netball, nordic skiing, nine ball, ninepin, ninepins, nordic combined, nunchaku, nine pin bowling
+orienteering, olympic weightlifting, obstacle racing, obstacle course, open water swimming, offroad racing, outrigger canoeing, octopush
+paddleboarding, paragliding, parkour, pentathlon, pickleball, pilates, ping pong, pole vault, polo, pool, powerlifting, parachuting, parasailing, pesapallo, pitch and putt, paintball, pankration, pehlwani, pole dancing, padel, para swimming, pistol shooting, platform diving, powerboating
+quidditch, quad biking, quoits, qigong, quad racing, quarter horse racing
+racquetball, rafting, relay, rock climbing, rodeo, roller derby, roller skating, rounders, rowing, rugby, rugby league, rugby union, running, racewalking, race walking, rifle shooting, rhythmic gymnastics, rock paper scissors, rope jumping, road cycling, road running, ringette, roller hockey, rally
+sailing, scuba diving, shot put, shooting, skateboarding, skating, skeleton, skiing, skydiving, snooker, snowboarding, soccer, softball, speed skating, sprinting, squash, sumo, surfing, swimming, sepak takraw, slalom, sled, sledding, snowshoeing, speedway, sport climbing, sprint, stock car racing, street hockey, strongman, sumo wrestling, synchronized swimming, snow skiing, spearfishing, steeplechase, sprint cycling, shuffleboard, shinty, savate
+table tennis, taekwondo, tai chi, tennis, tenpin bowling, tetherball, three day eventing, track and field, trampolining, trampoline, triathlon, triple jump, tug of war, taekwando, tchoukball, toboggan, trail running, trap shooting, tumbling, test cricket, touch rugby, thai boxing
+ultimate frisbee, ultimate, ultramarathon, underwater hockey, underwater rugby, unicycling, uneven bars, unicycle hockey
+volleyball, vault, vaulting, velodrome, vovinam, vert skating, viking chess
+wakeboarding, walking, water polo, water skiing, weightlifting, windsurfing, wrestling, wushu, wall climbing, wheelchair basketball, wheelchair rugby, wheelchair tennis, whitewater rafting, wiffle ball, winter sports, woodchopping, wing foiling
+xiangqi
+yachting, yoga, yacht racing, yabusame, yo yo
+zorbing, zumba, zip lining, zipline, zurkhaneh, zone ball

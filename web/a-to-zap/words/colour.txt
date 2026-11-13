@@ -1,0 +1,444 @@
+alabaster
+almond
+amber
+amethyst
+anthracite
+antique white
+apple green
+apricot
+apricot orange
+aqua
+aquamarine
+arctic blue
+army green
+ash
+asparagus
+aubergine
+auburn
+avocado
+azure
+baby blue
+baby pink
+banana yellow
+beige
+bisque
+black
+blue
+blue green
+blue grey
+blueberry
+blush
+bone
+bordeaux
+bottle green
+brass
+brick red
+bright green
+bright red
+british racing green
+bronze
+brown
+brunette
+bubblegum
+buff
+burgundy
+burnt orange
+burnt sienna
+butter
+cadet blue
+camel
+camouflage
+canary yellow
+candy
+caramel
+cardinal red
+carmine
+carnation
+carrot
+celadon
+cerise
+cerulean
+champagne
+charcoal
+chartreuse
+cherry
+chestnut
+chocolate
+cinnamon
+citrine
+claret
+clay
+cobalt
+cocoa
+coffee
+coffee brown
+cool grey
+copper
+coral
+corn
+cornflower
+cornflower blue
+cotton candy
+cranberry
+cream
+crimson
+cyan
+cyber yellow
+dandelion
+dark blue
+dark brown
+dark green
+dark grey
+dark orange
+dark red
+deep blue
+deep purple
+deep red
+denim
+desert sand
+dodger blue
+dove grey
+drab
+duck egg blue
+dusk
+dusty pink
+earth
+ebony
+ecru
+eggplant
+eggshell
+electric blue
+electric green
+electric purple
+emerald
+espresso
+eton blue
+eucalyptus
+evergreen
+fawn
+fern
+fern green
+fire engine red
+firebrick
+flame
+flamingo
+flax
+fluorescent green
+fluorescent pink
+forest green
+french blue
+frost
+fuchsia
+fuchsia pink
+fuschia
+gainsboro
+gamboge
+garnet
+ginger
+glaucous
+gold
+golden
+golden brown
+goldenrod
+granite
+grape
+graphite
+grass green
+gray
+green
+green apple
+green yellow
+grey
+gunmetal
+gunmetal grey
+harlequin
+hazel
+hazelnut
+heather
+heliotrope
+henna
+honey
+honeydew
+hooker green
+hot pink
+hunter green
+ice blue
+iceberg
+icterine
+imperial blue
+indian red
+indigo
+ink
+international orange
+iris
+iron
+iron grey
+ivory
+jade
+jam
+jasmine
+jasper
+jean blue
+jet black
+jonquil
+jungle green
+juniper
+kelly green
+khaki
+khaki green
+kingfisher blue
+kiwi
+kombu green
+lagoon
+lapis lazuli
+lavender
+lavender blue
+lawn green
+lead
+leaf green
+lemon
+lemon chiffon
+lemon yellow
+light blue
+light green
+light grey
+light pink
+lilac
+lime
+lime green
+linen
+lipstick red
+liver
+magenta
+magnolia
+mahogany
+maize
+malachite
+mandarin
+mango
+maple
+marigold
+maroon
+mauve
+mauve pink
+melon
+metallic gold
+metallic silver
+midnight blue
+millennial pink
+mint
+mint green
+misty rose
+moccasin
+mocha
+moss green
+mud
+mulberry
+mushroom
+mustard
+naples yellow
+navy
+navy blue
+neon
+neon blue
+neon green
+neon orange
+neon pink
+neon yellow
+nickel
+night blue
+nile blue
+nude
+nude pink
+nutmeg
+nyanza
+oatmeal
+ocean blue
+ochre
+off white
+old gold
+old rose
+olive
+olive drab
+olive green
+onyx
+opal
+orange
+orange peel
+orange red
+orchid
+oxblood
+oyster
+pale blue
+pale green
+pale pink
+pale yellow
+papaya
+paprika
+parakeet green
+pastel blue
+pastel green
+pastel pink
+pastel yellow
+patina
+pea green
+peach
+peacock blue
+pear
+pearl
+pearl white
+periwinkle
+persian blue
+pewter
+pine green
+pink
+pink lemonade
+pistachio
+platinum
+plum
+poppy
+powder blue
+primrose
+prussian blue
+puce
+pumpkin
+purple
+quartz
+quartz pink
+queen blue
+quicksilver
+quill grey
+quinacridone
+quince
+raspberry
+raw umber
+razzmatazz
+red
+red orange
+red violet
+redwood
+regal blue
+roman silver
+rose
+rose gold
+rose pink
+rosewood
+rosy brown
+royal blue
+royal purple
+ruby
+russet
+rust
+saffron
+sage
+salmon
+sand
+sandstone
+sandy brown
+sangria
+sapphire
+scarlet
+sea blue
+sea foam
+sea green
+seashell
+sepia
+sepia brown
+shamrock
+shocking pink
+sienna
+silver
+sky
+sky blue
+slate
+slate blue
+slate grey
+smalt
+smoke
+snow
+soft pink
+spearmint
+spring green
+steel blue
+stone
+straw
+sulfur
+sunflower
+sunglow
+sunset orange
+sunshine yellow
+tan
+tangerine
+taupe
+tawny
+tea green
+tea rose
+teal
+terracotta
+thistle
+tiffany blue
+titanium
+tomato
+topaz
+torquoise
+tropical green
+trout
+true blue
+tulip
+turmeric
+turquoise
+tuscan red
+tyrian purple
+ube
+ultra pink
+ultra violet
+ultramarine
+ultramarine blue
+umber
+unbleached
+university red
+upsdell red
+urobilin
+vanilla
+vegas gold
+venetian red
+verdigris
+vermilion
+vine green
+violet
+viridian
+vivid blue
+vivid red
+volt
+walnut
+warm grey
+watermelon
+wenge
+wheat
+whiskey
+white
+wild blueberry
+willow green
+windsor tan
+wine
+wisteria
+woodland green
+xanadu
+xanthic
+xanthous
+yale blue
+yam
+yellow
+yellow green
+yellow ochre
+yellow orange
+yinmn blue
+yolk
+young green
+zafferano
+zaffre
+zebra white
+zinc
+zinc yellow
+zomp
+zucchini

@@ -1,0 +1,33 @@
+aardvark, aardwolf, abyssinian cat, adder, african elephant, agama, agouti, albatross, alligator, alpaca, anaconda, anchovy, angelfish, angora, ant, anteater, antelope, ape, arctic fox, arctic hare, armadillo, asp, ass, avocet, axolotl, aye aye
+baboon, badger, bald eagle, bandicoot, barnacle, barracuda, basilisk, bass, bat, bear, beaver, bee, beetle, bengal tiger, bighorn, bird, bison, bittern, blackbird, black bear, black panther, bluebird, blue whale, boa, bobcat, bonobo, booby, bovine, budgie, buffalo, bull, bulldog, bullfrog, bumblebee, bunny, burro, bushbaby, butterfly, buzzard
+caiman, camel, canary, capybara, caracal, cardinal, caribou, carp, cat, caterpillar, catfish, cattle, centipede, chameleon, chamois, cheetah, chicken, chickadee, chimpanzee, chimp, chinchilla, chipmunk, chough, cicada, civet, clam, clownfish, cobra, cockatoo, cockroach, cod, collie, condor, conch, cormorant, cougar, cow, coyote, crab, crane, crayfish, cricket, crocodile, crow, cuckoo, curlew, cygnet
+dachshund, dalmatian, damselfly, deer, desert fox, dhole, dingo, dinosaur, dog, dogfish, dolphin, donkey, dormouse, dove, dragonfly, drake, dromedary, duck, dugong, dunlin
+eagle, earthworm, earwig, echidna, eel, egret, eland, elephant, elephant seal, elk, emu, ermine, eagle owl
+falcon, fawn, ferret, finch, firefly, fish, flamingo, flea, flounder, fly, flying fish, flying squirrel, fox, frog, fruit bat
+gazelle, gecko, gerbil, gharial, gibbon, giraffe, gnat, gnu, goat, goldfish, goose, gopher, gorilla, goshawk, grasshopper, grebe, greyhound, grizzly, grouse, guanaco, guinea pig, gull, guppy
+haddock, hamster, hare, harrier, hawk, hedgehog, heron, herring, hippo, hippopotamus, hog, honeybee, hoopoe, hornbill, hornet, horse, hound, hummingbird, husky, hyena, hyrax
+ibex, ibis, iguana, impala, insect, indian elephant, indian cobra, indian peafowl, indian rhino, irish setter, isopod
+jackal, jackrabbit, jaguar, jay, jellyfish, jerboa, jackdaw, john dory
+kangaroo, katydid, kestrel, killer whale, kingfisher, kinkajou, kiwi, koala, kodiak, komodo dragon, koi, krill, kudu, kookaburra
+labrador, lacewing, ladybird, ladybug, lamb, lammergeier, lamprey, langur, lark, lemming, lemur, leopard, lion, lionfish, lizard, llama, lobster, locust, loon, loris, louse, lynx, lyrebird, lapwing
+macaw, mackerel, magpie, mallard, mamba, manatee, mandrill, mantis, markhor, marlin, marmoset, marmot, marten, mastiff, meerkat, mink, minnow, mole, mongoose, monkey, moose, mosquito, moth, mouse, mule, mussel, mustang, muskrat
+narwhal, newt, nightingale, nightjar, numbat, nutria, nuthatch, nilgai, nile crocodile
+ocelot, octopus, okapi, olm, opossum, orangutan, orca, oriole, oryx, osprey, ostrich, otter, owl, ox, oyster, ocean sunfish
+panda, pangolin, panther, parakeet, parrot, partridge, peacock, peafowl, pekingese, pelican, penguin, perch, pheasant, pig, pigeon, pike, piranha, platypus, polar bear, pony, poodle, porcupine, porpoise, possum, prawn, puffin, puma, python, pug, pitbull, pomeranian
+quail, quagga, quokka, quoll, queen bee, quetzal
+rabbit, raccoon, ram, rat, rattlesnake, raven, ray, red panda, reindeer, rhea, rhino, rhinoceros, roach, roadrunner, robin, rooster, rottweiler, rooks, rook
+sable, salamander, salmon, sandpiper, sardine, scorpion, sea cow, sea lion, sea otter, seagull, seahorse, seal, shark, sheep, shrew, shrimp, siamese cat, skunk, sloth, slug, snail, snake, snow leopard, sparrow, spider, spider monkey, sponge, squid, squirrel, stag, starfish, starling, stingray, stoat, stork, swallow, swan, swift, swordfish, st bernard, snow owl
+tadpole, tapir, tarantula, tarsier, termite, tern, terrier, thrush, tick, tiger, tiger shark, toad, tortoise, toucan, trout, tuna, turkey, turtle, tit, takin
+uakari, uguisu, umbrella bird, urial, unicorn fish, uromastyx
+viper, vole, vulture, vicuna, vampire bat
+wallaby, walrus, warthog, wasp, water buffalo, weasel, weevil, whale, whale shark, wildcat, wildebeest, wolf, wolverine, wombat, woodpecker, worm, wren, wagtail, whippet, whooping crane
+xerus, x ray tetra, xenops, xantus hummingbird, xoloitzcuintli
+yak, yellowhammer, yellowjacket, yorkshire terrier, yabby
+zebra, zebu, zebra finch, zander, zorilla, zebra shark
+bengal fox, markhor, ibex, urial, snow leopard, indus dolphin, blind dolphin, chukar, houbara bustard, himalayan brown bear, himalayan monal, sindh ibex, chinkara, nilgai, blackbuck, blackbuck antelope, jungle cat, fishing cat, leopard cat, indian pangolin, black kite, shikra, eurasian eagle owl, cheel, kite, myna, mynah, koel, bulbul, babbler, lapwing, hoopoe, parakeet, rose ringed parakeet, house sparrow, crow, jungle crow, mongoose, langur, rhesus macaque, macaque, mugger crocodile, monitor lizard, saw scaled viper, russell's viper, krait, rat snake, cobra, python, gharial
+bulbul, buffalo, goat, sheep, camel, donkey, horse, cow, bull, ox, hen, cock, rooster, kitten, puppy, calf, foal, cub, chick, duckling, gosling, piglet, fawn, kid, lamb
+aphid, bedbug, bluebottle, bush cricket, cabbage white, daddy longlegs, dung beetle, fruit fly, gadfly, glow worm, grub, horsefly, housefly, leafhopper, maggot, mayfly, midge, mealworm, moth, pill bug, sawfly, silkworm, stag beetle, stick insect, tsetse fly, wood louse, yellow jacket
+abalone, cuttlefish, dogwhelk, limpet, nautilus, periwinkle, scallop, sea urchin, sea cucumber, whelk
+bream, bluefish, char, cichlid, dace, eel, flatfish, gar, goby, grouper, gurnard, halibut, hake, john dory, kingfish, lingcod, mahi mahi, mullet, pollock, pompano, pufferfish, rainbow trout, red snapper, roach, sailfish, sea bass, skate, snapper, sole, sturgeon, tench, tilapia, tetra, turbot, wahoo, walleye, whitefish, wrasse, zander
+bullsnake, copperhead, coral snake, corn snake, garter snake, gila monster, horned lizard, kingsnake, milk snake, rat snake, sea snake, sidewinder, skink, slow worm, tree frog, water moccasin, whiptail
+albatross, auk, bee eater, blue jay, bunting, bustard, chaffinch, cassowary, cockatiel, coot, corncrake, crossbill, dipper, dodo, eider, fantail, fieldfare, flycatcher, fulmar, gannet, godwit, goldcrest, goldfinch, goldeneye, greenfinch, guillemot, gyrfalcon, harpy eagle, hobby, jacana, jackdaw, kite, kittiwake, knot, linnet, lovebird, mockingbird, moorhen, nightingale, ortolan, osprey, ouzel, oystercatcher, petrel, phoebe, pintail, pipit, plover, pochard, ptarmigan, quail, rail, redpoll, redstart, rhea, ringdove, roller, ruff, sanderling, secretary bird, shearwater, shelduck, shoveler, shrike, siskin, skua, skylark, snipe, sparrowhawk, spoonbill, stonechat, swiftlet, tanager, teal, tinamou, treecreeper, turnstone, vireo, warbler, waxwing, wheatear, whimbrel, whinchat, wigeon, woodcock, woodpigeon, yellowhammer
