@@ -193,6 +193,9 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'rotten:longest': 'max', // longest word
   'fast-fingers:bestWpm': 'max', // words per minute
   'lettuce-party:fastestNeg': 'max', // the fastest solve in ms, stored NEGATED so that MAX = fastest
+  'lettuce-party:countsFastestNeg': 'max', // Counts: fastest solve in ms, negated like fastestNeg
+  'lettuce-party:ladderFastestNeg': 'max', // Word ladder: fastest finish in ms, negated
+  'lettuce-party:ladderBestOverNeg': 'max', // Word ladder: fewest steps over par, negated (0 = a shortest path)
   'rotten:bestDaily': 'min', // the daily's score is a time (order 'asc')
   'guesstimate:bestDaily': 'max', // the daily's score is points (order 'desc')
   'melonburst:bestDaily': 'min', // the daily's score is solved/wrong/time packed into one number (order 'asc')

@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test';
+import { PROTOCOL } from '../src/core/game';
 
 export type Msg = Record<string, unknown> & { t?: string };
 
@@ -39,7 +40,7 @@ export class TestClient {
   }
 
   join(name: string, extra: Msg = {}): void {
-    this.send({ t: 'join', v: 1, name, client: `tab-${name}`, ...extra });
+    this.send({ t: 'join', v: PROTOCOL, name, client: `tab-${name}`, ...extra });
   }
 
   /** The next message (from `from` onwards) matching pred. */

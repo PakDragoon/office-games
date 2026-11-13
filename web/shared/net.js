@@ -4,7 +4,7 @@
 import { getGuest, setGuest, getIdToken, api } from './cloud.js';
 import { roomJoined, roomLeft } from './friends.js';
 
-export const PROTOCOL = 1;
+export const PROTOCOL = 2;
 const PING_MS = 3000;     // answered by the server runtime itself, so it never wakes the room
 const LOST_MS = 12000;    // nothing heard for this long while the tab is visible: reconnect
 const RETRY_MS = [500, 1000, 2000, 3000, 5000, 8000];

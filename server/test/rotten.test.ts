@@ -1,4 +1,5 @@
 import { env, runDurableObjectAlarm, runInDurableObject } from 'cloudflare:test';
+import { PROTOCOL } from '../src/core/game';
 import { describe, expect, it } from 'vitest';
 import { hostRoom, playersOf, sleep, TestClient, type Msg } from './helpers';
 
@@ -53,7 +54,7 @@ describe('rooms', () => {
   it('gives a second "Sara" from another tab her own seat, but a refresh takes the seat back', async () => {
     const { host, code } = await hostRoom('Sara');
     const other = await TestClient.open(`/rotten/ws?code=${code}`);
-    other.send({ t: 'join', v: 1, name: 'Sara', client: 'tab-other' });
+    other.send({ t: 'join', v: PROTOCOL, name: 'Sara', client: 'tab-other' });
     let s = await host.state((x) => playersOf(x).length === 2);
     expect(playersOf(s).map((p) => p.name)).toEqual(['Sara', 'Sara 2']);
     // Refresh: the host's tab comes back with the same client id

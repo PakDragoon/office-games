@@ -1,4 +1,5 @@
 import { SELF } from 'cloudflare:test';
+import { PROTOCOL } from '../src/core/game';
 import { describe, expect, it } from 'vitest';
 import EN_TEXT from '../../web/rotten/words/en.txt';
 import { SortedWords } from '../src/core/words';
@@ -44,7 +45,7 @@ async function guestToken(): Promise<string> {
       const m = JSON.parse(String(e.data)) as { t: string; token?: string };
       if (m.t === 'guest' && m.token) resolve(m.token);
     });
-    ws.send(JSON.stringify({ t: 'join', v: 1, name: 'Daily', client: 'tab-daily' }));
+    ws.send(JSON.stringify({ t: 'join', v: PROTOCOL, name: 'Daily', client: 'tab-daily' }));
   });
   ws.close();
   return token;
