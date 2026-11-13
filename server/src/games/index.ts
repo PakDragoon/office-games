@@ -1,4 +1,5 @@
 import type { GameModule } from '../core/game';
+import { atozap } from './atozap';
 import { fastFingers } from './fastfingers';
 import { flipchip } from './flipchip';
 import { guesstimate } from './guesstimate';
@@ -18,4 +19,5 @@ export const GAMES: Record<string, GameModule> = {
   flipchip,
   'fast-fingers': fastFingers,
   'lettuce-party': lettuce,
+  'a-to-zap': atozap,
 };

@@ -353,6 +353,31 @@
         </div>
       </a>
     </li>
+    <li>
+      <a class="game" href="/a-to-zap/">
+        <div class="art zp" aria-hidden="true">
+          <style>
+            .zp .row { display: flex; align-items: center; gap: 7px; }
+            .zp .tile { display: grid; place-items: center; width: 44px; height: 50px; font-weight: 800; font-size: 1.6rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink); border-radius: 10px; box-shadow: 0 4px 0 var(--ink); }
+            .zp .tile.lit { background: #ffc933; color: #1b1e3a; }
+            .zp .to { font-style: italic; font-weight: 700; color: var(--muted); padding: 0 3px; }
+            .zp .bolt { width: 40px; height: 52px; fill: #ffc933; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; margin-left: -6px; overflow: visible; animation: zp-bolt 3.2s ease-in-out infinite; transform-origin: 50% 80%; }
+            @keyframes zp-bolt { 0%, 72%, 100% { transform: none; } 78% { transform: scale(1.2) rotate(-7deg); } 84% { transform: scale(0.96); } 90% { transform: scale(1.1) rotate(3deg); } }
+            @media (prefers-reduced-motion: reduce) { .zp .bolt { animation: none; } }
+          </style>
+          <div class="row">
+            <span class="tile">A</span><span class="to">to</span><span class="tile lit">Z</span><span class="tile">A</span><span class="tile">P</span>
+            <svg class="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>A to Zap</h2><span class="beta">BETA</span></div>
+          <p>One player picks a letter and everyone races to fill in a name, a place, an animal and more that start with it. First to finish hits Zap!</p>
+          <ul class="facts"><li>2 to 8 players</li><li>Words</li><li>About 15 minutes a game</li></ul>
+          <span class="play">Play A to Zap</span>
+        </div>
+      </a>
+    </li>
   </ul>
 
   <footer>

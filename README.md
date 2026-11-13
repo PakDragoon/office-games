@@ -14,6 +14,7 @@ Free real-time multiplayer browser games, served by one Cloudflare Worker:
 | `/flipchip/` | Flipchip | rooms, Quick Play | vs the computer |
 | `/fast-fingers/` | Fast Fingers | rooms, Quick Play | practice |
 | `/lettuce-party/` | Lettuce Party | rooms, Quick Play | – |
+| `/a-to-zap/` | A to Zap | rooms, Quick Play | – |
 
 Every room is a Durable Object: the server holds the secrets, checks every move, runs the timers,
 passes the host role on when the host leaves, and writes the stats. Solo modes run the same rules

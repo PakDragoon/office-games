@@ -206,6 +206,7 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'lettuce-party:streak': 'max',
   'guesstimate:streak': 'max',
   'guesstimate:lastDay': 'max',
+  'a-to-zap:bestRound': 'max', // the most points in one round
 };
 
 const keysOf = (kind: 'max' | 'min') => Object.keys(BEST_STATS).filter((k) => BEST_STATS[k] === kind);

@@ -1,0 +1,25 @@
+abdomen, achilles tendon, adams apple, adenoids, adrenal gland, ankle, anus, aorta, appendix, arm, armpit, artery, atrium, areola, arch, adipose tissue, auricle, axilla, alveoli, anklebone, abs
+back, backbone, belly, belly button, bicep, biceps, bladder, blood, blood vessel, bone, bone marrow, brain, brain stem, breast, breastbone, bronchus, buttock, buttocks, brow, bum, beard, bellybutton, brainstem
+calf, capillary, carpal, cartilage, cerebellum, cerebrum, cheek, cheekbone, chest, chin, clavicle, coccyx, collarbone, colon, cornea, cranium, crown, calves, cuticle, cell, cortex, cervix, canine, cuspid
+diaphragm, dimple, disc, duodenum, dermis, deltoid, digit, dentine, dorsal
+ear, earlobe, eardrum, elbow, enamel, epidermis, epiglottis, esophagus, oesophagus, eye, eyeball, eyebrow, eyelash, eyelid, eardum, ear canal, eyesocket, eye socket
+face, fat, femur, fibula, fingernail, finger, fingertip, fist, flesh, foot, forearm, forehead, foreskin, fontanelle, funny bone, follicle, frontal lobe, feet, fingerprint
+gall bladder, gallbladder, gland, groin, gum, gums, gullet, gut, glute, glutes, gluteus, gizzard, ganglion
+hair, hamstring, hand, head, heart, heel, hip, humerus, hand bone, heartbeat, hairline, hypothalamus, hippocampus
+ileum, index finger, instep, intestine, intestines, iris, ilium, incisor, inner ear, ischium, insteps, intestinal tract
+jaw, jawbone, jejunum, joint, jugular, jugular vein, jowl
+kidney, kidneys, knee, kneecap, knuckle, knuckles, keratin, knee joint
+larynx, leg, ligament, lip, liver, lobe, lung, lungs, lower back, lymph node, lymph, lash, lens, lower leg, lap
+mandible, marrow, molar, mouth, muscle, mole, middle finger, maxilla, medulla, meniscus, metacarpal, metatarsal, moustache, mustache
+nail, navel, neck, nerve, nipple, nose, nostril, neuron, nape, nasal bone, nasal cavity
+occipital, optic nerve, organ, oesophagus, ovary, ovaries, orbit, outer ear, oral cavity
+palm, pancreas, patella, pelvis, penis, pinky, pinkie, pituitary, plasma, pore, pulse, pupil, pectoral, pectorals, pharynx, phalanges, palate, parietal, plantar, pimple, prostate, pelvic bone, platelet, pinna, philtrum
+quadricep, quadriceps, quad, quads
+radius, rectum, red blood cell, retina, rib, ribs, ribcage, rib cage, rotator cuff, rump, rhomboid
+sacrum, saliva, scalp, scapula, shin, shinbone, shoulder, shoulder blade, sinus, skeleton, skin, skull, spine, spinal cord, spleen, sternum, stomach, sweat gland, sole, side, septum, scar, shoulders, small intestine, sperm, sebaceous gland, solar plexus, soft palate
+tailbone, tarsal, temple, tendon, testicle, thigh, thigh bone, throat, thumb, thymus, thyroid, tibia, tissue, toe, toenail, tongue, tonsil, tonsils, tooth, teeth, torso, trachea, tricep, triceps, trapezius, tear duct, taste bud, tummy, trunk, tragus
+ulna, umbilical cord, upper arm, upper back, ureter, urethra, uterus, uvula, underarm, urinary bladder
+vagina, valve, vein, vena cava, ventricle, vertebra, vertebrae, vocal cords, voice box, vitreous humor, vulva, vein
+waist, windpipe, wrist, white blood cell, womb, wisdom tooth, wing bone, wart
+xiphoid, xiphoid process
+zygomatic bone, zygoma, zona pellucida
