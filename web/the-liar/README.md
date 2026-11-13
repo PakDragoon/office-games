@@ -27,7 +27,7 @@ Draw enough to prove you know the word, but not so much that the liar can work i
 
 **The vote.** Pick who you think the liar is (45 seconds). Point at a name to see only that player's lines (or words). The most votes is accused; a tie accuses nobody.
 
-**Last chance** (Draw and Words). If the liar is accused, they pick the secret word from 12 options in its category (30 seconds). Pick right, and they steal the win.
+**Last chance** (Draw and Words). If the liar is accused, they pick the secret word from 12 options in its category (10 seconds). Pick right, and they steal the win.
 
 **Points.**
 

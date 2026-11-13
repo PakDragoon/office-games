@@ -12,7 +12,7 @@ export const FREE_SECONDS = [5, 8, 12, 15, 20, 30];
 // Words game: seconds to type your word each turn
 export const WORD_SECONDS = [20, 30, 45, 60];
 export const CLUE = { maxChars: 24, maxWords: 2 };
-export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 30000 };
+export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 10000 };
 // Time game: seconds to talk it over once everyone has stopped the clock
 export const DISCUSS_SECONDS = [60, 120, 180];
 export const OPTION_COUNT = 12;
