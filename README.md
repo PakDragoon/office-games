@@ -1,7 +1,7 @@
 # Office games
 
 Free real-time multiplayer browser games, served by one Cloudflare Worker:
-**https://play.officegames.workers.dev**
+**https://play.orcavalley.com** (also https://play.officegames.workers.dev, which fails on networks that block Encrypted Client Hello)
 
 | Path | Game | On the server | In the browser |
 | --- | --- | --- | --- |

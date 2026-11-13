@@ -3,6 +3,9 @@
   "name": "play",
   "main": "server/src/index.ts",
   "compatibility_date": "2026-11-01",
+  // Public address: play.orcavalley.com, a Workers custom domain attached through the Cloudflare API (not listed here,
+  // so CI's token needs no zone permission; wrangler deploy leaves it alone). Encrypted Client Hello is OFF on the
+  // orcavalley.com zone: some ISPs reset ECH connections, which kills WebSockets. workers.dev always has ECH on.
   "workers_dev": true,
   "assets": {
     "directory": "./web",
