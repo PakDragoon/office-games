@@ -510,6 +510,7 @@ if (typeof ResizeObserver !== 'undefined') new ResizeObserver(() => layoutTable(
 function renderCentre(v) {
   const started = startedFor(v);
   $('countdown').hidden = !(v.status === 'play' && !started);
+  if ($('countdown').hidden) delete $('countdown').dataset.key;
   if (v.status === 'play' && !started) runCountdown(v);
   const prompt = v.status === 'play' ? v.prompt : '';
   $('prompt').innerHTML = prompt ? [...prompt].map((c) => `<span class="tile">${esc(c)}</span>`).join('') : '';
@@ -546,14 +547,24 @@ function renderTyping() {
   el.innerHTML = text ? highlight(text, v.prompt) : (holder && !mine && startedFor(v) && !pausedNow(v) ? `<span class="muted">${esc(holder.name)} is thinking…</span>` : '');
 }
 
+/* Calm countdown: draw each number once and let CSS fade it in and out. Re-writing the same
+   number every tick would restart the fade, so only touch the DOM when the number or label changes. */
+function paintCountdown(el, n, label, leftMs) {
+  const key = `${n}|${label}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const into = Math.min(900, Math.max(0, 1000 - (leftMs - (n - 1) * 1000)));
+  el.innerHTML = `<b style="animation-delay:-${Math.round(into)}ms">${n}</b><span>${label}</span>`;
+}
+
 let countdownTimer = 0;
 function runCountdown(v) {
   clearInterval(countdownTimer);
   const end = S.viewAt + v.startsIn;
   const tick = () => {
     const left = end - performance.now();
-    if (left <= 0) { clearInterval(countdownTimer); $('countdown').hidden = true; return; }
-    $('countdown').innerHTML = `<b>${Math.ceil(left / 1000)}</b><span>${esc(v.holder === S.myId ? 'You start' : `${nameOf(v, v.holder)} starts`)}</span>`;
+    if (left <= 0) { clearInterval(countdownTimer); $('countdown').hidden = true; delete $('countdown').dataset.key; return; }
+    paintCountdown($('countdown'), Math.ceil(left / 1000), esc(v.holder === S.myId ? 'You start' : `${nameOf(v, v.holder)} starts`), left);
   };
   tick();
   countdownTimer = setInterval(tick, 100);
@@ -933,8 +944,8 @@ function soloCountdown(then) {
   const tick = () => {
     if ($('solo').hidden || token !== SOLO.token) return;
     const left = end - performance.now();
-    if (left <= 0) { $('solo-countdown').hidden = true; then(); return; }
-    $('solo-countdown').innerHTML = `<b>${Math.ceil(left / 1000)}</b><span>Get ready</span>`;
+    if (left <= 0) { $('solo-countdown').hidden = true; delete $('solo-countdown').dataset.key; then(); return; }
+    paintCountdown($('solo-countdown'), Math.ceil(left / 1000), 'Get ready', left);
     setTimeout(tick, 100);
   };
   tick();
