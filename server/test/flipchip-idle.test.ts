@@ -143,14 +143,17 @@ describe('Flipchip turn inactivity timer', () => {
     expect(await inside(h.code, (_i, room) => room.strikes)).toEqual({});
   });
 
-  it('the move timer and the idle limit share one timer: a timed room uses its own deadline and counts the strikes too', async () => {
+  it('a timed room keeps its own move timer: out of time plays a move as before, with no idle deadline and no strikes', async () => {
     const { h, s } = await started({ timer: '15' });
     expect(s.turnMs).toBe(15000);
-    expect(s.idleMs).toBe(15000);
-    expect(s.idleLeft).toBeLessThanOrEqual(15000);
-    await timeout(h.code);
-    const v = await h.c.state((x) => x.moveSeq === 1);
-    expect(Object.values(v.strikes as Record<string, number>)).toEqual([1]);
+    expect(s.idleLeft).toBeNull();
+    let v = s;
+    for (let n = 1; n <= 3; n++) {
+      await timeout(h.code);
+      v = await h.c.state((x) => x.moveSeq === n);
+    }
+    expect(v.status).toBe('play');
+    expect(v.strikes).toEqual({});
   });
 
   it('spectators can neither move nor stop the clock; a stale timer after the game ends does nothing', async () => {

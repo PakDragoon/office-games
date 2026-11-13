@@ -237,9 +237,10 @@ class FlipRoom extends SeatRoom<Player, Room> {
     this.afterTurn();
   }
 
-  // After every move (or at the start): the move timer, and for a person's turn the idle deadline.
-  // One room timer ('turn') serves both: the move timer when the room has one (it is always shorter),
-  // otherwise E.TIMES.idleMs. A computer's turn has no idle deadline (it moves on the 'bot' timer).
+  // After every move (or at the start): the move timer when the room has one (out of time = a move is played
+  // for them, as before; nobody is ever removed, the game keeps moving), otherwise for a person's turn the idle
+  // deadline E.TIMES.idleMs (auto-move + strikes). One room timer ('turn') serves both. A computer's turn has
+  // no idle deadline (it moves on the 'bot' timer).
   private afterTurn(): void {
     const room = this.room;
     this.ctx.clearTimer('turn');
@@ -250,7 +251,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
       const ms = E.timerMs(room.settings);
       if (ms) room.turnEnd = now + ms;
       const mover = this.byId(room.seats[room.turn as Side]);
-      if (mover && !mover.bot) room.idleEnd = room.turnEnd || now + E.TIMES.idleMs;
+      if (mover && !mover.bot && !room.turnEnd) room.idleEnd = now + E.TIMES.idleMs;
       const at = room.turnEnd || room.idleEnd;
       if (at) this.ctx.setTimer('turn', at + 60);
     }
@@ -287,9 +288,9 @@ class FlipRoom extends SeatRoom<Player, Room> {
   }
 
   /**
-   * The person to move ran out of time (the room's move timer, or the idle limit when it has none).
-   * The first strikes - 1 times in a row the computer plays an Easy move for them through move(); on
-   * the last one they forfeit instead and are taken out of their seat.
+   * The person to move ran out of time. With the room's move timer: a random move, as before. Without one
+   * (the idle limit): the first strikes - 1 times in a row the computer plays an Easy move for them through
+   * move(); on the last one they forfeit instead and are taken out of their seat.
    */
   private timeUp(): void {
     const room = this.room;
@@ -299,7 +300,8 @@ class FlipRoom extends SeatRoom<Player, Room> {
     const p = this.byId(id);
     if (!id || !p) return;
     const rnd = { rnd: this.rnd, maxRoot: ROOT_CAP[room.size] || 3 };
-    if (p.bot) {   // a computer that never got to move (nobody here to play against): as before
+    // A timed room's move timer, or a computer that never got to move: a random move as before, no strike
+    if (p.bot || room.turnEnd) {
       const m = E.chooseMove(room.board, room.size, side, 'random', rnd);
       if (m >= 0) this.move(id, m, room.moveSeq, true);
       return;
@@ -422,7 +424,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
       turnLeft: room.turnEnd ? room.turnEnd - now : null,
       turnMs: E.timerMs(room.settings),
       idleLeft: room.idleEnd ? room.idleEnd - now : null,
-      idleMs: room.turnEnd ? E.timerMs(room.settings) : E.TIMES.idleMs,
+      idleMs: E.TIMES.idleMs,
       strikes: room.strikes, maxStrikes: E.TIMES.idleStrikes,
       result: room.result, matchWinner: room.matchWinner, replayId: room.status === 'over' ? room.replayId ?? null : null,
       canUndo: false,
