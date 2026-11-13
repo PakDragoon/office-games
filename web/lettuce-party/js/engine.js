@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = {
   mode: 'classic',
   attempts: ATTEMPTS.default,   // classic and counts only
   ladderTime: 180,              // ladder only
+  ladderReuse: true,            // ladder only: a word already in your ladder may be typed again (go back a step)
 };
 
 function apply(into, raw) {
@@ -33,6 +34,7 @@ function apply(into, raw) {
   if (MODES.includes(raw.mode)) into.mode = raw.mode;
   if (Number.isInteger(raw.attempts) && raw.attempts >= ATTEMPTS.min && raw.attempts <= ATTEMPTS.max) into.attempts = raw.attempts;
   if (LADDER_TIMES.includes(raw.ladderTime)) into.ladderTime = raw.ladderTime;
+  if (typeof raw.ladderReuse === 'boolean') into.ladderReuse = raw.ladderReuse;
   return into;
 }
 
@@ -97,12 +99,13 @@ export const matchCount = (word, target) => COLS - diffCount(word, target);
 
 /**
  * Why `word` can't be the next step of this ladder (the start word followed by the steps so far), or null if it can.
- * `isWord(w)` says whether w is in the word list.
+ * `isWord(w)` says whether w is in the word list. With `allowReuse` a word already in the ladder (the start word
+ * included) may come round again, as a new step; without it (the default here) a repeat is refused.
  */
-export function ladderStepProblem(ladder, word, isWord) {
+export function ladderStepProblem(ladder, word, isWord, allowReuse = false) {
   if (typeof word !== 'string' || !/^[a-z]{5}$/.test(word)) return 'Not enough letters';
   if (diffCount(ladder[ladder.length - 1], word) !== 1) return 'Change exactly one letter';
-  if (ladder.includes(word)) return 'Already used';
+  if (!allowReuse && ladder.includes(word)) return 'Already used';
   if (!isWord(word)) return 'Not a word';
   return null;
 }

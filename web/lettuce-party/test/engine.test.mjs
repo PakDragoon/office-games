@@ -142,6 +142,34 @@ test('ladder step: going back to an earlier word is a repeat', () => {
   eq(E.ladderStepProblem(['crane', 'crate', 'irate', 'orate'], 'crane', isWord), 'Change exactly one letter');
 });
 
+test('ladder step with reuse on: the start word, a middle word, but still one letter and a real word', () => {
+  const ladder = ['crane', 'crate', 'grate'];
+  eq(E.ladderStepProblem(ladder, 'crate', isWord, true), null);                          // back one step to a middle word
+  eq(E.ladderStepProblem(['crane', 'crate'], 'crane', isWord, true), null);              // back to the start word
+  eq(E.ladderStepProblem(['crane', 'crate', 'irate'], 'crate', isWord, true), null);
+  eq(E.ladderStepProblem(['crane', 'crate', 'irate', 'orate'], 'crane', isWord, true), 'Change exactly one letter');   // not one letter away
+  eq(E.ladderStepProblem(['crane', 'crate'], 'crate', isWord, true), 'Change exactly one letter');                     // same as current
+  eq(E.ladderStepProblem(['crane', 'crate'], 'qrate', isWord, true), 'Not a word');
+  eq(E.ladderStepProblem(['crane', 'crate'], 'cra', isWord, true), 'Not enough letters');
+});
+
+test('ladder step with reuse off (or left out) is the old rule', () => {
+  eq(E.ladderStepProblem(['crane', 'crate'], 'crane', isWord, false), 'Already used');
+  eq(E.ladderStepProblem(['crane', 'crate', 'irate'], 'crate', isWord, false), 'Already used');
+  eq(E.ladderStepProblem(['crane', 'crate'], 'irate', isWord, false), null);
+});
+
+test('settings: ladderReuse defaults to true, bad values are ignored, an old snapshot gets true', () => {
+  eq(E.DEFAULT_SETTINGS.ladderReuse, true);
+  eq(E.cleanSettings(null).ladderReuse, true);
+  eq(E.cleanSettings({ ladderReuse: false }).ladderReuse, false);
+  const off = E.cleanSettings({ ladderReuse: false });
+  for (const bad of ['false', 0, 1, null, undefined, [], {}]) eq(E.cleanSettings({ ladderReuse: bad }, off).ladderReuse, false, `bad ${JSON.stringify(bad)}`);
+  eq(E.cleanSettings({ ladderReuse: true }, off).ladderReuse, true);
+  const old = { strict: true, winRule: 'first', hard: false, maxRounds: 0, timer: 0, mode: 'ladder', attempts: 6, ladderTime: 120 };
+  eq(E.cleanSettings(null, old).ladderReuse, true);
+});
+
 test('ladder: matchCount and diffCount', () => {
   eq(E.diffCount('crane', 'crate'), 1);
   eq(E.matchCount('crane', 'crate'), 4);

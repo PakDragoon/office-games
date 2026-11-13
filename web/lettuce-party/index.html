@@ -122,6 +122,13 @@
               <option value="10">10 guesses</option>
             </select>
           </label>
+          <label class="select-field" id="reuse-field" hidden>
+            <span>Going back to earlier words</span>
+            <select id="reuse-select">
+              <option value="true">Allowed</option>
+              <option value="false">Not allowed</option>
+            </select>
+          </label>
           <label class="select-field">
             <span>Time limit</span>
             <select id="timer-select">
@@ -169,13 +176,16 @@
   <!-- GAME -->
   <main id="screen-game" class="screen game" hidden>
     <header class="game-bar">
-      <span class="bar-code">Room <b id="game-code"></b></span>
+      <span class="bar-code"><span class="bar-word">Room </span><b id="game-code"></b></span>
       <span id="game-round" class="muted"></span>
       <button id="scores-btn" class="btn ghost small">Scores</button>
       <button id="endround-btn" class="btn ghost small" hidden>End round</button>
       <button id="results-btn" class="btn ghost small" hidden>Results</button>
       <span id="game-clock" class="clock" aria-label="Round time">0:00</span>
       <button class="icon-btn" data-open-settings aria-label="Settings">⚙</button>
+      <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave room" title="Leave room">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </header>
 
     <div class="arena">

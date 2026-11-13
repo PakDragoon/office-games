@@ -227,7 +227,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     if (!/^[a-z]{5}$/.test(word)) return reply({ t: 'invalid', reason: 'Not enough letters' });
 
     if (ladder && room.ladder) {
-      const problem = E.ladderStepProblem([room.ladder.start, ...p.guesses.map((g) => g.word)], word, (w: string) => ladderWord(w));
+      const problem = E.ladderStepProblem([room.ladder.start, ...p.guesses.map((g) => g.word)], word, (w: string) => ladderWord(w), room.ladderReuse);
       if (problem) return reply({ t: 'invalid', reason: problem });
       // No attempt limit in a ladder, but a cap keeps the room's snapshot small against a step-spamming client
       if (p.guesses.length >= MAX_LADDER_STEPS) return reply({ t: 'invalid', reason: 'Too many steps' });
@@ -339,7 +339,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       t: 'state',
       code: room.code, status: room.status, round: room.round, strict: room.strict, winRule: room.winRule, public: room.public,
       maxRounds: room.maxRounds, timer: room.timer, hard: room.hard, matchRound: room.matchRound,
-      mode: room.mode, attempts: room.attempts, ladderTime: room.ladderTime,
+      mode: room.mode, attempts: room.attempts, ladderTime: room.ladderTime, ladderReuse: room.ladderReuse,
       elapsed: room.startedAt ? this.ctx.now() - room.startedAt : 0,
       // Start and target are public (it's a puzzle). The shortest path is the answer key: only once the round is over.
       ladder: ladder && room.status !== 'lobby' ? { start: ladder.start, target: ladder.target, par: ladder.par, path: over ? ladder.path : null } : null,
