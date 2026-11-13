@@ -232,8 +232,11 @@ describe('Thulla ratings', () => {
       for (const p of all) {
         const pv = view(p.c);
         if (pv?.round && !pv.round.resolving && pv.round.myTurn && (pv.round.legal as string[]).length) {
+          if (p.c.closed) throw new Error(`${p.c.closed.code} ${p.c.closed.reason}`);
           p.c.send({ t: 'play', card: (pv.round.legal as string[])[0] });
           acted = true;
+          // stay under the per-connection rate limit (8 a second) even when the machine is slow to answer
+          await sleep(130);
           break;
         }
       }
