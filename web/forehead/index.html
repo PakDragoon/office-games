@@ -6,7 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <meta name="description" content="Everyone has a secret card stuck on their forehead that everyone else can see. Ask yes-or-no questions and work out what yours says.">
   <title>Forehead</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><g transform='rotate(-8 16 15)'><rect x='6' y='7' width='20' height='17' rx='2' fill='%23ffe98a'/><path d='M12.5 13.2c0-2 1.4-3 3.5-3s3.5 1 3.5 2.8c0 2.6-3.4 2.4-3.4 5M16 21.2v.2' fill='none' stroke='%232b2500' stroke-width='2' stroke-linecap='round'/></g></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><path d='M16 3.5c-5 0-7 4-7 9.500 0 6 3 14.500 7 14.500s7-8.500 7-14.500c0-5.500-2-9.500-7-9.500z' fill='%23f4f5fb'/><circle cx='13' cy='17' r='1.2' fill='%2315171b'/><circle cx='19' cy='17' r='1.2' fill='%2315171b'/><path d='M13 22.500q3 2 6-1' fill='none' stroke='%2315171b' stroke-width='1.3' stroke-linecap='round'/><g transform='rotate(-8 16 9)'><path d='M10.500 4.500h11v6.500l-2 2h-9z' fill='%23ffe98a'/><path d='M14 7.500c0-1.500 1-2 2-2s2 .7 2 1.700c0 1.500-2 1.300-2 2.800' fill='none' stroke='%232b2500' stroke-width='1.300' stroke-linecap='round'/></g></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
@@ -14,6 +14,7 @@
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><symbol id="fh-face" viewBox="0 0 100 100"><path d="M50 10C30 10 22 26 22 48C22 72 32 92 50 92C68 92 78 72 78 48C78 26 70 10 50 10Z" fill="var(--surface)"/><path d="M22 52c-7-2-9 5-6 10s5 4 7 2M78 52c7-2 9 5 6 10s-5 4-7 2M46 10c-2-6 2-9 6-7M52 10c1-4 5-5 7-3M32 50q6-5 13-2M56 46q7-5 13 0M50 61q-3 7 1 9M42 79q7 4 15-2" fill="none"/><circle cx="40" cy="59" r="3.4" stroke="none" fill="currentColor"/><circle cx="60" cy="59" r="3.4" stroke="none" fill="currentColor"/></symbol></svg>
 
 <!-- ============ Home ============ -->
 <main id="home" class="screen home">
@@ -31,17 +32,15 @@
   <div class="home-inner">
     <div class="home-intro">
       <h1 class="logo" aria-label="Forehead">
-        <svg class="logo-mark" viewBox="0 0 96 80" aria-hidden="true">
-          <path class="head" d="M20 34C20 16 32 6 48 6s28 10 28 28v24c0 9-12 16-28 16s-28-7-28-16z"/>
-          <path class="head" d="M20 44c-6-1-8 3-7 7s5 6 8 5M76 44c6-1 8 3 7 7s-5 6-8 5"/>
-          <circle class="eye" cx="38" cy="54" r="2.6"/><circle class="eye" cx="58" cy="54" r="2.6"/>
-          <path class="head" d="M40 63c5 4 11 4 16 0"/>
-          <g class="logo-note" transform="rotate(-7 48 30)">
-            <path class="note-fill" d="M26 12h44v28l-9 9H26z"/>
-            <path class="note-fold" d="M70 40h-9v9z"/>
-            <path class="note-ink" d="M42 23.5c0-3.6 2.6-5.5 6-5.5s6 1.9 6 5c0 4.6-6 4.2-6 8.6M48 37.2v.2"/>
-          </g>
-        </svg>
+        <svg class="logo-mark" viewBox="-6 -8 112 108" aria-hidden="true">
+<path class="head skin" d="M50 10C30 10 22 26 22 48C22 72 32 92 50 92C68 92 78 72 78 48C78 26 70 10 50 10Z"/>
+<path class="head skin" d="M22 52c-7-2-9 5-6 10s5 4 7 2M78 52c7-2 9 5 6 10s-5 4-7 2"/>
+<path class="head" d="M46 10c-2-6 2-9 6-7M52 10c1-4 5-5 7-3"/>
+<path class="head" d="M32 50q6-5 13-2M56 46q7-5 13 0"/>
+<circle class="eye" cx="40" cy="59" r="2.8"/><circle class="eye" cx="60" cy="59" r="2.8"/>
+<path class="head" d="M50 61q-3 7 1 9"/><path class="head" d="M42 79q7 4 15-2"/>
+<g class="logo-note" transform="rotate(-8 50 25)"><path class="note-fill" d="M34 14h32v20l-6 6H34z"/><path class="note-fold" d="M66 34h-6v6z"/><path class="note-ink" d="M44.5 21c0-2.8 2-4.2 4.6-4.2s4.6 1.5 4.6 3.7c0 3.2-4.6 2.8-4.6 6M49.1 33v.1"/></g>
+</svg>
         <span class="logo-word" aria-hidden="true">Forehead</span>
         <span class="logo-sub" aria-hidden="true">everyone can see your card but you</span>
       </h1>
@@ -72,7 +71,7 @@
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 8h20v13h-8l-4 4v-4H6z"/><path d="M13 14.5c0-1.7 1.2-2.5 3-2.5s3 .9 3 2.3c0 2.2-3 2-3 4"/></svg><b>Get a card</b><span>Everyone sees it except you.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 7h22v14H15l-6 5v-5H5z"/><path d="M10 12h12M10 16h7"/></svg><b>Ask on your turn</b><span>A yes-or-no question about your card.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="11" height="14" rx="3"/><rect x="17" y="9" width="11" height="14" rx="3"/><path d="M7.5 16l2 2 3-4"/></svg><b>Others answer</b><span>Yes, No, Sort of or Don’t know. The most common one shows.</span></li>
-          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M11 16.5l3.5 3.5L21 12"/></svg><b>Guess or pass</b><span>Fewer questions, more points.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M11 16.5l3.5 3.5L21 12"/></svg><b>Ask or guess</b><span>Fewer questions, more points.</span></li>
         </ol>
       </section>
     </div>
@@ -153,14 +152,22 @@
       <div class="stage" id="stage">
         <!-- Someone's turn to ask -->
         <div class="st" id="st-ask-me" hidden>
-          <p class="st-k" id="ask-title">Your turn: ask a yes-or-no question</p>
+          <p class="st-k" id="ask-title">Your turn: ask a yes-or-no question, or guess</p>
           <form class="ask-form" id="ask-form" autocomplete="off">
             <label class="sr-only" for="ask-input">Your question</label>
             <input class="text-input" id="ask-input" maxlength="100" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" placeholder="Am I an animal?">
             <button class="btn primary" id="ask-send" type="submit">Ask</button>
             <span class="count" id="ask-count" aria-hidden="true">0/100</span>
           </form>
+          <!-- Guessing is a turn of its own, instead of asking -->
+          <form class="guess-form" id="guess-form" autocomplete="off" hidden>
+            <label class="sr-only" for="guess-input">Your guess</label>
+            <input class="text-input" id="guess-input" maxlength="40" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Type your guess">
+            <button class="btn primary" id="guess-send" type="submit">Guess</button>
+            <button class="btn ghost" id="ask-instead" type="button">Ask instead</button>
+          </form>
           <p class="st-hint" id="ask-hint">Everyone else can read your card. They’ll answer Yes, No, Sort of or Don’t know.</p>
+          <p class="guess-line" id="guess-line">Think you know it? <button class="link-btn" id="guess-instead" type="button">Guess my card</button> <span class="muted">(uses your turn; a wrong guess just ends it)</span></p>
           <p class="error" id="ask-error" role="alert"></p>
         </div>
         <div class="st" id="st-ask-other" hidden>
@@ -180,21 +187,14 @@
           <div class="answers" id="answers" role="group" aria-label="Your answer"></div>
           <p class="st-hint" id="answer-status" aria-live="polite"></p>
         </div>
-        <!-- The tally is in: the asker guesses or passes -->
-        <div class="st" id="st-decide" hidden>
+        <!-- The answers are in: everyone sees the tally for a moment, then the next turn starts -->
+        <div class="st" id="st-tally" hidden>
           <div class="q-block">
             <span class="q-from" id="d-from"></span>
             <p class="q-text" id="d-text"></p>
           </div>
           <ul class="tally" id="tally"></ul>
-          <form class="guess-form" id="guess-form" autocomplete="off" hidden>
-            <label class="sr-only" for="guess-input">Your guess</label>
-            <input class="text-input" id="guess-input" maxlength="40" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Type your guess">
-            <button class="btn primary" id="guess-send" type="submit">Guess</button>
-            <button class="btn ghost" id="pass-btn" type="button">Pass</button>
-            <p class="error" id="guess-error" role="alert"></p>
-          </form>
-          <p class="st-hint" id="decide-wait" aria-live="polite"></p>
+          <p class="st-hint" id="tally-next" aria-live="polite"></p>
         </div>
         <div class="st" id="st-wait" hidden>
           <p class="st-k">Waiting for someone to come back…</p>
@@ -252,9 +252,9 @@
   <p>2 to 8 players. Everyone gets a secret card, like a sticky note on their forehead: <b>everyone else can read it, you can’t</b>. Your card shows as <b>?</b> on your screen. The host picks a deck (Animals, Food, Everyday objects, Jobs, Famous people or Numbers 1 to 100).</p>
   <h3>On your turn</h3>
   <ol class="rule-steps">
-    <li><b>Ask</b> a yes-or-no question about your card (up to 100 characters), like “Is it bigger than a car?”. You have 45 seconds, or your turn is skipped.</li>
-    <li>Everyone else <b>answers</b>: Yes, No, Sort of or Don’t know. In the Numbers deck the answers are Yes, No, Higher and Lower (ask “Is it 50?” and they say Higher or Lower). They have 20 seconds. The most common answer is highlighted for everyone.</li>
-    <li>Then you <b>guess</b> or <b>pass</b> (30 seconds). A wrong guess shows as “Not it” and ends your turn, same as passing.</li>
+    <li>Do <b>one</b> thing: <b>ask</b> a yes-or-no question about your card (up to 100 characters), like “Is it bigger than a car?”, <b>or guess</b> it with <b>Guess my card</b>. You have 45 seconds, or your turn is skipped.</li>
+    <li>If you asked, everyone else <b>answers</b>: Yes, No, Sort of or Don’t know. In the Numbers deck the answers are Yes, No, Higher and Lower (ask “Is it 50?” and they say Higher or Lower). They have 20 seconds. The answers show for a moment, the most common one highlighted, and the next player’s turn starts.</li>
+    <li>If you guessed: right and you’re done, wrong and it shows as “Not it” and your turn ends.</li>
   </ol>
   <p>Turns go round the table in seat order. Anyone who has gone away or left is skipped, and the game never waits for them. Every question and its answers stay in the <b>Questions</b> list, so you can look back at what was asked about each player.</p>
   <h3>Guessing</h3>

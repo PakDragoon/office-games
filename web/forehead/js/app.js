@@ -6,7 +6,7 @@ import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 /* =========================================================
    Forehead
    Everyone has a secret card that everyone else can see. On your turn you ask a yes-or-no question about your
-   card, the others answer, then you guess or pass. The game runs on the server (server/src/games/forehead.ts):
+   card or guess it, and the others answer your questions. The game runs on the server (server/src/games/forehead.ts):
    it deals the cards, checks every guess and sends each player their OWN view, in which their own card is
    missing until it has been revealed. This page draws that view and passes on what you do.
    ========================================================= */
@@ -244,7 +244,7 @@ function setClocks(v) {
   const now = performance.now();
   S.roundEndAt = play && v.roundEndsIn > 0 ? now + v.roundEndsIn : 0;
   $('round-clock').hidden = !S.roundEndAt;
-  const total = { ask: E.TIMES.askMs, answer: E.TIMES.answerMs, decide: E.TIMES.decideMs }[v.phase];
+  const total = { ask: E.TIMES.askMs, answer: E.TIMES.answerMs, tally: E.TIMES.tallyMs }[v.phase];
   S.turnEndAt = play && total && v.endsIn > 0 ? now + v.endsIn : 0;
   S.turnTotal = total || 1;
   $('clock').hidden = !S.turnEndAt;
@@ -307,6 +307,21 @@ function noteHTML(p, extra = '') {
   return `<span class="note l2${extra}">no card</span>`;
 }
 
+/** A player as a small head in their colour with a small tilted note on the forehead (the card). */
+function headHTML(p) {
+  const reveal = p.card !== null;
+  const len = reveal ? p.card.length : 0;
+  // Smaller text for long cards, and for one long word ("Chameleon") so it never breaks mid-word
+  const word = reveal ? Math.max(...p.card.split(/\s+/).map((w) => w.length)) : 0;
+  const size = len > 16 || word > 10 ? ' l2' : len > 9 || word > 7 ? ' l1' : '';
+  const state = p.done === 'guessed' ? ' ok' : p.done === 'gaveup' ? ' gaveup' : '';
+  const label = reveal ? `${p.name}’s card: ${p.card}${p.done === 'guessed' ? ' (got it)' : p.done === 'gaveup' ? ' (gave up)' : ''}` : p.hasCard ? 'Your card is hidden from you' : '';
+  const badge = p.done === 'guessed' ? '<i class="badge" aria-hidden="true">✓</i>' : '';
+  const note = reveal ? `<span class="fnote${size}${state}" title="${esc(p.card)}" aria-label="${esc(label)}"><span>${esc(p.card)}</span>${badge}</span>`
+    : p.hasCard ? `<span class="fnote mine" title="${esc(label)}" aria-label="${esc(label)}"><span>?</span></span>` : '';
+  return `<span class="seat-head"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#fh-face"/></svg>${note}</span>`;
+}
+
 function renderSeats(v) {
   const seats = v.players.filter((p) => p.inGame);
   $('seats').style.setProperty('--cols', String(Math.min(4, Math.max(1, seats.length))));
@@ -317,9 +332,11 @@ function renderSeats(v) {
           : !p.connected ? '<span class="tag">Left</span>' : p.away ? '<span class="tag">Away</span>' : '';
     const cls = `seat pc${p.color}${v.status === 'play' && v.asker === p.id ? ' asking' : ''}${S.filter === p.id ? ' filtered' : ''}${active(p) ? '' : ' off'}`;
     return `<li><button type="button" class="${cls}" data-pid="${esc(p.id)}" aria-pressed="${S.filter === p.id}" title="Show the questions asked about ${esc(p.name)}">
-      ${noteHTML(p)}
-      <span class="seat-name"><span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
-      <span class="seat-meta">${tag}<span>${p.asked} Q</span><span>${p.score} pts</span></span>
+      ${headHTML(p)}
+      <span class="seat-info">
+        <span class="seat-name"><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
+        <span class="seat-meta">${tag}<span>${p.asked} Q</span><span>${p.score} pts</span></span>
+      </span>
     </button></li>`;
   }).join('');
 }
@@ -334,11 +351,10 @@ $('seats').addEventListener('click', (e) => {
 /* ---------- The stage ---------- */
 function showFormError(text) {
   clearTimeout(S.errorTimer);
-  for (const id of ['ask-error', 'guess-error']) $(id).textContent = '';
+  $('ask-error').textContent = '';
   if (!text) return;
-  const target = !$('st-decide').hidden ? 'guess-error' : 'ask-error';
-  $(target).textContent = text;
-  S.errorTimer = setTimeout(() => { $(target).textContent = ''; }, 3500);
+  $('ask-error').textContent = text;
+  S.errorTimer = setTimeout(() => { $('ask-error').textContent = ''; }, 3500);
 }
 
 function renderStage(v, { mine, play, myTurn, asker, newTurn }) {
@@ -347,7 +363,7 @@ function renderStage(v, { mine, play, myTurn, asker, newTurn }) {
   show('st-ask-me', play && v.phase === 'ask' && myTurn);
   show('st-ask-other', play && v.phase === 'ask' && !myTurn);
   show('st-answer', play && v.phase === 'answer');
-  show('st-decide', play && v.phase === 'decide');
+  show('st-tally', play && v.phase === 'tally');
   show('st-wait', play && v.phase === 'wait');
   show('st-result', result);
 
@@ -369,9 +385,12 @@ function renderStage(v, { mine, play, myTurn, asker, newTurn }) {
         : 'Everyone else can read your card. They’ll answer Yes, No, Sort of or Don’t know.';
       if (newTurn) {
         input.value = '';
+        $('guess-input').value = '';
+        S.guessing = false;
         paintCount();
         if (mine.inGame) { chime(); setTimeout(() => { if (!$('st-ask-me').hidden) input.focus({ preventScroll: true }); }, 60); }
       }
+      paintGuessMode();
       $('ask-send').disabled = false;
     } else {
       $('ask-other-title').textContent = `${asker ? asker.name : 'Someone'} is thinking of a question…`;
@@ -379,7 +398,7 @@ function renderStage(v, { mine, play, myTurn, asker, newTurn }) {
     }
   }
 
-  if (play && (v.phase === 'answer' || v.phase === 'decide')) renderQuestion(v, { mine, asker, numbers });
+  if (play && (v.phase === 'answer' || v.phase === 'tally')) renderQuestion(v, { mine, asker, numbers });
   if (result) renderResult(v);
 }
 
@@ -389,7 +408,7 @@ function renderQuestion(v, { mine, asker, numbers }) {
   const text = v.question ? v.question.q : null;
   const answering = v.phase === 'answer';
   const pc = asker ? `pc${asker.color}` : '';
-  for (const [fromId, textId, block] of [['q-from', 'q-text', 'st-answer'], ['d-from', 'd-text', 'st-decide']]) {
+  for (const [fromId, textId, block] of [['q-from', 'q-text', 'st-answer'], ['d-from', 'd-text', 'st-tally']]) {
     $(fromId).textContent = from;
     $(textId).textContent = text === null ? 'Hidden: it names your card, so you don’t get the spoiler.' : text;
     $(textId).classList.toggle('hidden', text === null);
@@ -414,14 +433,7 @@ function renderQuestion(v, { mine, asker, numbers }) {
         : `${picked ? 'Answered. You can change it until everyone has.' : 'Tap an answer.'} ${v.answered} of ${v.need} answered.`;
   } else {
     renderTally(v);
-    const asking = asker && asker.id === S.myId;
-    show('guess-form', asking && mine.inGame);
-    $('decide-wait').textContent = asking ? '' : `${asker ? asker.name : 'Someone'} is deciding whether to guess or pass…`;
-    if (asking && S.guessKey !== `${v.game}:${v.log.length}`) {
-      S.guessKey = `${v.game}:${v.log.length}`;
-      $('guess-input').value = '';
-      setTimeout(() => { if (!$('guess-form').hidden) $('guess-input').focus({ preventScroll: true }); }, 60);
-    }
+    $('tally-next').textContent = 'Next turn in a moment…';
   }
 }
 
@@ -450,7 +462,25 @@ function renderTally(v) {
   }).join('');
 }
 
-/* ---------- Asking, guessing, passing ---------- */
+/* ---------- Asking or guessing (one per turn) ---------- */
+/** On your turn the box asks a question, or (after "Guess my card") takes your guess instead. */
+function paintGuessMode() {
+  const g = Boolean(S.guessing);
+  $('ask-form').hidden = g;
+  $('ask-hint').hidden = g;
+  $('guess-line').hidden = g;
+  $('guess-form').hidden = !g;
+  $('ask-title').textContent = g ? 'Your turn: what’s on your forehead?' : 'Your turn: ask a yes-or-no question, or guess';
+}
+function setGuessing(on) {
+  S.guessing = on;
+  showFormError('');
+  paintGuessMode();
+  const el = on ? $('guess-input') : $('ask-input');
+  setTimeout(() => el.focus({ preventScroll: true }), 30);
+}
+$('guess-instead').addEventListener('click', () => setGuessing(true));
+$('ask-instead').addEventListener('click', () => setGuessing(false));
 function paintCount() {
   const n = $('ask-input').value.length;
   $('ask-count').textContent = `${n}/${E.QUESTION_MAX}`;
@@ -466,15 +496,12 @@ $('ask-form').addEventListener('submit', (e) => {
 });
 $('guess-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!S.view || S.view.phase !== 'decide' || S.view.asker !== S.myId) return;
+  if (!S.view || S.view.phase !== 'ask' || S.view.asker !== S.myId) return;
   const text = $('guess-input').value.replace(/\s+/g, ' ').trim();
   if (!text) { showFormError('Type your guess first.'); return; }
   toHost({ t: 'guess', text });
 });
 $('guess-input').addEventListener('input', () => showFormError(''));
-$('pass-btn').addEventListener('click', () => {
-  if (S.view && S.view.phase === 'decide' && S.view.asker === S.myId) toHost({ t: 'pass' });
-});
 
 // Two taps to give up or end the round: the first one arms the button for a few seconds
 function disarm(id) {
@@ -510,7 +537,7 @@ const outcomeHTML = (e, isCurrent, v) => {
     case 'pass': return '<span class="out">Passed</span>';
     case 'skip': return '<span class="out">Skipped</span>';
     case 'ended': return '<span class="out">Round ended</span>';
-    default: return isCurrent ? `<span class="out">${v.phase === 'answer' ? 'Waiting for answers…' : 'Guessing…'}</span>` : '';
+    default: return isCurrent && v.phase === 'answer' ? '<span class="out">Waiting for answers…</span>' : '';
   }
 };
 
@@ -521,9 +548,10 @@ function renderLog(v) {
     .concat(players.map((p) => `<button type="button" class="chip pc${p.color}" data-f="${esc(p.id)}" aria-pressed="${S.filter === p.id}">${esc(p.name)}</button>`));
   $('log-filter').innerHTML = players.length > 1 ? chips.join('') : '';
   const list = v.log.filter((e) => !S.filter || e.pid === S.filter);
-  $('log-count').textContent = v.log.length ? plural(v.log.length, 'question') : '';
+  const asked = v.log.filter((e) => !e.guessTurn).length;
+  $('log-count').textContent = asked ? plural(asked, 'question') : '';
   const lastN = v.log.length ? v.log[v.log.length - 1].n : -1;
-  const open = v.status === 'play' && (v.phase === 'answer' || v.phase === 'decide');
+  const open = v.status === 'play' && (v.phase === 'answer' || v.phase === 'tally');
   if (!list.length) {
     $('log').innerHTML = `<li class="log-empty">${v.log.length ? 'Nothing asked about them yet.' : 'Questions and answers will collect here.'}</li>`;
     return;
@@ -533,7 +561,7 @@ function renderLog(v) {
     const keys = e.tally ? answerList(v) : [];
     const ans = e.tally ? `<span class="ans">${keys.filter(([k]) => e.tally[k]).map(([k, label]) => `<span class="${e.top.includes(k) ? 'top' : ''}">${esc(label)} ${e.tally[k]}</span>`).join('') || '<span>No answers</span>'}</span>` : '';
     return `<li class="pc${p ? p.color : 0}"><span class="who">${esc(p ? p.name : 'Someone')} · #${e.n}</span>
-      <span class="qt${e.q === null ? ' hidden' : ''}">${e.q === null ? 'Hidden, it names your card' : esc(e.q)}</span>${ans}${outcomeHTML(e, open && e.n === lastN, v)}</li>`;
+      ${e.guessTurn ? '<span class="qt">Took a guess</span>' : `<span class="qt${e.q === null ? ' hidden' : ''}">${e.q === null ? 'Hidden, it names your card' : esc(e.q)}</span>`}${ans}${outcomeHTML(e, open && e.n === lastN, v)}</li>`;
   }).join('');
 }
 $('log-filter').addEventListener('click', (e) => {

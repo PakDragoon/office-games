@@ -21,7 +21,8 @@ interface Settings {
 }
 
 type Done = 'guessed' | 'gaveup' | null;
-type Phase = 'ask' | 'answer' | 'decide' | 'wait';
+type Phase = 'ask' | 'answer' | 'tally' | 'wait';
+// 'pass' and 'skip' only appear in logs saved before turns became "ask OR guess"
 type Outcome = 'pass' | 'wrong' | 'right' | 'skip' | 'ended';
 
 interface Player extends Seat {
@@ -42,6 +43,8 @@ interface LogEntry {
   outcome?: Outcome;
   guess?: string;
   gtok?: string;
+  /** A turn spent guessing instead of asking (no question, never counted as one). */
+  guessTurn?: boolean;
 }
 
 interface Room extends BaseRoom<Player> {
@@ -111,10 +114,8 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     if (room.status !== 'play') return;
     if (room.phase === 'wait') return this.nextTurn();
     if (room.phase === 'answer') return void this.checkAnswers();
-    if ((room.phase === 'ask' || room.phase === 'decide') && room.order[room.turn] === p.id && !this.active(p)) {
-      if (room.phase === 'decide') this.setOutcome('skip');
-      this.endTurn();
-    }
+    // The asker went: skip their turn (a tally on show just runs out by itself)
+    if (room.phase === 'ask' && room.order[room.turn] === p.id && !this.active(p)) this.endTurn();
   }
 
   protected offlineOutMs(): number {
@@ -130,7 +131,6 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       case 'ask': return this.ask(p, msg.q);
       case 'answer': return this.answer(p, msg.a);
       case 'guess': return this.guess(p, msg.text);
-      case 'pass': return this.pass(p);
       case 'giveup': return this.giveUp(p);
       default:
     }
@@ -171,9 +171,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
         return this.nextTurn();
       }
       case 'answer': return void this.closeAnswers();
-      case 'decide':
-        this.setOutcome('pass');
-        return this.endTurn();
+      case 'tally': return this.endTurn();
       default:
     }
   }
@@ -304,7 +302,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     return false;
   }
 
-  /** Count the answers, show the tally to everyone and let the asker guess or pass. */
+  /** Count the answers and show the tally to everyone for a moment; then the next turn starts by itself. */
   private closeAnswers(): void {
     const room = this.room;
     if (room.status !== 'play' || room.phase !== 'answer') return;
@@ -314,43 +312,35 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       entry.tally = E.tallyAnswers(room.answers, keys);
       entry.top = E.majority(entry.tally, keys);
     }
-    const asker = this.byId(room.order[room.turn]);
-    if (!asker || !this.active(asker)) {
-      this.setOutcome('skip');
-      return this.endTurn();
-    }
-    room.phase = 'decide';
-    room.deadline = this.ctx.now() + E.TIMES.decideMs;
+    room.phase = 'tally';
+    room.deadline = this.ctx.now() + E.TIMES.tallyMs;
     this.ctx.setTimer('turn', room.deadline);
     this.broadcast();
   }
 
-  /* ---------- Guessing, passing, giving up ---------- */
+  /* ---------- Guessing and giving up ---------- */
 
+  /** A guess is a turn of its own, instead of asking: right (done, points) or "Not it"; either way the turn ends. */
   private guess(p: Player, raw: unknown): void {
     const room = this.room;
-    if (room.status !== 'play' || room.phase !== 'decide' || room.order[room.turn] !== p.id) return;
+    if (room.status !== 'play' || room.phase !== 'ask' || room.order[room.turn] !== p.id) return;
     const text = E.cleanGuess(raw);
     if (!text) return this.tell(p.id, { t: 'nope', reason: 'Type your guess first.' });
     const deck = deckOf(room.settings.deck);
-    const entry = this.current();
+    const entry: LogEntry = { n: ++room.seq, pid: p.id, q: '', nq: '', guessTurn: true };
+    room.log.push(entry);
+    if (room.log.length > MAX_LOG) room.log.shift();
+    room.note = '';
     if (E.guessMatches(text, deck, room.cards[p.id])) {
-      if (entry) Object.assign(entry, { outcome: 'right', guess: deck.entries[room.cards[p.id]].name });
+      Object.assign(entry, { outcome: 'right', guess: deck.entries[room.cards[p.id]].name });
       const pts = E.points(p.asked, room.first === null);
       if (room.first === null) room.first = p.id;
       room.delta[p.id] = (room.delta[p.id] || 0) + pts;
       p.score += pts;
       p.done = 'guessed';
-    } else if (entry) {
+    } else {
       Object.assign(entry, { outcome: 'wrong', guess: text, gtok: E.tokens(text) });
     }
-    this.endTurn();
-  }
-
-  private pass(p: Player): void {
-    const room = this.room;
-    if (room.status !== 'play' || room.phase !== 'decide' || room.order[room.turn] !== p.id) return;
-    this.setOutcome('pass');
     this.endTurn();
   }
 
@@ -359,8 +349,9 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     if (room.status !== 'play' || !p.inGame || p.done) return;
     p.done = 'gaveup';
-    const wasTurn = room.order[room.turn] === p.id && room.phase !== 'wait';
-    if (wasTurn) this.setOutcome('skip');
+    // Giving up on your own turn ends it, an open question included (a tally on show just runs out)
+    const wasTurn = room.order[room.turn] === p.id && (room.phase === 'ask' || room.phase === 'answer');
+    if (wasTurn && room.phase === 'answer') this.setOutcome('skip');
     if (this.allDone()) return this.finishRound();
     if (wasTurn) return this.endTurn();
     if (!this.checkAnswers()) this.broadcast();
@@ -380,7 +371,8 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
         entry.top = E.majority(entry.tally, keys);
       }
     }
-    this.setOutcome('ended');
+    // Only a question still waiting for answers is cut short by the end of the round
+    if (room.phase === 'answer') this.setOutcome('ended');
     this.ctx.clearTimer('turn');
     this.ctx.clearTimer('round');
     Object.assign(room, { status: 'result', deadline: 0, roundEnd: 0, phase: 'wait' });
@@ -440,7 +432,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       return deck.entries[idx].name;
     };
     const asker = room.status === 'play' && room.phase !== 'wait' ? room.order[room.turn] : null;
-    const cur = room.status === 'play' && (room.phase === 'answer' || room.phase === 'decide') ? this.current() : undefined;
+    const cur = room.status === 'play' && (room.phase === 'answer' || room.phase === 'tally') ? this.current() : undefined;
     const need = room.status === 'play' && room.phase === 'answer' ? this.answerers().length : 0;
     const answered = room.status === 'play' && room.phase === 'answer' ? this.answerers().filter((p) => p.id in room.answers).length : 0;
     return {
@@ -453,12 +445,13 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       question: cur ? { n: cur.n, q: spoils(cur.nq) ? null : cur.q } : null,
       answered, need,
       myAnswer: room.phase === 'answer' && forId ? room.answers[forId] ?? null : null,
-      tally: cur && room.phase === 'decide' ? cur.tally ?? null : null,
-      top: cur && room.phase === 'decide' ? cur.top ?? [] : [],
+      tally: cur && room.phase === 'tally' ? cur.tally ?? null : null,
+      top: cur && room.phase === 'tally' ? cur.top ?? [] : [],
       note: room.status === 'play' ? room.note : '',
       first: live ? room.first : null,
       log: live ? room.log.map((e) => ({
         n: e.n, pid: e.pid, q: spoils(e.nq) ? null : e.q, tally: e.tally ?? null, top: e.top ?? [], outcome: e.outcome ?? null,
+        guessTurn: Boolean(e.guessTurn),
         guess: e.guess === undefined ? null : e.outcome === 'wrong' && spoils(e.gtok) ? null : e.guess,
       })) : [],
       players: room.players.map((p) => ({
@@ -488,6 +481,9 @@ export const forehead: GameModule = {
   restore(ctx, snap) {
     const room = snap as Room;
     restoreSeats(ctx, room);
+    // Saved before turns became "ask OR guess": the old guess-or-pass step shows its tally until its saved
+    // 'turn' timer fires, then the next turn starts
+    if ((room.phase as string) === 'decide') room.phase = 'tally';
     return new ForeheadRoom(ctx, room);
   },
 };

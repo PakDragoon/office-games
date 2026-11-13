@@ -209,15 +209,16 @@
     /* Forehead: a head with a sticky note on it */
     .fh { --note: #ffe98a; --note-edge: #e8cf55; --note-ink: #2b2500; }
     @media (prefers-color-scheme: dark) { .fh { --note: #f6dd6a; --note-edge: #cdb23e; } }
-    .fh svg { width: 150px; height: auto; overflow: visible; }
+    .fh svg { width: 130px; height: auto; overflow: visible; }
     .fh .head { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
     .fh .eye { fill: var(--ink); }
+    .fh .skin { fill: var(--surface); }
     .fh .note-fill { fill: var(--note); stroke: var(--note-edge); stroke-width: 1.2; stroke-linejoin: round; }
     .fh .note-fold { fill: var(--note-edge); }
     .fh .note-ink { fill: none; stroke: var(--note-ink); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-    .fh .note-g { transform-box: view-box; transform-origin: 48px 30px; animation: fh-wobble 4.2s ease-in-out infinite; }
-    @keyframes fh-wobble { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(-3deg); } }
-    @media (prefers-reduced-motion: reduce) { .fh .note-g { animation: none; transform: rotate(-7deg); } }
+    .fh .note-g { transform-box: view-box; transform-origin: 50px 25px; animation: fh-wobble 4.2s ease-in-out infinite; }
+    @keyframes fh-wobble { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-4deg); } }
+    @media (prefers-reduced-motion: reduce) { .fh .note-g { animation: none; transform: rotate(-8deg); } }
   </style>
 </head>
 <body>
@@ -230,7 +231,43 @@
   </header>
 
   <ul class="games">
-    <li class="has-credit">
+    <li>
+      <a class="game" href="/forehead/">
+        <div class="art fh" aria-hidden="true">
+          <svg viewBox="-6 -8 112 108" aria-hidden="true">
+<path class="head skin" d="M50 10C30 10 22 26 22 48C22 72 32 92 50 92C68 92 78 72 78 48C78 26 70 10 50 10Z"/>
+<path class="head skin" d="M22 52c-7-2-9 5-6 10s5 4 7 2M78 52c7-2 9 5 6 10s-5 4-7 2"/>
+<path class="head" d="M46 10c-2-6 2-9 6-7M52 10c1-4 5-5 7-3"/>
+<path class="head" d="M32 50q6-5 13-2M56 46q7-5 13 0"/>
+<circle class="eye" cx="40" cy="59" r="2.8"/><circle class="eye" cx="60" cy="59" r="2.8"/>
+<path class="head" d="M50 61q-3 7 1 9"/><path class="head" d="M42 79q7 4 15-2"/>
+<g class="note-g" transform="rotate(-8 50 25)"><path class="note-fill" d="M34 14h32v20l-6 6H34z"/><path class="note-fold" d="M66 34h-6v6z"/><path class="note-ink" d="M44.5 21c0-2.8 2-4.2 4.6-4.2s4.6 1.5 4.6 3.7c0 3.2-4.6 2.8-4.6 6M49.1 33v.1"/></g>
+</svg>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Forehead</h2><span class="beta">BETA</span></div>
+          <p>Everyone has a secret card stuck on their forehead that everyone else can read. Ask yes-or-no questions and work out what yours says.</p>
+          <ul class="facts"><li>2 to 8 players</li><    <li>
+      <a class="game" href="/a-to-zap/">
+        <div class="art zp" aria-hidden="true">
+          <style>
+            .zp .row { display: flex; align-items: center; gap: 7px; }
+            .zp .tile { display: grid; place-items: center; width: 44px; height: 50px; font-weight: 800; font-size: 1.6rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink); border-radius: 10px; box-shadow: 0 4px 0 var(--ink); }
+            .zp .tile.lit { background: #ffc933; color: #1b1e3a; }
+            .zp .to { font-style: italic; font-weight: 700; color: var(--muted); padding: 0 3px; }
+            .zp .bolt { width: 40px; height: 52px; fill: #ffc933; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; margin-left: -6px; overflow: visible; animation: zp-bolt 3.2s ease-in-out infinite; transform-origin: 50% 80%; }
+            @keyframes zp-bolt { 0%, 72%, 100% { transform: none; } 78% { transform: scale(1.2) rotate(-7deg); } 84% { transform: scale(0.96); } 90% { transform: scale(1.1) rotate(3deg); } }
+            @media (prefers-reduced-motion: reduce) { .zp .bolt { animation: none; } }
+          </style>
+          <div class="row">
+            <span class="tile">A</span><span class="to">to</span><span class="tile lit">Z</span><span class="tile">A</span><span class="tile">P</span>
+            <svg class="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
+          </div>
+        </div>
+        <div class="body">
+          <div class="title"><h2>A to Zap</h2><span class="beta">BETA</span></div>
+          <p>One player picks a letter and everyone races to fill in a name, a place, an animal and more that start with it. First to finish hits Zap!</p>
+          <ul class="facts"><li>2 to 8 players</li><    <li class="has-credit">
       <a class="game" href="/fast-fingers/">
         <div class="art ff" aria-hidden="true">
           <div class="tb">
@@ -371,50 +408,12 @@
         </div>
       </a>
     </li>
-    <li>
-      <a class="game" href="/forehead/">
-        <div class="art fh" aria-hidden="true">
-          <svg viewBox="0 0 96 80">
-            <path class="head" d="M20 34C20 16 32 6 48 6s28 10 28 28v24c0 9-12 16-28 16s-28-7-28-16z"/>
-            <path class="head" d="M20 44c-6-1-8 3-7 7s5 6 8 5M76 44c6-1 8 3 7 7s-5 6-8 5"/>
-            <circle class="eye" cx="38" cy="54" r="2.6"/><circle class="eye" cx="58" cy="54" r="2.6"/>
-            <path class="head" d="M40 63c5 4 11 4 16 0"/>
-            <g class="note-g">
-              <path class="note-fill" d="M26 12h44v28l-9 9H26z"/>
-              <path class="note-fold" d="M70 40h-9v9z"/>
-              <path class="note-ink" d="M42 23.5c0-3.6 2.6-5.5 6-5.5s6 1.9 6 5c0 4.6-6 4.2-6 8.6M48 37.2v.2"/>
-            </g>
-          </svg>
-        </div>
-        <div class="body">
-          <div class="title"><h2>Forehead</h2><span class="beta">BETA</span></div>
-          <p>Everyone has a secret card stuck on their forehead that everyone else can read. Ask yes-or-no questions and work out what yours says.</p>
-          <ul class="facts"><li>2 to 8 players</li><li>Questions and guessing</li><li>About 8 minutes a round</li></ul>
+li>Questions and guessing</li><li>About 8 minutes a round</li></ul>
           <span class="play">Play Forehead</span>
         </div>
       </a>
     </li>
-    <li>
-      <a class="game" href="/a-to-zap/">
-        <div class="art zp" aria-hidden="true">
-          <style>
-            .zp .row { display: flex; align-items: center; gap: 7px; }
-            .zp .tile { display: grid; place-items: center; width: 44px; height: 50px; font-weight: 800; font-size: 1.6rem; color: var(--ink); background: var(--surface); border: 1.5px solid var(--ink); border-radius: 10px; box-shadow: 0 4px 0 var(--ink); }
-            .zp .tile.lit { background: #ffc933; color: #1b1e3a; }
-            .zp .to { font-style: italic; font-weight: 700; color: var(--muted); padding: 0 3px; }
-            .zp .bolt { width: 40px; height: 52px; fill: #ffc933; stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; margin-left: -6px; overflow: visible; animation: zp-bolt 3.2s ease-in-out infinite; transform-origin: 50% 80%; }
-            @keyframes zp-bolt { 0%, 72%, 100% { transform: none; } 78% { transform: scale(1.2) rotate(-7deg); } 84% { transform: scale(0.96); } 90% { transform: scale(1.1) rotate(3deg); } }
-            @media (prefers-reduced-motion: reduce) { .zp .bolt { animation: none; } }
-          </style>
-          <div class="row">
-            <span class="tile">A</span><span class="to">to</span><span class="tile lit">Z</span><span class="tile">A</span><span class="tile">P</span>
-            <svg class="bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h7l-1 8 10-12h-7z"/></svg>
-          </div>
-        </div>
-        <div class="body">
-          <div class="title"><h2>A to Zap</h2><span class="beta">BETA</span></div>
-          <p>One player picks a letter and everyone races to fill in a name, a place, an animal and more that start with it. First to finish hits Zap!</p>
-          <ul class="facts"><li>2 to 8 players</li><li>Words</li><li>About 15 minutes a game</li></ul>
+li>Words</li><li>About 15 minutes a game</li></ul>
           <span class="play">Play A to Zap</span>
         </div>
       </a>

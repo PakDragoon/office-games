@@ -47,7 +47,7 @@ interface PView {
   first: string | null;
   public: boolean;
   settings: { deck: string; minutes: number };
-  log: Array<{ n: number; pid: string; q: string | null; tally: Record<string, number> | null; top: string[]; outcome: string | null; guess: string | null }>;
+  log: Array<{ n: number; pid: string; q: string | null; tally: Record<string, number> | null; top: string[]; outcome: string | null; guess: string | null; guessTurn: boolean }>;
   players: Array<{
     id: string; name: string; isHost: boolean; connected: boolean; away: boolean; inGame: boolean; score: number;
     done: string | null; asked: number; pts: number; hasCard: boolean; card: string | null;
@@ -115,16 +115,17 @@ async function answerAll(g: Game, key: string): Promise<void> {
   await pace();
   const a = asker(g);
   for (const p of g.p) if (p !== a) p.c.send({ t: 'answer', a: key });
-  await all(g, (v) => v.phase === 'decide', 'decide phase');
+  await all(g, (v) => v.phase === 'tally', 'tally phase');
 }
-/** The asker passes; resolves when the next turn has begun. */
+/** The tally on show runs out (its timer is forced); resolves when the next turn has begun. */
 async function pass(g: Game): Promise<void> {
   await pace();
-  const a = asker(g);
-  const before = latest(a)!;
-  a.c.send({ t: 'pass' });
-  await all(g, (v) => v.phase === 'ask' && v.asker !== before.asker || v.status === 'result', 'next turn');
+  const before = latest(g.p[0])!;
+  expect(before.phase).toBe('tally');
+  await fire(g.code, 'turn');
+  await all(g, (v) => (v.phase === 'ask' && v.asker !== before.asker) || v.status === 'result', 'next turn');
 }
+/** The asker spends their turn on a wrong guess (instead of asking); resolves when the next turn has begun. */
 async function wrong(g: Game, text = 'Nobody Nowhere'): Promise<void> {
   await pace();
   const a = asker(g);
@@ -177,10 +178,11 @@ describe('forehead: secrecy', () => {
     const cards = g.p.map((p) => entryOf(cardOf(g, p)));
     const scan = (p: P, i: number, label: string) => expect(leaks(p.raw, cards[i]), `${p.name} (${cards[i].name}) ${label}`).toBeNull();
 
-    // a few full turns: wrong guesses and passes
-    await ask(g); await answerAll(g, 'yes'); await wrong(g);
+    // a few full turns: questions and wrong-guess turns
+    await ask(g); await answerAll(g, 'yes'); await pass(g);
+    await wrong(g);
     await ask(g, 'Is it a woman?'); await answerAll(g, 'no'); await pass(g);
-    await ask(g, 'Did this person ever play a sport?'); await answerAll(g, 'sort'); await wrong(g, 'Somebody Else');
+    await wrong(g, 'Somebody Else');
     await ask(g, 'Are they famous in Asia?'); await answerAll(g, 'dunno'); await pass(g);
     g.p.forEach((p, i) => scan(p, i, 'after four turns'));
     // the others' cards ARE visible to a player (the secrecy is only about their own)
@@ -204,7 +206,7 @@ describe('forehead: secrecy', () => {
     const winner = asker(g);
     const wi = g.p.indexOf(winner);
     const before = g.p.map((p) => p.raw.length);
-    await ask(g, 'Is it a singer?'); await answerAll(g, 'no');
+    await pace();
     winner.c.send({ t: 'guess', text: cards[wi].name });
     await all(g, (v) => v.players.find((x) => x.id === winner.id)!.done === 'guessed', 'a right guess');
     expect(latest(winner)!.players.find((x) => x.id === winner.id)!.card).toBe(cards[wi].name);
@@ -239,16 +241,19 @@ describe('forehead: secrecy', () => {
     expect(seenByVictim.question!.q).toBeNull();
     expect(latest(bystander)!.question!.q).toBe(`Am I the same as ${secret}?`);
     expect(latest(a)!.question!.q).toBe(`Am I the same as ${secret}?`);
-    await answerAll(g, 'no');
-    // ...and then guesses it, which can never be right (cards are unique) but would be shown as "Not it: <card>"
+    await answerAll(g, 'no'); await pass(g);
+    // ...and later someone who can see it spends a turn guessing it as their own, which can never be right
+    // (cards are unique) but would be shown as "Not it: <card>"
+    while (asker(g) === victim) { await ask(g); await answerAll(g, 'no'); await pass(g); }
     await wrong(g, secret);
     const v = latest(victim)!;
+    const gv = v.log.find((e) => e.guessTurn)!;
     expect(v.log[0].q).toBeNull();
-    expect(v.log[0].guess).toBeNull();
-    expect(v.log[0].outcome).toBe('wrong');
+    expect(gv.guess).toBeNull();
+    expect(gv.outcome).toBe('wrong');
     const b = latest(bystander)!;
     expect(b.log[0].q).toContain(secret);
-    expect(b.log[0].guess).toBe(secret);
+    expect(b.log.find((e) => e.guessTurn)!.guess).toBe(secret);
     expect(leaks(victim.raw, entryOf(secret))).toBeNull();
     // an ordinary question is shown to everyone, the victim included
     await ask(g, 'Is it a woman?');
@@ -310,7 +315,7 @@ describe('forehead: dealing', () => {
 });
 
 describe('forehead: turns', () => {
-  it('goes round in seat order: ask, answer, tally, then pass; each step only from the right player', async () => {
+  it('goes round in seat order: ask, answer, a short tally, then the next turn by itself; each step only from the right player', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia']);
     const order = await peek(g.code, (r) => r.order);
     const idOf = (p: P) => p.id;
@@ -328,9 +333,9 @@ describe('forehead: turns', () => {
     first.c.send({ t: 'ask', q: 12345 });
     await first.c.next((m) => m.t === 'nope');
     expect(latest(first)!.phase).toBe('ask');
-    // pass / guess / answer before there is a question: ignored
+    // the old pass, a guess from someone else, an answer before there is a question: ignored
     first.c.send({ t: 'pass' });
-    first.c.send({ t: 'guess', text: 'x' });
+    others[0].c.send({ t: 'guess', text: 'x' });
     others[0].c.send({ t: 'answer', a: 'yes' });
     expect(latest(first)!.phase).toBe('ask');
 
@@ -359,27 +364,28 @@ describe('forehead: turns', () => {
     others[0].c.send({ t: 'answer', a: 'no' });
     await waitFor(others[0], (x) => x.myAnswer === 'no', 'changed answer');
     others[1].c.send({ t: 'answer', a: 'no' });
-    const decide = await waitFor(first, (x) => x.phase === 'decide', 'decide');
+    const decide = await waitFor(first, (x) => x.phase === 'tally', 'tally');
     expect(decide.tally).toEqual({ yes: 0, no: 2, sort: 0, dunno: 0 });
     expect(decide.top).toEqual(['no']);
     // everyone sees the same tally, and nobody receives who said what
     for (const p of g.p) {
-      const w = await waitFor(p, (x) => x.phase === 'decide', 'decide for all');
+      const w = await waitFor(p, (x) => x.phase === 'tally', 'tally for all');
       expect(w.tally).toEqual(decide.tally);
       expect(Object.keys(w)).not.toContain('answers');
       expect(JSON.stringify(w)).not.toContain(others[0].id + '":"');
     }
-    expect(decide.endsIn).toBeGreaterThan(29000);
-    expect(decide.log[0]).toMatchObject({ pid: idOf(first), tally: { no: 2 }, top: ['no'] });
+    expect(decide.endsIn).toBeGreaterThan(E.TIMES.tallyMs - 1000);
+    expect(decide.endsIn).toBeLessThanOrEqual(E.TIMES.tallyMs);
+    expect(decide.log[0]).toMatchObject({ pid: idOf(first), tally: { no: 2 }, top: ['no'], guessTurn: false });
 
-    // an empty guess is refused with a hint and the asker keeps their turn
-    first.c.msgs = first.c.msgs.filter((m) => m.t !== 'nope');
-    first.c.send({ t: 'guess', text: '   ' });
-    await first.c.next((m) => m.t === 'nope');
-    expect(latest(first)!.phase).toBe('decide');
-    // only the asker passes
-    others[0].c.send({ t: 'pass' });
+    // during the tally there is nothing to decide: a guess or a pass is ignored
+    first.c.send({ t: 'guess', text: cardOf(g, first) });
     first.c.send({ t: 'pass' });
+    await sleep(40);
+    expect(latest(first)!.phase).toBe('tally');
+    expect(latest(first)!.players.find((x) => x.id === first.id)!.done).toBeNull();
+    // the tally runs out and the next player's turn starts by itself
+    await fire(g.code, 'turn');
     const next = await waitFor(first, (x) => x.phase === 'ask' && x.asker !== first.id, 'next asker');
     expect(next.asker).toBe(order[1]);
     expect(next.players.find((x) => x.id === first.id)!.asked).toBe(1);
@@ -398,7 +404,7 @@ describe('forehead: turns', () => {
     others[0].c.send({ t: 'answer', a: 'yes' });
     others[1].c.send({ t: 'answer', a: 'yes' });
     others[2].c.send({ t: 'answer', a: 'no' });
-    const v = await waitFor(a, (x) => x.phase === 'decide', 'decide');
+    const v = await waitFor(a, (x) => x.phase === 'tally', 'tally');
     expect(v.tally).toEqual({ yes: 2, no: 1, sort: 0, dunno: 0 });
     expect(v.top).toEqual(['yes']);
     await pass(g);
@@ -407,7 +413,7 @@ describe('forehead: turns', () => {
     rest[0].c.send({ t: 'answer', a: 'yes' });
     rest[1].c.send({ t: 'answer', a: 'no' });
     rest[2].c.send({ t: 'answer', a: 'sort' });
-    const t = await waitFor(b, (x) => x.phase === 'decide', 'decide 2');
+    const t = await waitFor(b, (x) => x.phase === 'tally', 'tally 2');
     expect(t.top).toEqual(['yes', 'no', 'sort']);
     closeAll(g);
   });
@@ -425,21 +431,22 @@ describe('forehead: turns', () => {
     await waitFor(a, (x) => x.answered === 1 && x.myAnswer === null, 'one valid answer');
     expect(latest(others[0])!.myAnswer).toBe('higher');
     others[1].c.send({ t: 'answer', a: 'higher' });
-    const v = await waitFor(a, (x) => x.phase === 'decide', 'decide');
+    const v = await waitFor(a, (x) => x.phase === 'tally', 'tally');
     expect(v.tally).toEqual({ yes: 0, no: 0, higher: 2, lower: 0 });
     expect(v.top).toEqual(['higher']);
-    // the real number: one off is wrong, the number in words is right
+    await pass(g);
+    // the real number: one off is wrong, the number in words is right (each guess is a turn of its own)
     const real = Number(cardOf(g, a));
     expect(real).toBeGreaterThanOrEqual(1);
     expect(real).toBeLessThanOrEqual(100);
     const off = real === 100 ? 99 : real + 1;
-    a.c.send({ t: 'guess', text: String(off) });
-    await all(g, (x) => x.phase === 'ask' && x.asker !== a.id, 'wrong number');
-    expect(latest(a)!.players.find((x) => x.id === a.id)!.done).toBeNull();
-    // cycle back to a: ask, answer, guess it in words
     for (let i = 0; i < 2; i++) { await ask(g); await answerAll(g, 'yes'); await pass(g); }
     expect(asker(g)).toBe(a);
-    await ask(g); await answerAll(g, 'lower');
+    await wrong(g, String(off));
+    expect(latest(a)!.players.find((x) => x.id === a.id)!.done).toBeNull();
+    for (let i = 0; i < 2; i++) { await ask(g); await answerAll(g, 'yes'); await pass(g); }
+    expect(asker(g)).toBe(a);
+    await pace();
     a.c.send({ t: 'guess', text: E.numberWords(real) });
     await all(g, (x) => x.players.find((y) => y.id === a.id)!.done === 'guessed', 'right number');
     closeAll(g);
@@ -455,10 +462,10 @@ describe('forehead: timers', () => {
     await waitFor(a, (x) => x.answered === 1, 'one answer in');
     expect(latest(a)!.phase).toBe('answer');
     await fire(g.code, 'turn');
-    const v = await waitFor(a, (x) => x.phase === 'decide', 'decide after the timer');
+    const v = await waitFor(a, (x) => x.phase === 'tally', 'tally after the timer');
     expect(v.tally).toEqual({ yes: 0, no: 0, sort: 1, dunno: 0 });
     expect(v.top).toEqual(['sort']);
-    expect(v.endsIn).toBeGreaterThan(29000);
+    expect(v.endsIn).toBeLessThanOrEqual(E.TIMES.tallyMs);
     // a late answer is ignored
     others[1].c.send({ t: 'answer', a: 'yes' });
     await sleep(30);
@@ -470,7 +477,7 @@ describe('forehead: timers', () => {
     const g = await newGame(['Hana', 'Zed', 'Pia']);
     const a = await ask(g);
     await fire(g.code, 'turn');
-    const v = await waitFor(a, (x) => x.phase === 'decide', 'decide');
+    const v = await waitFor(a, (x) => x.phase === 'tally', 'tally');
     expect(v.tally).toEqual({ yes: 0, no: 0, sort: 0, dunno: 0 });
     expect(v.top).toEqual([]);
     closeAll(g);
@@ -494,13 +501,35 @@ describe('forehead: timers', () => {
     closeAll(g);
   });
 
-  it('passes for an asker who does not guess or pass in time', async () => {
+  it('there is no guess-or-pass step any more: the tally ends the turn by itself, with no outcome on the question', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia']);
     const a = await ask(g);
     await answerAll(g, 'yes');
     await fire(g.code, 'turn');
     const v = await waitFor(g.p[0], (x) => x.phase === 'ask' && x.asker !== a.id, 'next asker');
-    expect(v.log[0].outcome).toBe('pass');
+    expect(v.log[0].outcome).toBeNull();
+    expect(v.players.find((x) => x.id === a.id)!.done).toBeNull();
+    expect(v.players.find((x) => x.id === a.id)!.asked).toBe(1);
+    expect(['ask', 'answer', 'tally', 'wait']).toContain(v.phase);
+    closeAll(g);
+  });
+
+  it('a room saved in the old guess-or-pass step restores as a tally and moves on when its timer fires', async () => {
+    const g = await newGame(['Hana', 'Zed', 'Pia']);
+    const a = await ask(g);
+    await answerAll(g, 'yes');
+    // a snapshot saved by the old version, mid guess-or-pass, comes back as a tally
+    const restored = await runInDurableObject(stub(g.code), (i) => {
+      const game = (i as unknown as { game: { room: unknown; ctx: unknown } }).game;
+      const snap = JSON.parse(JSON.stringify(game.room)) as Record<string, unknown>;
+      snap.phase = 'decide';
+      const rebuilt = GAMES.forehead.restore(game.ctx as Parameters<typeof GAMES.forehead.restore>[0], snap) as unknown as { room: { phase: string } };
+      return rebuilt.room.phase;
+    });
+    expect(restored).toBe('tally');
+    // and the live room's tally moves on when its timer fires
+    await fire(g.code, 'turn');
+    const v = await waitFor(g.p[0], (x) => x.phase === 'ask' && x.asker !== a.id, 'next asker after restore');
     expect(v.players.find((x) => x.id === a.id)!.done).toBeNull();
     closeAll(g);
   });
@@ -517,7 +546,7 @@ describe('forehead: timers', () => {
     await fire(g.code, 'round');
     const v = await waitFor(g.p[0], (x) => x.status === 'result', 'result');
     expect(v.log[0].tally).toMatchObject({ yes: 1 });
-    expect(v.log[0].outcome).toBe('ended');
+    expect(v.log[0].outcome).toBe('ended');                       // the question was still waiting for answers
     expect(v.roundEndsIn).toBe(0);
     expect(v.endsIn).toBe(0);
     for (const x of v.players) expect(x.card).toBeTruthy();
@@ -535,8 +564,8 @@ describe('forehead: away and left players', () => {
     const a = await ask(g);                                       // the first player asks; the away player is not expected to answer
     expect(latest(a)!.need).toBe(2);
     for (const p of g.p) if (p !== a && p !== second) p.c.send({ t: 'answer', a: 'yes' });
-    await waitFor(a, (v) => v.phase === 'decide', 'decide without the away player');
-    a.c.send({ t: 'pass' });
+    await waitFor(a, (v) => v.phase === 'tally', 'tally without the away player');
+    await fire(g.code, 'turn');
     const v = await waitFor(g.p[0], (x) => x.phase === 'ask' && x.asker !== a.id, 'next asker');
     expect(v.asker).toBe(order[2]);                               // skipped order[1]
     expect(v.players.find((x) => x.id === second.id)!.asked).toBe(0);
@@ -558,15 +587,17 @@ describe('forehead: away and left players', () => {
     closeAll(g);
   });
 
-  it('an Away asker during the answers is skipped as soon as the question closes', async () => {
+  it('an Away asker\'s question still closes, shows its tally to the others and the turn moves on', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia']);
     const a = await ask(g);
     await goAway(g.code, a.id);
     const others = g.p.filter((p) => p !== a);
     for (const p of others) p.c.send({ t: 'answer', a: 'no' });
+    await waitFor(others[0], (x) => x.phase === 'tally', 'tally');
+    await fire(g.code, 'turn');
     const v = await waitFor(others[0], (x) => x.phase === 'ask' && x.asker !== a.id, 'moved on');
     expect(v.log[0].tally).toMatchObject({ no: 2 });
-    expect(v.log[0].outcome).toBe('skip');
+    expect(v.log[0].outcome).toBeNull();
     closeAll(g);
   });
 
@@ -606,39 +637,35 @@ describe('forehead: away and left players', () => {
 });
 
 describe('forehead: guesses and scoring', () => {
-  it('a right guess scores 12 minus the questions asked, plus 2 for the first; "Not it" ends the turn only', async () => {
+  it('a right guess scores 12 minus the questions asked, plus 2 for the first; a guess is a turn of its own', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia', 'Quinn']);
     const p1 = asker(g);
-    // turn 1: p1 asks and guesses wrong
-    await ask(g); await answerAll(g, 'no'); await wrong(g, 'Totally Wrong');
+    // turn 1: p1 spends the turn on a wrong guess (no question asked, none counted)
+    await wrong(g, 'Totally Wrong');
     let v = latest(p1)!;
-    expect(v.log[0]).toMatchObject({ outcome: 'wrong', guess: 'Totally Wrong' });
-    expect(v.players.find((x) => x.id === p1.id)!.done).toBeNull();
-    expect(v.players.find((x) => x.id === p1.id)!.score).toBe(0);
-    // turn 2: the next player guesses right on their first question: 11 + 2 = 13, shown with their card
+    expect(v.log[0]).toMatchObject({ outcome: 'wrong', guess: 'Totally Wrong', guessTurn: true });
+    expect(v.players.find((x) => x.id === p1.id)).toMatchObject({ done: null, score: 0, asked: 0 });
+    // turn 2: the next player guesses right straight away: 12 + 2 = 14, shown with their card
     const second = asker(g);
-    await ask(g, 'Is it a footballer?'); await answerAll(g, 'yes');
+    await pace();
     second.c.send({ t: 'guess', text: `  ${cardOf(g, second).toUpperCase()} ` });
     v = await waitFor(g.p[0], (x) => x.players.find((y) => y.id === second.id)!.done === 'guessed', 'right guess');
     const me = v.players.find((y) => y.id === second.id)!;
-    expect(me).toMatchObject({ done: 'guessed', score: 13, pts: 13, asked: 1 });
+    expect(me).toMatchObject({ done: 'guessed', score: 14, pts: 14, asked: 0 });
     expect(v.first).toBe(second.id);
-    expect(v.log[1]).toMatchObject({ outcome: 'right', guess: cardOf(g, second) });
+    expect(v.log[1]).toMatchObject({ outcome: 'right', guess: cardOf(g, second), guessTurn: true });
     // the turn moved on, and the finished player is no longer asked to ask
     const after = await waitFor(g.p[0], (x) => x.phase === 'ask' && x.asker !== second.id, 'next');
     expect(after.asker).not.toBe(second.id);
-    // p1 has asked once already; they ask more questions (passing) and then guess right: 12 - 4 = 8, no bonus
-    let q = 1;
-    for (let i = 0; i < 40 && q < 4; i++) {
+    // p1 asks four questions over their next turns and then guesses right on a turn of its own: 12 - 4 = 8, no bonus
+    let q = 0;
+    for (let i = 0; i < 60 && !(q === 4 && asker(g) === p1); i++) {
       const cur = asker(g);
-      await ask(g); await answerAll(g, 'no');
-      if (cur === p1) {
-        q++;
-        if (q === 4) break;
-      }
-      await pass(g);
+      await ask(g); await answerAll(g, 'no'); await pass(g);
+      if (cur === p1) q++;
     }
     expect(asker(g)).toBe(p1);
+    await pace();
     expect(latest(p1)!.players.find((x) => x.id === p1.id)!.asked).toBe(4);
     p1.c.send({ t: 'guess', text: cardOf(g, p1) });
     v = await waitFor(g.p[0], (x) => x.players.find((y) => y.id === p1.id)!.done === 'guessed', 'p1 right');
@@ -655,8 +682,7 @@ describe('forehead: guesses and scoring', () => {
       const idx = animals.entries.findIndex((e: { name: string }) => e.name === cardName);
       expect(idx, cardName).toBeGreaterThanOrEqual(0);
       await runInDurableObject(stub(g.code), (i) => { (i as unknown as { game: { room: RoomPeek } }).game.room.cards[a.id] = idx; });
-      await ask(g, 'Is it alive?');
-      await answerAll(g, 'yes');
+      await pace();
       a.c.send({ t: 'guess', text });
       const v = await waitFor(g.p[0], (x) => x.log.length > 0 && x.log[0].outcome !== null, 'outcome');
       const right = v.log[0].outcome === 'right';
@@ -697,8 +723,8 @@ describe('forehead: guesses and scoring', () => {
     expect(w.need).toBe(2);
     idle.c.send({ t: 'answer', a: 'yes' });
     a.c.send({ t: 'answer', a: 'yes' });
-    await waitFor(last, (x) => x.phase === 'decide', 'decide');
-    last.c.send({ t: 'pass' });
+    await waitFor(last, (x) => x.phase === 'tally', 'tally');
+    await fire(g.code, 'turn');
     const again = await waitFor(last, (x) => x.phase === 'ask', 'asks again');
     expect(again.asker).toBe(last.id);                           // the only one still guessing keeps the turn
     closeAll(g);
@@ -706,14 +732,15 @@ describe('forehead: guesses and scoring', () => {
 
   it('ends the round when everyone has guessed or given up, then keeps the scores across rounds', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia']);
-    // round 1: first guesser scores 11 + 2; the other two give up
-    const a = await ask(g); await answerAll(g, 'yes');
+    // round 1: the first asker guesses right away for 12 + 2; the other two give up
+    const a = asker(g);
+    await pace();
     a.c.send({ t: 'guess', text: cardOf(g, a) });
     await waitFor(g.p[0], (x) => x.players.find((y) => y.id === a.id)!.done === 'guessed', 'guessed');
     for (const p of g.p.filter((x) => x !== a)) p.c.send({ t: 'giveup' });
     const r1 = await waitFor(g.p[0], (x) => x.status === 'result', 'result');
     const mine = r1.players.find((y) => y.id === a.id)!;
-    expect(mine.score).toBe(13);
+    expect(mine.score).toBe(14);
     expect(r1.players.filter((y) => y.id !== a.id).every((y) => y.score === 0 && y.done === 'gaveup')).toBe(true);
     expect(r1.asker).toBeNull();
     // nothing can be asked once the round is over
@@ -721,13 +748,15 @@ describe('forehead: guesses and scoring', () => {
     // round 2 starts from the result screen; scores carry over, the round's points start from zero
     g.p[0].c.send({ t: 'begin' });
     const r2 = await waitFor(g.p[0], (x) => x.status === 'play' && x.game === 2, 'round 2');
-    expect(r2.players.find((y) => y.id === a.id)).toMatchObject({ score: 13, pts: 0, asked: 0, done: null });
+    expect(r2.players.find((y) => y.id === a.id)).toMatchObject({ score: 14, pts: 0, asked: 0, done: null });
     expect(r2.log).toHaveLength(0);
     expect(r2.first).toBeNull();
-    const second = await ask(g); await answerAll(g, 'yes');
+    const second = await ask(g); await answerAll(g, 'yes'); await pass(g);
+    while (asker(g) !== second) { await ask(g); await answerAll(g, 'yes'); await pass(g); }
+    await pace();
     second.c.send({ t: 'guess', text: cardOf(g, second) });
     const w = await waitFor(g.p[0], (x) => x.players.find((y) => y.id === second.id)!.done === 'guessed', 'guessed again');
-    expect(w.players.find((y) => y.id === second.id)!.score).toBe(second === a ? 26 : 13);
+    expect(w.players.find((y) => y.id === second.id)!.score).toBe(second === a ? 27 : 13);   // 12 - 1 question + 2 first
     expect(w.players.find((y) => y.id === second.id)!.pts).toBe(13);
     closeAll(g);
   });
@@ -882,14 +911,14 @@ describe('forehead: a refreshed player keeps their place', () => {
     const mine = v.players.find((x) => x.name === quitter.name)!;
     expect(mine).toMatchObject({ done: 'gaveup', connected: true });
     expect(mine.card).toBeTruthy();                       // given up: their own card is revealed to them
-    // the asker refreshes while deciding: still the asker, still in "decide" with the tally
+    // the asker refreshes while their tally is on show: still the asker, the tally still there
     const idx = g.p.indexOf(a);
     const back = await seat(g.code, a.name);
-    const w = await waitFor(back, (x) => x.phase === 'decide', 'asker rejoined');
+    const w = await waitFor(back, (x) => x.phase === 'tally', 'asker rejoined');
     expect(w.asker).toBe(back.id);
     expect(w.tally).toMatchObject({ yes: 2 });
     expect(w.players.find((x) => x.id === back.id)!.card).toBeNull();
-    back.c.send({ t: 'pass' });
+    await fire(g.code, 'turn');
     await waitFor(back, (x) => x.phase === 'ask' && x.asker !== back.id, 'moved on');
     g.p[idx] = back;
     // the host leaves: host passes on, the round goes on
@@ -931,10 +960,12 @@ describe('forehead: saved stats', () => {
       const first = asker(g);
       const other = g.p.find((p) => p !== first)!;
       for (let q = 1; q <= n; q++) {
-        await ask(g); await answerAll(g, 'no');
-        if (q < n) { await pass(g); await ask(g); await answerAll(g, 'no'); await pass(g); }
+        await ask(g); await answerAll(g, 'no'); await pass(g);
+        // the other player asks too, except on the last lap, where they spend the turn on a wrong guess
+        if (q < n) { await ask(g); await answerAll(g, 'no'); await pass(g); } else await wrong(g);
       }
       expect(asker(g)).toBe(first);
+      await pace();
       first.c.send({ t: 'guess', text: cardOf(g, first) });
       await waitFor(g.p[0], (v) => v.players.find((x) => x.id === first.id)!.done === 'guessed', 'guessed');
       other.c.send({ t: 'giveup' });
