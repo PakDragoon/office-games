@@ -204,6 +204,15 @@ test('pickPair: any random number gives a whole line, and skipped lines are avoi
     const rnd = () => ((k++ * 0.37 + 0.11) % 1);
     eq(E.pickPair(two, rnd, (l) => l.startsWith('aaaaa')).start, 'ccccc');
   }
+  // The skip check gets "start target", the same key the server keeps in usedPairs (not the whole line with par and path)
+  const keys = [];
+  E.pickPair(two, () => 0.1, (k) => { keys.push(k); return false; });
+  eq(keys[0], 'aaaaa bbbbb');
+  const used = ['aaaaa bbbbb'];
+  for (let i = 0; i < 20; i++) {
+    let k = i;
+    eq(E.pickPair(two, () => ((k++ * 0.37 + 0.11) % 1), (key) => used.includes(key)).start, 'ccccc');
+  }
 });
 
 console.log(`${passed} passed, ${failed} failed`);

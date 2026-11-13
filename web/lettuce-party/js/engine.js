@@ -121,9 +121,9 @@ export function parsePair(line) {
 
 /**
  * A random pair from the file's text without splitting it: jump to a random place and take the line around it.
- * `skip(line)` can refuse lines already played; after a few misses the next line is simply accepted.
+ * `skip(key)` gets "start target" and can refuse pairs already played; after a few misses the next one is simply accepted.
  */
-export function pickPair(text, random, skip = (_line) => false) {
+export function pickPair(text, random, skip = (_key) => false) {
   const lines = text.length;
   let found = null;
   for (let tries = 0; tries < 12 && !found; tries++) {
@@ -133,7 +133,7 @@ export function pickPair(text, random, skip = (_line) => false) {
     if (to < 0) to = text.length;
     const line = text.slice(from, to);
     const pair = parsePair(line);
-    if (pair && (!skip(line) || tries === 11)) found = pair;
+    if (pair && (!skip(`${pair.start} ${pair.target}`) || tries === 11)) found = pair;
   }
   return found;
 }

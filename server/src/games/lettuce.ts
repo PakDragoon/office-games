@@ -13,6 +13,7 @@ import { SortedWords } from '../core/words';
 
 const GAME = 'lettuce-party';
 const MAX_PLAYERS = 5;
+const MAX_LADDER_STEPS = 60;
 const COLS = E.COLS;
 type Settings = ReturnType<typeof E.cleanSettings>;
 interface Guess { word: string; pattern: string }
@@ -177,8 +178,8 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     room.players = room.players.filter((p) => p.connected);
     if (room.mode === 'ladder') {
       // A pair precomputed by tools/build-ladders.mjs; nothing is searched here
-      const pair = E.pickPair(LADDERS_TEXT, () => this.ctx.random(), (line: string) => room.usedPairs.includes(line))
-        ?? E.parsePair('crane slate 3 crate irate') as Ladder;
+      const pair = E.pickPair(LADDERS_TEXT, () => this.ctx.random(), (key: string) => room.usedPairs.includes(key))
+        ?? E.parsePair('crane glaze 3 craze graze') as Ladder;
       const line = `${pair.start} ${pair.target}`;
       room.usedPairs = [...room.usedPairs.filter((l) => l !== line), line].slice(-300);
       room.ladder = pair as Ladder;
@@ -228,6 +229,8 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     if (ladder && room.ladder) {
       const problem = E.ladderStepProblem([room.ladder.start, ...p.guesses.map((g) => g.word)], word, (w: string) => ladderWord(w));
       if (problem) return reply({ t: 'invalid', reason: problem });
+      // No attempt limit in a ladder, but a cap keeps the room's snapshot small against a step-spamming client
+      if (p.guesses.length >= MAX_LADDER_STEPS) return reply({ t: 'invalid', reason: 'Too many steps' });
       p.guesses.push({ word, pattern: '' });
       if (word === room.ladder.target) Object.assign(p, { solved: true, done: true, finishMs: this.ctx.now() - room.startedAt });
       reply({ t: 'result', round: room.round, word });
