@@ -2,6 +2,7 @@
 // Handles keep-alive, noticing a dead connection, reconnecting with the same tab id,
 // and the hello that tells the server who this is.
 import { getGuest, setGuest, getIdToken, api } from './cloud.js';
+import { roomJoined, roomLeft } from './friends.js';
 
 export const PROTOCOL = 1;
 const PING_MS = 3000;     // answered by the server runtime itself, so it never wakes the room
@@ -70,9 +71,11 @@ export function createRoomLink(game, handlers) {
         everJoined = true;
         retries = 0;
         code = msg.code;
+        roomJoined(game, msg.code);
       }
       if (msg.t === 'reject') {
         leaving = true;
+        roomLeft();
         if (msg.gone && everJoined) { handlers.gone(msg.reason); return; }
       }
       handlers.message(msg);
@@ -80,7 +83,7 @@ export function createRoomLink(game, handlers) {
     sock.addEventListener('close', (e) => {
       if (ws !== sock || leaving) return;
       ws = null;
-      if (e.code === 4004) { handlers.gone('The room closed.'); return; }
+      if (e.code === 4004) { roomLeft(); handlers.gone('The room closed.'); return; }
       if (!everJoined) { handlers.failed('Couldn’t reach the game server. Check your internet and try again.'); return; }
       retry();
     });
@@ -88,7 +91,7 @@ export function createRoomLink(game, handlers) {
 
   function retry() {
     if (leaving || !code) return;
-    if (retries >= RETRY_MS.length * 2) { handlers.gone('Lost the connection to the room.'); return; }
+    if (retries >= RETRY_MS.length * 2) { roomLeft(); handlers.gone('Lost the connection to the room.'); return; }
     if (retries === 0) handlers.reconnecting();
     const wait = RETRY_MS[Math.min(retries, RETRY_MS.length - 1)];
     retries++;
@@ -144,6 +147,7 @@ export function createRoomLink(game, handlers) {
     code = '';
     joined = false;
     everJoined = false;
+    roomLeft();
   }
 
   return {
