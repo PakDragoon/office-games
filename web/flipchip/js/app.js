@@ -1149,14 +1149,17 @@ function updateIdleNote() {
       if (st.left < 10000) {
         cls = 'urgent';
         text = st.strikes >= max - 1 ? `Move in ${secs} s or you’ll be removed from the game` : `Move in ${secs} s or the computer will play for you`;
-      } else if (st.strikes) {
-        cls = 'warn';
-        text = `The computer moved for you (${st.strikes} of ${max}). Move yourself to reset it.`;
       }
-    } else if (st.left < warn) {
+    } else if (st.left < warn && !(v.strikes && v.strikes[S.myId])) {
       cls = st.left < 10000 ? 'urgent' : 'warn';
       text = `Waiting for ${st.name}… (auto-move in ${clockText(st.left)})`;
     }
+  }
+  // Until they move themselves, the person it happened to keeps a reminder of the count
+  const mineN = v && !v.solo && v.status === 'play' && v.strikes ? v.strikes[S.myId] || 0 : 0;
+  if (!text && mineN) {
+    cls = 'warn';
+    text = `The computer moved for you (${mineN} of ${max}). ${mineN >= max - 1 ? 'One more and you’ll be removed from the game.' : 'Move yourself to reset it.'}`;
   }
   if (el.textContent !== text) el.textContent = text;
   const cn = `idle-note${text ? ' show' : ''}${cls ? ` ${cls}` : ''}`;
