@@ -274,10 +274,10 @@ function negamax(b, n, who, depth, alpha, beta, ctx) {
 
 // Score every root move at one depth. exact: full window, so every score can be compared;
 // otherwise only the best score is exact (the rest are upper bounds), which is faster.
-function rootScores(b, n, who, depth, ctx, first, exact = false) {
+function rootScores(b, n, who, depth, ctx, first, exact = false, only = null) {
   const out = [];
   let alpha = -Infinity;
-  for (const m of ordered(b, n, who, first)) {
+  for (const m of only || ordered(b, n, who, first)) {
     const v = -negamax(apply(b, n, m, who), n, 3 - who, depth - 1, -Infinity, exact ? Infinity : -alpha, ctx);
     out.push({ m, v });
     if (v > alpha) alpha = v;
@@ -289,7 +289,7 @@ const bestOf = (scored) => scored.reduce((a, s) => (s.v > a.v ? s : a));
 
 /**
  * Pick a move for `who`. Returns a cell index, or -1 when there is no legal move.
- * opts: { rnd: () => number, ms: time budget for hard (default 1100) }
+ * opts: { rnd: () => number, ms: time budget for hard (default 1100), maxRoot: cap on the moves 'normal' searches (rooms) }
  */
 export function chooseMove(b, n, who, level = 'normal', opts = {}) {
   const rnd = opts.rnd || Math.random;
@@ -313,7 +313,14 @@ export function chooseMove(b, n, who, level = 'normal', opts = {}) {
 
   if (level === 'normal') {
     const ctx = { nodes: 0, deadline: Infinity };
-    const scored = rootScores(b, n, who, 2, ctx, -1, true).map((s) => ({ m: s.m, v: s.v + (rnd() - 0.5) * 24 }));
+    // A room's computer player has a tiny CPU budget (opts.maxRoot): it looks two moves ahead at the few
+    // moves that look best after one, instead of at all of them. Same idea, a fraction of the work.
+    let only = null;
+    if (opts.maxRoot && moves.length > opts.maxRoot) {
+      only = moves.map((m) => ({ m, v: evaluate(apply(b, n, m, who), n, who) }))
+        .sort((x, y) => y.v - x.v).slice(0, opts.maxRoot).map((x) => x.m);
+    }
+    const scored = rootScores(b, n, who, 2, ctx, -1, true, only).map((s) => ({ m: s.m, v: s.v + (rnd() - 0.5) * 24 }));
     scored.sort((x, y) => y.v - x.v);
     // Now and then it settles for its second choice, unless that throws away a corner
     if (scored.length > 1 && rnd() < 0.15 && scored[0].v - scored[1].v < 60) return scored[1].m;

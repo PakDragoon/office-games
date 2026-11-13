@@ -185,5 +185,26 @@ check('verb forms generated', ['khao', 'karo', 'karein', 'karega', 'dekhna', 'su
   check('random games end with one survivor', ok);
 }
 
+// Computer players: every prompt in every band has everyday answers, all real words that contain it
+{
+  const bot = readFileSync(new URL('../words/bot.txt', import.meta.url), 'utf8');
+  const en = new Set(readFileSync(new URL('../words/en.txt', import.meta.url), 'utf8').split('\n'));
+  const prompts = Object.values(E.promptBands('en', E.makeLexicon([], []))).flatMap((lens) => Object.values(lens).flat());
+  let allHave = true, allValid = true, allLong = true;
+  for (const p of prompts) {
+    const words = E.botCandidates(bot, p);
+    if (words.length < 7) allHave = false;
+    if (!words.every((w) => w.includes(p) && en.has(w) && !E.BLOCKED_SET.has(w))) allValid = false;
+    if (!words.every((w) => w.length >= 5)) allLong = false;
+  }
+  check('bot: every prompt has at least 7 answers', allHave);
+  check('bot: answers contain the prompt and are real, allowed words', allValid);
+  check('bot: answers work at every minimum length (5+ letters)', allLong);
+  check('bot: unknown or odd prompts give nothing', E.botCandidates(bot, 'qqq').length === 0 && E.botCandidates(bot, '').length === 0 && E.botCandidates(bot, 'a\nb').length === 0);
+  check('bot: a prompt is not matched as part of a longer one', E.botCandidates(bot, 'ab').every((w) => w.includes('ab')));
+  const lex = E.makeLexicon(['banana'], []);
+  check('bot answers pass the same word check as a person', E.checkWord(E.botCandidates(bot, 'an')[0], { prompt: 'an', minLen: 4, list: 'mix', forms: 'block', used: new Set(), lex: E.makeLexicon(E.botCandidates(bot, 'an'), []) }).ok && lex);
+}
+
 console.log(`${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

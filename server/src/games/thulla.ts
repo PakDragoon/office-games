@@ -3,6 +3,7 @@
 // cards plus public information. Seats have stable ids (p1, p2...) and a current connection.
 import * as Engine from '../../../web/thulla/js/engine.js';
 import type { GameInstance, GameModule, Msg, RatingInfo, RoomCtx } from '../core/game';
+import { botDelay, botName, type BotLevel, humanName, isBotLevel } from '../core/bots';
 import { cleanName, cleanPhoto } from '../core/util';
 import { reportPlayer } from '../core/seats';
 
@@ -42,6 +43,7 @@ interface ThullaEngine {
   takeTarget(r: Round, id: string): { target: string | null; reason: string };
   markTakeAsked(r: Round): void;
   applyTake(r: Round, from: string, to: string): Ev[];
+  botCard(r: Round, id: string, level: string, rnd: () => number): string | null;
   canGiveUp(r: Round, id: string): boolean;
   giveUp(r: Round, id: string): { ok: boolean; error?: string };
   positions(r: Round): Record<string, number>;
@@ -65,6 +67,7 @@ interface Player {
   rating?: RatingInfo | null;
   /** A computer player. Any round with one in it is never rated. */
   bot?: boolean;
+  botLevel?: BotLevel;
 }
 
 interface Score { rounds: number; losses: number; posSum: number; given: number; received: number; ratingDelta?: number }
@@ -91,6 +94,9 @@ interface State {
   allTime: { name: string; rounds: number; players: Record<string, Record<string, number>> } | null;
   crewNote: string;
   seq: number;
+  /** A computer player's move (or answer) is planned for this time (0: none), for this turn. */
+  botAt?: number;
+  botKey?: string;
 }
 
 class ThullaRoom implements GameInstance {
@@ -110,7 +116,7 @@ class ThullaRoom implements GameInstance {
   private ensureHost(): void {
     const host = this.H.players.find((p) => p.isHost);
     if (host && host.online && !host.left) return;
-    const next = this.H.players.find((p) => p.online && !p.left);
+    const next = this.H.players.find((p) => p.online && !p.left && !p.bot);
     if (!next) return;
     if (host) host.isHost = false;
     next.isHost = true;
@@ -124,7 +130,7 @@ class ThullaRoom implements GameInstance {
 
   join(connId: string, msg: Msg): void {
     const H = this.H;
-    const name = cleanName(msg.name);
+    const name = humanName(cleanName(msg.name));
     const cid = typeof msg.client === 'string' ? msg.client.slice(0, 40) : '';
     const reply = (m: Msg) => this.ctx.send(connId, m);
     const fail = (text: string) => {
@@ -133,7 +139,7 @@ class ThullaRoom implements GameInstance {
     };
     if (!name) return fail('Type your name first.');
     const ident = this.ctx.identity(connId);
-    let p = H.players.find((x) => x.name.toLowerCase() === name.toLowerCase());
+    let p = H.players.find((x) => !x.bot && x.name.toLowerCase() === name.toLowerCase());
     if (p) {
       const sameTab = cid && p.cid === cid;
       const sameAccount = ident.uid && p.uid === ident.uid;
@@ -147,6 +153,11 @@ class ThullaRoom implements GameInstance {
       if (p.conn && p.conn !== connId) this.ctx.close(p.conn, 'replaced');
       Object.assign(p, { conn: connId, online: true, left: false, cid: cid || p.cid });
     } else {
+      // People come before computer players: in the lobby a newcomer takes the place of the latest bot
+      if (H.phase === 'lobby' && H.players.filter((x) => !x.left).length >= MAX_PLAYERS) {
+        const bot = [...H.players].reverse().find((x) => x.bot);
+        if (bot) H.players = H.players.filter((x) => x !== bot);
+      }
       if (H.players.filter((x) => !x.left).length >= MAX_PLAYERS) return fail(`This room is full (${MAX_PLAYERS} players).`);
       p = {
         id: `p${H.nextId++}`, name, cid, conn: connId, online: true, left: false, isHost: false,
@@ -210,6 +221,9 @@ class ThullaRoom implements GameInstance {
         this.H.phase = 'lobby';
         return this.broadcast();
       case 'playFor': return this.playFor();
+      case 'addBot': return this.addBot(p, msg.level);
+      case 'removeBot': return this.removeBot(msg.id);
+      case 'botLevel': return this.setBotLevel(msg.id, msg.level);
       case 'public':
         // Open to Quick Play or private: the host can flip it in the lobby only
         if (this.H.phase === 'lobby' && typeof msg.on === 'boolean' && msg.on !== this.H.public) {
@@ -252,8 +266,88 @@ class ThullaRoom implements GameInstance {
     this.broadcast();
   }
 
+  /** A room with only computer players left has nobody in it: it is cleaned up like an empty one. */
   occupied(): boolean {
-    return this.H.players.some((p) => p.online);
+    return this.H.players.some((p) => p.online && !p.bot);
+  }
+
+  /* ---------- Computer players ---------- */
+
+  private addBot(host: Player, level: unknown): void {
+    const H = this.H;
+    if (H.phase !== 'lobby') return;
+    if (H.players.filter((x) => !x.left).length >= MAX_PLAYERS) {
+      if (host.conn) this.ctx.send(host.conn, { t: 'error', msg: 'The room is full.' });
+      return;
+    }
+    const rnd = () => this.ctx.random();
+    H.players.push({
+      id: `p${H.nextId++}`, name: botName(H.players.map((x) => x.name), rnd), cid: '', conn: null, online: true, left: false,
+      isHost: false, color: this.freeColor(), uid: null, guest: null, photo: '', lastChat: 0,
+      bot: true, botLevel: isBotLevel(level) ? level : 'normal',
+    });
+    this.ctx.track('bot_added');
+    this.broadcast();
+  }
+
+  private botById(id: unknown): Player | undefined {
+    const p = typeof id === 'string' ? this.byId(id) : undefined;
+    return p && p.bot ? p : undefined;
+  }
+
+  private removeBot(id: unknown): void {
+    const bot = this.botById(id);
+    if (!bot || this.H.phase !== 'lobby') return;
+    this.H.players = this.H.players.filter((x) => x !== bot);
+    this.broadcast();
+  }
+
+  private setBotLevel(id: unknown, level: unknown): void {
+    const bot = this.botById(id);
+    if (!bot || this.H.phase !== 'lobby' || !isBotLevel(level)) return;
+    bot.botLevel = level;
+    this.broadcast();
+  }
+
+  /** After every update: plan the next computer move (or answer to a card request), once per turn. */
+  private botCheck(): void {
+    const H = this.H;
+    const r = H.round;
+    if (H.phase !== 'playing' || !r || r.over || H.resolving) return;
+    if (!H.players.some((p) => p.online && !p.bot)) return;   // nobody here to play with: wait
+    let key = '';
+    let who: Player | undefined;
+    if (H.take) {
+      who = this.botById(H.take.to);
+      key = `take:${H.roundNo}:${H.take.until}`;
+    } else {
+      who = this.botById(r.turn);
+      key = `t:${H.roundNo}:${r.turnNo}`;
+    }
+    if (!who) return;
+    const stale = H.botAt && this.ctx.now() > H.botAt + 4000;   // the timer got lost
+    if (H.botKey === key && !stale) return;
+    H.botKey = key;
+    H.botAt = this.ctx.now() + botDelay(who.botLevel || 'normal', () => this.ctx.random(), 700, 2200);
+    this.ctx.setTimer('bot', H.botAt);
+  }
+
+  private botAct(): void {
+    const H = this.H;
+    H.botAt = 0;
+    const r = H.round;
+    if (H.phase !== 'playing' || !r || r.over || H.resolving) return;
+    if (H.take) {
+      const to = this.botById(H.take.to);
+      // A computer player takes the offer: handing over its hand gets it out of the round
+      if (to && H.botKey === `take:${H.roundNo}:${H.take.until}`) this.takeReply(to, true);
+      return;
+    }
+    const bot = this.botById(r.turn);
+    if (!bot || H.botKey !== `t:${H.roundNo}:${r.turnNo}`) return;
+    const card = E.botCard(r, bot.id, bot.botLevel || 'normal', () => this.ctx.random());
+    // The same play() a person goes through: it checks the turn and that the card is legal
+    if (card) this.play(bot, card);
   }
 
   timer(name: string): void {
@@ -269,6 +363,7 @@ class ThullaRoom implements GameInstance {
       case 'turn': return this.autoPlay(H.turnTimerNo);
       case 'take': return this.takeResolve(false, 'timeout');
       case 'stuck': return this.broadcast();
+      case 'bot': return this.botAct();
       case 'presence': return this.presence();
       default:
     }
@@ -664,6 +759,7 @@ class ThullaRoom implements GameInstance {
     const inGame = (p: Player) => (r && r.seats.includes(p.id)) || H.scores[p.id];
     const players = H.players.filter((p) => !p.left || inGame(p)).map((p) => ({
       id: p.id, name: p.name, color: p.color, online: p.online, left: p.left, isHost: p.isHost, photo: p.photo,
+      bot: Boolean(p.bot), botLevel: p.bot ? p.botLevel || 'normal' : null,
       rating: p.rating ? p.rating.rating : null, ratingProv: Boolean(p.rating?.provisional),
       inRound: Boolean(r && r.seats.includes(p.id)),
       count: r && r.hands[p.id] ? r.hands[p.id].length : null,
@@ -719,14 +815,16 @@ class ThullaRoom implements GameInstance {
     const H = this.H;
     for (const p of H.players) if (p.online && p.conn) this.ctx.send(p.conn, { t: 'state', v: this.buildView(p.id) });
     const host = H.players.find((p) => p.isHost);
-    this.ctx.listing({
+    // Bots take seats but are not people: with nobody real here the room is not offered at all
+    this.ctx.listing(H.players.some((p) => p.online && !p.bot) ? {
       public: H.public,
       status: H.phase === 'lobby' ? 'lobby' : 'play',
       players: H.players.filter((p) => p.online).length,
       max: MAX_PLAYERS,
       host: host ? host.name : '',
       rating: this.listingRating(),
-    });
+    } : null);
+    this.botCheck();
     this.ctx.dirty();
   }
 
@@ -754,7 +852,7 @@ export const thulla: GameModule = {
   },
   restore(ctx, snap) {
     const H = snap as State;
-    for (const p of H.players) if (p.online && (!p.conn || !ctx.lastSeen(p.conn))) Object.assign(p, { online: false, conn: null });
+    for (const p of H.players) if (!p.bot && p.online && (!p.conn || !ctx.lastSeen(p.conn))) Object.assign(p, { online: false, conn: null });
     if (H.phase === 'lobby') H.players = H.players.filter((p) => p.online);
     return new ThullaRoom(ctx, H);
   },

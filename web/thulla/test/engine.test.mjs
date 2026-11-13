@@ -269,4 +269,32 @@ const seats3 = ['a', 'b', 'c'];
   assert.equal(E.giveUp(st, 'b').ok, false);
   console.log('ok give up');
 }
+// Computer players: only legal cards, and the normal one plays by its habits
+{
+  for (let g = 0; g < 300; g++) {
+    const n = 2 + (g % 7);
+    const seats = Array.from({ length: n }, (_, i) => 'p' + i);
+    const st = E.createRound({ seats, dealer: g % n, rnd });
+    let steps = 0;
+    while (!st.over) {
+      assert.ok(++steps < 20000);
+      const c = E.botCard(st, st.turn, g % 2 ? 'easy' : 'normal', rnd);
+      assert.ok(E.legalCards(st, st.turn).includes(c));
+      assert.ok(E.play(st, st.turn, c).ok);
+    }
+  }
+  const st = E.createRound({ seats: seats3, dealer: 2, rnd });
+  st.first = false;
+  const calm = () => 0.5;   // never the "not paying attention" move
+  Object.assign(st, { turn: 'a', ledSuit: 'H', trick: [{ id: 'c', card: 'H10' }] });
+  st.hands.a = ['H5', 'H9', 'H13', 'S3'];
+  assert.equal(E.botCard(st, 'a', 'normal', calm), 'H9', 'dumps its highest card that cannot take the trick');
+  st.trick = [{ id: 'c', card: 'H4' }];
+  assert.equal(E.botCard(st, 'a', 'normal', calm), 'H5', 'every card beats the trick: plays the lowest');
+  st.hands.a = ['D2', 'D12', 'S3'];
+  assert.equal(E.botCard(st, 'a', 'normal', calm), 'D12', 'cannot follow: throws its highest card');
+  Object.assign(st, { trick: [], ledSuit: null });
+  assert.equal(E.botCard(st, 'a', 'normal', calm), 'D2', 'leads low');
+  console.log('ok bot plays only legal cards');
+}
 console.log('ALL ENGINE TESTS PASSED');

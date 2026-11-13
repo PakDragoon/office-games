@@ -615,3 +615,11 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .delete-data .delete-data-btn { border-color: var(--danger); color: var(--danger); }
 .delete-data .delete-data-btn.sure { background: var(--danger); border-color: var(--danger); color: #fff; }
 .delete-data .delete-data-note { margin: 0; text-align: left; }
+
+/* Computer players (shared/bots.js) */
+.bot-tag { margin-left: 0.4rem; padding: 0.05rem 0.35rem; border: 1px solid var(--line); border-radius: 6px; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.07em; color: var(--muted); vertical-align: middle; }
+.bot-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.bot-lvl { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.bot-lvl button { border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 0.8rem; font-weight: 700; padding: 0.3rem 0.65rem; min-height: 32px; cursor: pointer; }
+.bot-lvl button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.bot-rm { border: 0; background: none; color: var(--muted); font: inherit; font-size: 0.82rem; text-decoration: underline; text-underline-offset: 3px; padding: 0.3rem 0.2rem; min-height: 32px; cursor: pointer; }

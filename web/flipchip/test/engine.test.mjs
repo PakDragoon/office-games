@@ -293,5 +293,33 @@ test('levels are stronger in order', () => {
   ok(h >= 7, `hard beats normal (${h}-${nm2})`);
 });
 
+test('room bot: capped normal search only plays legal moves and still beats easy', () => {
+  for (const n of [6, 8, 10]) {
+    const rnd = E.mulberry32(n);
+    let b = E.newBoard(n), who = E.DARK;
+    for (let guard = 0; guard < 200; guard++) {
+      const moves = E.legalMoves(b, n, who);
+      if (!moves.length) { who = E.other(who); if (!E.hasMove(b, n, who)) break; continue; }
+      const m = E.chooseMove(b, n, who, who === E.DARK ? 'normal' : 'easy', { rnd, maxRoot: 3 });
+      ok(moves.includes(m), 'legal');
+      b = E.play(b, n, m, who).board;
+      who = E.other(who);
+    }
+  }
+  let wins = 0;
+  for (let g = 0; g < 12; g++) {
+    const rnd = E.mulberry32(100 + g);
+    const botSide = g % 2 ? E.LIGHT : E.DARK;
+    let b = E.newBoard(8), who = E.DARK;
+    for (let guard = 0; guard < 200; guard++) {
+      if (!E.hasMove(b, 8, who)) { who = E.other(who); if (!E.hasMove(b, 8, who)) break; }
+      b = E.play(b, 8, E.chooseMove(b, 8, who, who === botSide ? 'normal' : 'easy', { rnd, maxRoot: 4 }), who).board;
+      who = E.other(who);
+    }
+    if (E.winnerOf(b) === botSide) wins++;
+  }
+  ok(wins >= 8, `capped normal beats easy (${wins}/12)`);
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 if (failed) process.exit(1);

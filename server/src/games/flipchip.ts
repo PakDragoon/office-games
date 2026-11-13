@@ -2,6 +2,7 @@
 // against the computer still run that code in the browser). Two seats, Dark and Light; everyone
 // else watches. The server checks every move, runs the move timer and keeps the score.
 import * as E from '../../../web/flipchip/js/engine.js';
+import { botDelay } from '../core/bots';
 import type { GameModule, Msg, RatingInfo, RoomCtx } from '../core/game';
 import { type BaseRoom, reportPlayer, restoreSeats, type Seat, SeatRoom } from '../core/seats';
 
@@ -13,6 +14,7 @@ type Side = 1 | 2;
 type Settings = ReturnType<typeof E.cleanSettings>;
 
 interface Player extends Seat {
+  /** A computer player (same as `bot`; the browser's own solo mode uses this name too). Never rated. */
   isBot: boolean;
   games: number;
   wins: number;
@@ -38,17 +40,24 @@ interface Room extends BaseRoom<Player> {
   turnEnd: number;
   result: { reason: string; winner: number; counts: unknown; ids: Record<Side, string | null> } | null;
   matchWinner: string | null;
+  /** A computer player's move is planned for this time (0: none), for this game and move. */
+  botAt?: number;
+  botKey?: string;
 }
+
+/** How many moves a room's computer player weighs up (the CPU budget is tiny on a big board). */
+const ROOT_CAP: Record<number, number> = { 6: 5, 8: 4, 10: 3 };
 
 type LogEntry = { side: number; i?: number; pass?: boolean };
 
 class FlipRoom extends SeatRoom<Player, Room> {
   protected readonly gameId = GAME;
   protected readonly maxPlayers = E.MAX_PLAYERS;
+  protected botSupport = true;
   private rnd = () => this.ctx.random();
 
   protected newSeat(base: Seat): Player {
-    return { ...base, isBot: false, games: 0, wins: 0, draws: 0, matchWins: 0, reactAt: 0 };
+    return { ...base, isBot: Boolean(base.bot), games: 0, wins: 0, draws: 0, matchWins: 0, reactAt: 0 };
   }
 
   protected remap(from: string, to: string): void {
@@ -65,6 +74,23 @@ class FlipRoom extends SeatRoom<Player, Room> {
     if (rejoin || room.status !== 'lobby' || this.seatOf(p.id)) return;
     if (!room.seats[DARK]) room.seats[DARK] = p.id;
     else if (!room.seats[LIGHT]) room.seats[LIGHT] = p.id;
+    else {
+      // Both seats taken: a computer player gives up its seat to a person who just came in
+      const side = ([DARK, LIGHT] as Side[]).find((s) => this.byId(room.seats[s])?.bot);
+      if (!side) return;
+      const bot = this.byId(room.seats[side]) as Player;
+      room.seats[side] = p.id;
+      this.dropBot(bot);
+    }
+  }
+
+  /** A bot takes a free seat (never someone's seat); with both taken it can't be added. */
+  protected seatBot(p: Player): boolean {
+    const room = this.room;
+    const side = ([DARK, LIGHT] as Side[]).find((s) => !room.seats[s] || !this.byId(room.seats[s]));
+    if (!side) return false;
+    room.seats[side] = p.id;
+    return true;
   }
 
   protected afterPresence(): void {
@@ -163,6 +189,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
 
   protected gameTimer(name: string): void {
     if (name === 'turn') this.timeUp();
+    else if (name === 'bot') this.botMove();
   }
 
   private seatsReady(): boolean {
@@ -217,6 +244,35 @@ class FlipRoom extends SeatRoom<Player, Room> {
       }
     }
     this.broadcast();
+  }
+
+  /* ---------- Computer players ---------- */
+
+  protected afterBroadcast(): void {
+    const room = this.room;
+    if (room.status !== 'play' || !room.board) return;
+    const bot = this.byId(room.seats[room.turn as Side]);
+    const key = `${room.game}:${room.moveSeq}`;
+    if (!bot || !bot.bot) return;
+    if (!room.players.some((p) => p.connected && !p.bot)) return;   // nobody here to play against: wait
+    const stale = room.botAt && this.ctx.now() > room.botAt + 4000;   // the timer got lost
+    if (room.botKey === key && !stale) return;
+    const level = bot.botLevel || 'normal';
+    room.botKey = key;
+    room.botAt = this.ctx.now() + botDelay(level, this.rnd, 900, 2400);
+    this.ctx.setTimer('bot', room.botAt);
+  }
+
+  private botMove(): void {
+    const room = this.room;
+    room.botAt = 0;
+    if (room.status !== 'play' || !room.board) return;
+    const bot = this.byId(room.seats[room.turn as Side]);
+    if (!bot || !bot.bot || room.botKey !== `${room.game}:${room.moveSeq}`) return;
+    const level = bot.botLevel || 'normal';
+    const m = E.chooseMove(room.board, room.size, room.turn, level, { rnd: this.rnd, maxRoot: ROOT_CAP[room.size] || 3 });
+    // The same move() a person goes through: it checks the seat, the turn and that the move is legal
+    if (m >= 0) this.move(bot.id, m, room.moveSeq);
   }
 
   // Out of time: a random legal move is played for them
@@ -322,7 +378,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
       t: 'state',
       code: room.code, solo: false, level: null, status: room.status, settings: room.settings, game: room.game, public: room.public,
       players: room.players.map((p) => ({
-        id: p.id, name: p.name, color: p.color, isHost: p.isHost, isBot: false, photo: p.photo,
+        id: p.id, name: p.name, color: p.color, isHost: p.isHost, isBot: Boolean(p.bot), botLevel: p.bot ? p.botLevel || 'normal' : null, photo: p.photo,
         connected: p.connected, away: p.away, games: p.games, wins: p.wins, draws: p.draws, matchWins: p.matchWins,
         rating: p.rating ? p.rating.rating : null, ratingProv: Boolean(p.rating?.provisional), ratingDelta: p.ratingDelta ?? null,
         offlineFor: p.connected ? 0 : now - p.offlineAt,
