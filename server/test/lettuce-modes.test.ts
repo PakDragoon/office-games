@@ -14,6 +14,8 @@ interface RoomShape {
   hard: boolean;
   attempts: number;
   ladderTime: number;
+  ladderReuse: boolean;
+  players: Array<{ guesses: Array<{ word: string; pattern: string }> }>;
   timer: number;
   history: Array<{ word: string | null; winner: string | null }>;
 }
@@ -263,8 +265,8 @@ describe('Lettuce Party Word ladder', () => {
     ann.close();
   });
 
-  it('rejects steps that are not words, change more than one letter, or repeat a word', async () => {
-    const { code, clients: [ann] } = await startRound(['Ann', 'Bob'], { mode: 'ladder' });
+  it('rejects steps that are not words, change more than one letter, or repeat a word (reuse turned off)', async () => {
+    const { code, clients: [ann] } = await startRound(['Ann', 'Bob'], { mode: 'ladder', ladderReuse: false });
     await ladder(code, 'crane', 'irate');
     const reason = async (w: string) => { guess(ann, w); return (await ann.next((m) => m.t === 'invalid')).reason; };
     expect(await reason('crane')).toBe('Change exactly one letter');   // the start word again
@@ -277,6 +279,59 @@ describe('Lettuce Party Word ladder', () => {
     expect(await reason('crate')).toBe('Change exactly one letter');
     const s = await ann.state((x) => me(x, 'Ann').used === 1);
     expect(me(s, 'Ann')).toMatchObject({ used: 1, solved: false });   // rejected steps never count
+  });
+
+  it('Reuse words is on by default: going back to the start word or a middle word is a new step, and finishing still ends the round', async () => {
+    const { code, clients: [ann, bob] } = await startRound(['Ann', 'Bob'], { mode: 'ladder' });
+    expect((await ann.state()).ladderReuse).toBe(true);
+    await ladder(code, 'crane', 'irate');
+    const step = async (w: string) => { guess(ann, w); return ann.next((m) => m.t === 'result' || m.t === 'invalid'); };
+    expect(await step('crate')).toMatchObject({ t: 'result', word: 'crate' });
+    expect(await step('crane')).toMatchObject({ t: 'result', word: 'crane' });   // back to the start word
+    expect(await step('crate')).toMatchObject({ t: 'result', word: 'crate' });   // and forward again
+    expect(await step('grate')).toMatchObject({ t: 'result', word: 'grate' });
+    expect(await step('crate')).toMatchObject({ t: 'result', word: 'crate' });   // back to a middle word
+    expect(await step('crate')).toMatchObject({ t: 'invalid', reason: 'Change exactly one letter' });   // still one letter from where you are
+    expect(await step('qrate')).toMatchObject({ t: 'invalid', reason: 'Not a word' });                  // still a real word
+    expect(await step('irate')).toMatchObject({ t: 'result', word: 'irate' });
+    const s = await bob.state((x) => me(x, 'Ann').solved === true);
+    expect(me(s, 'Ann')).toMatchObject({ used: 6, done: true });                  // every step typed counts
+    ann.send({ t: 'endRound' });
+    await ann.state((x) => x.status === 'ended');
+    expect(await inRoom(code, (r) => r.players[0].guesses.map((g) => g.word))).toEqual(['crate', 'crane', 'crate', 'grate', 'crate', 'irate']);
+  });
+
+  it('the host can turn Reuse words off; a non-host cannot; it is frozen mid-round', async () => {
+    const { clients: [host, bob] } = await room('lettuce-party', ['Ann', 'Bob']);
+    bob.send({ t: 'settings', patch: { ladderReuse: false } });
+    host.send({ t: 'settings', patch: { maxRounds: 3 } });
+    expect((await host.state((x) => x.maxRounds === 3)).ladderReuse).toBe(true);
+    host.send({ t: 'settings', patch: { mode: 'ladder', ladderReuse: 'no' } });          // a bad value is ignored
+    host.send({ t: 'settings', patch: { maxRounds: 5 } });
+    expect((await host.state((x) => x.maxRounds === 5)).ladderReuse).toBe(true);
+    host.send({ t: 'settings', patch: { ladderReuse: false } });
+    await host.state((x) => x.ladderReuse === false);
+    host.send({ t: 'start' });
+    await host.state((x) => x.status === 'playing');
+    host.send({ t: 'settings', patch: { ladderReuse: true } });                          // mid-round: ignored
+    host.send({ t: 'endRound' });
+    expect((await host.state((x) => x.status === 'ended')).ladderReuse).toBe(false);
+  });
+
+  it('with reuse on the 60-step cap still applies', async () => {
+    const { code, clients: [ann] } = await startRound(['Ann', 'Bob'], { mode: 'ladder' });
+    await ladder(code, 'crane', 'irate');
+    await inRoom(code, (r) => { r.players[0].guesses = Array.from({ length: 60 }, (_, i) => ({ word: i % 2 ? 'crane' : 'crate', pattern: '' })); });
+    guess(ann, 'crane');                       // last step was crane (index 59), so go to crate
+    expect((await ann.next((m) => m.t === 'invalid')).reason).toBe('Change exactly one letter');
+    guess(ann, 'crate');
+    expect((await ann.next((m) => m.t === 'invalid')).reason).toBe('Too many steps');
+  });
+
+  it('a room saved before Reuse words existed gets it switched on', () => {
+    const snap = { code: 'ABCD', status: 'lobby', game: 0, players: [], mode: 'ladder', strict: true, hard: false, winRule: 'first', maxRounds: 0, timer: 0, ladderTime: 120, round: 0, matchRound: 0, stats: {}, history: [], used: [], word: null, lastWord: null, startedAt: 0 };
+    lettuce.restore({ now: () => 1, lastSeen: () => 0 } as unknown as RoomCtx, snap);
+    expect(snap).toMatchObject({ mode: 'ladder', ladderTime: 120, ladderReuse: true });
   });
 
   it('blocked words are not allowed as steps, because the par was worked out without them', async () => {
@@ -349,7 +404,7 @@ describe('Lettuce Party Word ladder', () => {
   });
 
   it('refresh mid-round gives your ladder back', async () => {
-    const { code, clients: [ann, bob] } = await startRound(['Ann', 'Bob'], { mode: 'ladder' });
+    const { code, clients: [ann, bob] } = await startRound(['Ann', 'Bob'], { mode: 'ladder', ladderReuse: false });
     await ladder(code, 'crane', 'irate');
     guess(bob, 'crate');
     await bob.next((m) => m.t === 'result');

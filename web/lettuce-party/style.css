@@ -401,6 +401,12 @@ h1, h2 { line-height: 1.15; margin: 0; }
 @media (max-width: 420px) {
   #game-round { display: none; }
   .bar-code { margin-right: auto; }
+  /* Room code, Scores, End round, clock, settings and the leave ✕ must all fit a 360 px phone on one line */
+  .bar-word { display: none; }
+  .game-bar { gap: 0.4rem; padding: 0.5rem 0.6rem; }
+  .game-bar .btn.small { padding: 0.4rem 0.5rem; font-size: 0.85rem; white-space: nowrap; }
+  .clock { font-size: 1rem; min-width: 0; }
+  .game-bar .icon-btn { padding: 0.35rem 0.4rem; }
 }
 @media (max-height: 700px) and (max-width: 760px) {
   .key { height: 44px; }
@@ -677,3 +683,7 @@ button.tile:not(:disabled)::before { content: ''; position: absolute; inset: -3p
 .results-actions .sheet-row .btn { padding: 0.6rem 0.6rem; }
 .results-actions .sheet-links { gap: 0.5rem 1rem; }
 .results-actions .sheet-links .btn { padding: 0.2rem 0.5rem; }
+
+/* The ✕ that leaves the room (same job as the other games' quit button) */
+.icon-btn svg { width: 1.1rem; height: 1.1rem; display: block; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; }
+#quit-btn { display: inline-grid; place-items: center; flex: none; }

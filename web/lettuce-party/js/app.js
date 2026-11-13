@@ -427,7 +427,7 @@ function drawLadder() {
   }
   const steps = S.guesses.map((g) => g.word);
   const reached = steps[steps.length - 1] === lad.target;
-  note.textContent = `Par ${lad.par}: ${lad.par} step${lad.par === 1 ? '' : 's'} is the fewest. You: ${steps.length} step${steps.length === 1 ? '' : 's'}.`;
+  note.textContent = `Par ${lad.par}: ${lad.par} step${lad.par === 1 ? '' : 's'} is the fewest. You: ${steps.length} step${steps.length === 1 ? '' : 's'}. ${S.view.ladderReuse !== false ? 'You can go back to an earlier word.' : 'Words can’t be reused.'}`;
   board.appendChild(ladderRow(lad.start, 'start', lad.target, 'Start'));
   const m = me();
   const drafting = !reached && S.view?.status === 'playing' && Boolean(m) && !m.done;
@@ -833,6 +833,8 @@ function renderLobby(v) {
     $('rule-fewest-text').textContent = ladder ? 'Fewest steps' : 'Fewest guesses';
     $('rounds-select').value = String(v.maxRounds);
     $('attempts-field').hidden = ladder;
+    $('reuse-field').hidden = !ladder;
+    $('reuse-select').value = String(v.ladderReuse !== false);
     $('attempts-select').value = String(v.attempts);
     $('strict-label').hidden = ladder;
     // Hard mode needs revealed hints, which only Classic has
@@ -869,7 +871,8 @@ function settingsSummary(v) {
   const limit = E.effectiveTimer(v);
   const timer = limit ? `${limit / 60} minute${limit === 60 ? '' : 's'} per round` : 'no timer';
   const attempts = v.mode === 'ladder' ? '' : `, ${v.attempts} guesses`;
-  return `${MODE_NAMES[v.mode] || 'Classic'}. ${winRules(v)[v.winRule] || ''} ${rounds}${attempts}, ${timer}.${v.hard ? ' Hard mode.' : ''}`;
+  const reuse = v.mode === 'ladder' ? (v.ladderReuse !== false ? ' Going back to earlier words is allowed.' : ' Words can’t be reused.') : '';
+  return `${MODE_NAMES[v.mode] || 'Classic'}. ${winRules(v)[v.winRule] || ''} ${rounds}${attempts}, ${timer}.${v.hard ? ' Hard mode.' : ''}${reuse}`;
 }
 
 /* =========================================================
@@ -1556,6 +1559,11 @@ for (const r of document.querySelectorAll('input[name="mode"]')) {
 }
 
 $('leave-btn').addEventListener('click', () => leaveRoom());
+// The ✕ in the game bar, like the other games: no confirm, same leave path as the lobby and results links
+$('quit-btn').addEventListener('click', () => leaveRoom());
+$('reuse-select').addEventListener('change', (e) => {
+  if (S.isHost) hostSettings({ ladderReuse: e.target.value === 'true' });
+});
 
 $('see-boards-btn').addEventListener('click', () => {
   S.resultsClosedRound = S.view?.round || 0;
