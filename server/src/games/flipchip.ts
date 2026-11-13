@@ -46,7 +46,7 @@ interface Room extends BaseRoom<Player> {
 }
 
 /** How many moves a room's computer player weighs up (the CPU budget is tiny on a big board). */
-const ROOT_CAP: Record<number, number> = { 6: 5, 8: 4, 10: 3 };
+const ROOT_CAP: Record<number, number> = { 6: 5, 8: 4, 10: 2 };
 
 type LogEntry = { side: number; i?: number; pass?: boolean };
 
