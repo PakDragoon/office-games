@@ -102,9 +102,15 @@
     .body { display: grid; gap: 0.6rem; align-content: start; padding: 1.1rem 1.2rem 1.25rem; }
     .title { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
     .title h2 { margin: 0; font-size: 1.45rem; font-weight: 800; letter-spacing: -0.02em; }
-    .new {
+    .new, .beta {
       font-size: 0.75rem; font-weight: 800; letter-spacing: 0.04em; color: var(--bg); background: var(--liar);
       border-radius: 999px; padding: 0.12rem 0.55rem 0.15rem;
+    }
+    /* BETA: a new game still being tested with real players. A badge on the card's top-right corner, over the
+       picture (the card link is position: relative), so it reads differently from the NEW pill by the title. */
+    .beta {
+      position: absolute; top: 0.7rem; right: 0.7rem; z-index: 1;
+      color: var(--ink); background: var(--surface); box-shadow: 0 0 0 1.5px var(--ink), 0 2px 6px rgba(0, 0, 0, 0.18);
     }
     .body p { margin: 0; color: var(--muted); }
     .facts { list-style: none; margin: 0.15rem 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.35rem; }
@@ -246,7 +252,7 @@
 </g><g class="band ping p1"><path d="M110.2 54.9C117.2 80.6 117.2 143.4 110.2 169.1" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="7" stroke-linecap="round"/><path d="M110.2 54.9C117.2 80.6 117.2 143.4 110.2 169.1" fill="none" stroke="#e8453c" stroke-width="4.6" stroke-linecap="round"/><path d="M110.2 54.9C117.2 80.6 117.2 143.4 110.2 169.1" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2" stroke-linecap="round" transform="translate(-1 0)"/></g><g class="band ping p2"><path d="M116.7 58.3C124.7 82.5 124.7 141.5 116.7 165.7" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="7" stroke-linecap="round"/><path d="M116.7 58.3C124.7 82.5 124.7 141.5 116.7 165.7" fill="none" stroke="#f2b630" stroke-width="4.6" stroke-linecap="round"/><path d="M116.7 58.3C124.7 82.5 124.7 141.5 116.7 165.7" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2" stroke-linecap="round" transform="translate(-1 0)"/></g><g class="band ping p3"><path d="M123.3 58.3C130.3 82.5 130.3 141.5 123.3 165.7" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="7" stroke-linecap="round"/><path d="M123.3 58.3C130.3 82.5 130.3 141.5 123.3 165.7" fill="none" stroke="#3d7fe0" stroke-width="4.6" stroke-linecap="round"/><path d="M123.3 58.3C130.3 82.5 130.3 141.5 123.3 165.7" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2" stroke-linecap="round" transform="translate(-1 0)"/></g><g class="band ping p4"><path d="M129.8 54.9C137.8 80.6 137.8 143.4 129.8 169.1" fill="none" stroke="rgba(0,0,0,.35)" stroke-width="7" stroke-linecap="round"/><path d="M129.8 54.9C137.8 80.6 137.8 143.4 129.8 169.1" fill="none" stroke="#9b5de5" stroke-width="4.6" stroke-linecap="round"/><path d="M129.8 54.9C137.8 80.6 137.8 143.4 129.8 169.1" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="1.2" stroke-linecap="round" transform="translate(-1 0)"/></g></g></g></svg>
         </div>
         <div class="body">
-          <div class="title"><h2>Melon Burst</h2><span class="new">NEW</span></div>
+          <div class="title"><h2>Melon Burst</h2></div>
           <p>Guess the word letter by letter. Every wrong letter snaps another rubber band round your watermelon, and one too many makes it burst.</p>
           <ul class="facts"><li>1 to 8 players</li><li>Race, or pick words 1v1 / 2v2</li><li>Daily word and practice</li></ul>
           <span class="play">Play Melon Burst</span>
@@ -264,7 +270,7 @@
           </div>
         </div>
         <div class="body">
-          <div class="title"><h2>Flipchip</h2><span class="new">NEW</span></div>
+          <div class="title"><h2>Flipchip</h2></div>
           <p>Trap a line of your opponent’s chips between two of yours and they all flip to your colour. Most chips when the board fills up wins.</p>
           <ul class="facts"><li>2 players, others watch</li><li>Board game</li><li>Play the computer too</li></ul>
           <span class="play">Play Flipchip</span>
@@ -281,7 +287,7 @@
           </div>
         </div>
         <div class="body">
-          <div class="title"><h2>Rotten</h2><span class="new">NEW</span></div>
+          <div class="title"><h2>Rotten</h2></div>
           <p>Type a word with the letters to pass the banana on before it splats. Nobody knows when it will go off, so be quick. Last one standing wins.</p>
           <ul class="facts"><li>2 to 8 players</li><li>Words, English or Roman Urdu</li><li>Daily puzzle and practice</li></ul>
           <span class="play">Play Rotten</span>
@@ -297,7 +303,7 @@
           </div>
         </div>
         <div class="body">
-          <div class="title"><h2>The Liar</h2><span class="new">NEW</span></div>
+          <div class="title"><h2>The Liar</h2></div>
           <p>Everyone draws the same secret word, one line at a time. One of you doesn’t know it and is bluffing with every stroke. Find the liar.</p>
           <ul class="facts"><li>3 to 8 players</li><li>Drawing and bluffing</li><li>About 5 minutes a game</li></ul>
           <span class="play">Play The Liar</span>
