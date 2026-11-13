@@ -1,0 +1,176 @@
+Accountant
+Actor|actress
+Air Traffic Controller
+Archaeologist
+Architect
+Artist|painter
+Astronaut
+Athlete
+Author|writer
+Baker
+Bank Teller|teller
+Banker
+Barber
+Barista
+Bartender|barman
+Biologist
+Blacksmith
+Bodyguard
+Bookkeeper
+Builder|bricklayer
+Bus Conductor|conductor
+Bus Driver
+Bus Mechanic
+Butcher
+Camera Operator|cameraman
+Car Salesman
+Cardiologist|heart doctor
+Caretaker
+Carpenter
+Cartographer|mapmaker
+Cartoonist
+Cashier
+Chef|cook
+Chemist
+Chiropractor
+Choreographer
+Cleaner|janitor
+Clown
+Coach
+Coast Guard
+Cobbler|shoemaker
+Comedian
+Computer Programmer|programmer|software developer|developer|coder
+Construction Worker
+Counselor|counsellor
+Crane Operator
+Dairy Farmer
+Dancer
+Dentist
+Dermatologist|skin doctor
+Designer
+Detective
+Dietitian|nutritionist
+Diver
+Doctor|physician
+Dog Walker
+Driver
+Drummer
+Economist
+Editor
+Electrician
+Engineer
+Estate Agent|real estate agent|realtor
+Farmer
+Fashion Designer
+Film Director|director|movie director
+Firefighter|fireman
+Fisherman|fisher
+Fitness Trainer|personal trainer
+Flight Attendant|air hostess|stewardess|cabin crew
+Florist
+Football Player|footballer|soccer player
+Forklift Driver
+Game Developer
+Gardener
+Geologist
+Glassblower
+Graphic Designer
+Hairdresser|hair stylist
+Historian
+Hotel Manager
+Housekeeper
+IT Support|tech support
+Interior Designer
+Interpreter
+Inventor
+Jeweler|jeweller
+Journalist|reporter
+Judge
+Lawyer|attorney|advocate
+Librarian
+Lifeguard
+Locksmith
+Lumberjack
+Magician
+Mail Carrier|postman|mailman|postal worker
+Manager
+Marine Biologist
+Mathematician
+Mechanic
+Meteorologist|weather presenter|weatherman
+Midwife
+Miner
+Model
+Musician
+Nanny
+News Anchor|newsreader
+Newspaper Seller
+Nurse
+Optician
+Orchestra Conductor
+Painter and Decorator|house painter
+Paramedic
+Park Ranger|ranger
+Pastry Chef
+Pediatrician|paediatrician|children's doctor
+Pet Groomer
+Pharmacist
+Photographer
+Physicist
+Piano Teacher
+Pilot
+Pizza Delivery Driver|delivery driver
+Plumber
+Poet
+Police Officer|policeman|cop
+Potter
+Producer
+Professor
+Psychologist
+Radio Host|dj
+Radiologist
+Receptionist
+Referee|umpire
+Researcher
+Rickshaw Driver
+Sailor
+Salesperson|salesman|saleswoman
+Scientist
+Sculptor
+Secretary
+Security Guard
+Shepherd
+Shopkeeper
+Singer
+Soldier
+Sound Engineer
+Statistician
+Stockbroker|trader
+Street Vendor
+Stunt Double
+Surgeon
+Surveyor
+Tailor
+Tattoo Artist
+Taxi Driver|cab driver
+Teacher
+Teaching Assistant
+Therapist
+Tour Guide
+Train Driver
+Translator
+Travel Agent
+Truck Driver|trucker
+Tutor
+Veterinarian|vet
+Veterinary Nurse
+Voice Actor
+Waiter|waitress|server
+Web Developer
+Wedding Planner
+Welder
+Yoga Instructor
+YouTuber
+Zookeeper
+Zoologist

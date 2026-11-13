@@ -33,6 +33,8 @@ export interface GameReport {
     stats: Record<string, number>;
     /** Numbers where the stat keeps the highest value seen (longest word...). */
     max?: Record<string, number>;
+    /** Numbers where the stat keeps the lowest value seen (fewest questions...). List them in BEST_STATS as 'min'. */
+    min?: Record<string, number>;
     /**
      * Running streaks: name -> did this game continue it. A hit adds 1, a miss resets it to 0, and
      * `best<Name>` (bestStreak for "streak") keeps the highest value the streak ever reached.

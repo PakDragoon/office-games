@@ -1,0 +1,209 @@
+Alarm Clock
+Ambulance
+Anchor
+Apron
+Axe
+Backpack|rucksack|school bag
+Balloon
+Bandage|band-aid
+Basket
+Basketball
+Bathtub|bath
+Battery
+Bed
+Bell
+Belt
+Bench
+Bicycle|bike
+Binoculars
+Blanket
+Blender
+Book
+Boot|boots
+Bottle
+Bowl
+Box
+Bracelet
+Broom
+Brush
+Bucket
+Bulb|light bulb
+Bus
+Button
+Calculator
+Calendar
+Camera
+Candle
+Cap|baseball cap
+Car
+Carpet|rug
+Chair
+Chalk
+Charger|phone charger
+Clock
+Cloud
+Coat|jacket
+Comb
+Compass
+Computer Mouse|mouse
+Computer|pc
+Cooler
+Couch|sofa
+Crayon
+Crown
+Cup|mug
+Curtain
+Cushion|pillow
+Desk
+Diary
+Dice
+Dishwasher
+Doll
+Door
+Drill
+Drum
+Dustbin|trash can|rubbish bin
+Earphones|headphones
+Eraser|rubber
+Fan|ceiling fan
+Fence
+Fire Extinguisher
+Flag
+Flashlight|torch
+Flute
+Fork
+Fridge|refrigerator
+Frying Pan|pan
+Gate
+Glasses|spectacles
+Gloves
+Glue
+Guitar
+Hairdryer|hair dryer
+Hammer
+Handbag|ladies bag
+Hanger|coat hanger
+Hat
+Helmet
+Hose
+Iron|clothes iron
+Jar
+Jeans
+Kettle
+Key
+Keyboard
+Kite
+Knife
+Ladder
+Lamp
+Laptop
+Lawnmower|lawn mower
+Letter|envelope
+Lighter
+Lock|padlock
+Magnet
+Map
+Marker
+Mask
+Matchbox|matches
+Mattress
+Microphone|mic
+Microwave
+Mirror
+Mobile Phone|phone|smartphone|cell phone
+Monitor|screen
+Mop
+Motorcycle|motorbike
+Nail
+Necklace
+Needle
+Notebook
+Oven
+Paintbrush
+Paper
+Paperclip
+Parachute
+Passport
+Pen
+Pencil
+Pencil Sharpener|sharpener
+Piano
+Plate
+Pliers
+Plug
+Pot|cooking pot
+Printer
+Radio
+Rain Boots|gumboots
+Raincoat
+Razor
+Remote Control|remote|tv remote
+Ring
+Rope
+Rubber Duck
+Ruler|scale
+Safety Pin
+Saw
+Scarf
+Scissors
+Screwdriver
+Shampoo
+Shirt|t-shirt
+Shoe|shoes|sneakers
+Shopping Cart|trolley
+Shovel|spade
+Shower
+Sink
+Skateboard
+Slippers|flip flops
+Soap
+Socks|sock
+Spoon
+Stamp
+Stapler
+Stethoscope
+Stove|cooker
+Suitcase|luggage
+Sunglasses
+Sweater|jumper
+Swing
+Syringe
+Table
+Tape
+Tea Bag
+Teapot
+Teddy Bear
+Telephone|landline
+Telescope
+Tent
+Thermometer
+Thread
+Ticket
+Tie|necktie
+Tissue|tissues
+Toaster
+Toilet
+Toothbrush
+Toothpaste
+Towel
+Toy Car
+Tractor
+Train
+Tray
+Tree House
+Trophy
+Trumpet
+Umbrella
+Vacuum Cleaner|hoover|vacuum
+Vase
+Violin
+Wallet|purse
+Washing Machine
+Watch|wristwatch
+Water Bottle
+Wheelbarrow
+Wheelchair
+Whistle
+Windmill
+Window
+Zip|zipper

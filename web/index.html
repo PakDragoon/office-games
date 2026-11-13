@@ -206,6 +206,18 @@
     @keyframes ff-blink { 50% { opacity: 0; } }
     @keyframes ff-run { 0% { left: 0; } 80%, 100% { left: calc(100% - 24px); } }
     @media (prefers-reduced-motion: reduce) { .ff .txt .typed { animation: none; max-width: 12em; } .ff .lane b { animation: none; left: 55%; } .ff .txt .caret { animation: none; } }
+    /* Forehead: a head with a sticky note on it */
+    .fh { --note: #ffe98a; --note-edge: #e8cf55; --note-ink: #2b2500; }
+    @media (prefers-color-scheme: dark) { .fh { --note: #f6dd6a; --note-edge: #cdb23e; } }
+    .fh svg { width: 150px; height: auto; overflow: visible; }
+    .fh .head { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+    .fh .eye { fill: var(--ink); }
+    .fh .note-fill { fill: var(--note); stroke: var(--note-edge); stroke-width: 1.2; stroke-linejoin: round; }
+    .fh .note-fold { fill: var(--note-edge); }
+    .fh .note-ink { fill: none; stroke: var(--note-ink); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+    .fh .note-g { transform-box: view-box; transform-origin: 48px 30px; animation: fh-wobble 4.2s ease-in-out infinite; }
+    @keyframes fh-wobble { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(-3deg); } }
+    @media (prefers-reduced-motion: reduce) { .fh .note-g { animation: none; transform: rotate(-7deg); } }
   </style>
 </head>
 <body>
@@ -356,6 +368,29 @@
           <p>Race your friends to the same secret five-letter word. Watch their colours fill in live, never their letters.</p>
           <ul class="facts"><li>Up to 5 players</li><li>Words</li><li>A few minutes a round</li></ul>
           <span class="play">Play Lettuce Party</span>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="game" href="/forehead/">
+        <div class="art fh" aria-hidden="true">
+          <svg viewBox="0 0 96 80">
+            <path class="head" d="M20 34C20 16 32 6 48 6s28 10 28 28v24c0 9-12 16-28 16s-28-7-28-16z"/>
+            <path class="head" d="M20 44c-6-1-8 3-7 7s5 6 8 5M76 44c6-1 8 3 7 7s-5 6-8 5"/>
+            <circle class="eye" cx="38" cy="54" r="2.6"/><circle class="eye" cx="58" cy="54" r="2.6"/>
+            <path class="head" d="M40 63c5 4 11 4 16 0"/>
+            <g class="note-g">
+              <path class="note-fill" d="M26 12h44v28l-9 9H26z"/>
+              <path class="note-fold" d="M70 40h-9v9z"/>
+              <path class="note-ink" d="M42 23.5c0-3.6 2.6-5.5 6-5.5s6 1.9 6 5c0 4.6-6 4.2-6 8.6M48 37.2v.2"/>
+            </g>
+          </svg>
+        </div>
+        <div class="body">
+          <div class="title"><h2>Forehead</h2><span class="beta">BETA</span></div>
+          <p>Everyone has a secret card stuck on their forehead that everyone else can read. Ask yes-or-no questions and work out what yours says.</p>
+          <ul class="facts"><li>2 to 8 players</li><li>Questions and guessing</li><li>About 8 minutes a round</li></ul>
+          <span class="play">Play Forehead</span>
         </div>
       </a>
     </li>

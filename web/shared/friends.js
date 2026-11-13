@@ -15,6 +15,7 @@ const GAME = location.pathname.split('/').filter(Boolean)[0] || '';
 const GAME_NAMES = {
   'fast-fingers': 'Fast Fingers', melonburst: 'Melon Burst', flipchip: 'Flipchip', rotten: 'Rotten', 'the-liar': 'The Liar',
   guesstimate: 'Guesstimate', thulla: 'Thulla', 'lettuce-party': 'Lettuce Party',
+  forehead: 'Forehead',
 };
 const gameName = (id) => GAME_NAMES[id] || id;
 
