@@ -1,0 +1,194 @@
+Almond
+Apple
+Apricot
+Avocado
+Bacon
+Bagel
+Baklava
+Banana
+Barbecue|bbq
+Biryani
+Biscuit|cookie
+Blueberry
+Bread
+Broccoli
+Brownie
+Brownie Sundae
+Burger|hamburger
+Burrito
+Butter
+Butter Chicken
+Cabbage
+Caesar Salad
+Cake
+Carrot
+Carrot Cake
+Cashew
+Cauliflower
+Celery
+Cereal|cornflakes
+Cheese
+Cheeseburger
+Cheesecake
+Cherry
+Chicken Karahi|karahi
+Chicken Nuggets|nuggets
+Chicken Wings|wings
+Chickpeas|chana
+Chili|chilli
+Chocolate
+Chocolate Chip Cookie
+Chow Mein
+Churros
+Cinnamon
+Coconut
+Coffee
+Cornbread
+Corn|sweetcorn
+Cotton Candy|candy floss
+Crab Cake
+Cream
+Croissant
+Cucumber
+Cupcake
+Curry
+Custard
+Date|dates
+Donut|doughnut
+Dumpling
+Eggplant|aubergine|brinjal
+Egg|eggs
+Falafel
+Fish and Chips
+French Fries|fries|chips
+Fried Rice
+Fruit Salad
+Garlic
+Garlic Bread
+Gelato
+Ginger
+Gnocchi
+Grapes|grape
+Grilled Cheese
+Guava
+Gulab Jamun
+Halwa
+Ham
+Honey
+Hot Chocolate
+Hot Dog
+Hummus
+Ice Cream
+Jalebi
+Jam
+Jelly
+Kebab
+Ketchup
+Kheer
+Kiwi
+Kofta
+Kulfi
+Lamb Chop
+Lasagna|lasagne
+Lassi
+Lemon
+Lemonade
+Lentils|daal|dal
+Lettuce
+Lime
+Lollipop
+Mac and Cheese|macaroni and cheese
+Mango
+Maple Syrup
+Marshmallow
+Mayonnaise|mayo
+Meatball
+Melon
+Milk
+Milkshake
+Mushroom
+Mustard
+Naan
+Nachos
+Nihari
+Noodles
+Nutella
+Oatmeal|porridge
+Olive
+Omelette|omelet
+Onion
+Orange
+Oreo
+Pakora
+Pancake
+Papaya
+Paratha
+Pasta
+Peach
+Peach Cobbler
+Peanut
+Peanut Butter
+Pear
+Peas
+Pepper
+Pepperoni
+Pho
+Pickle
+Pie
+Pineapple
+Pistachio
+Pizza
+Plum
+Pomegranate
+Popcorn
+Pork
+Potato
+Pretzel
+Pudding
+Pumpkin
+Quesadilla
+Raisin
+Ramen
+Raspberry
+Ravioli
+Rice
+Risotto
+Roti|chapati
+Salad
+Salami
+Salt
+Samosa
+Sandwich
+Sausage
+Seekh Kebab
+Shawarma
+Smoothie
+Soup
+Spaghetti
+Spinach
+Spring Roll
+Sprinkles
+Steak
+Strawberry
+Sugar
+Sushi
+Taco
+Tea|chai
+Tikka
+Tiramisu
+Toast
+Tofu
+Tomato
+Tortilla
+Trifle
+Truffle
+Tuna Salad
+Turkey Sandwich
+Vanilla
+Vermicelli|seviyan
+Waffle
+Walnut
+Watermelon
+Wrap
+Yogurt|yoghurt|dahi
+Zucchini|courgette

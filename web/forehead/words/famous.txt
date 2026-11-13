@@ -1,0 +1,219 @@
+A. R. Rahman|ar rahman|rahman
+Aamir Khan|aamir
+Abdul Qadir
+Abdul Sattar Edhi|edhi|sattar edhi
+Abida Parveen
+Abraham Lincoln|lincoln
+Ada Lovelace|lovelace
+Adele
+Agatha Christie|christie
+Alan Turing|turing
+Albert Einstein|einstein
+Alexander Fleming|fleming
+Alexander Graham Bell|graham bell
+Ali Zafar
+Allama Iqbal|iqbal|muhammad iqbal
+Amelia Earhart|earhart
+Amitabh Bachchan|bachchan|big b
+Angelina Jolie|jolie
+Anne Hathaway
+Anthony Hopkins|hopkins
+Archimedes
+Ariana Grande
+Arijit Singh|arijit
+Aristotle
+Atif Aslam
+Audrey Hepburn|hepburn
+Ayrton Senna|senna
+Babar Azam|babar
+Beethoven|ludwig van beethoven
+Ben Stokes|stokes
+Beyonce|beyoncé
+Billie Eilish|eilish
+Bob Marley|marley
+Bob Ross
+Brad Pitt
+Brian Lara|lara
+Brian May
+Bruce Lee
+Bruno Mars
+Buzz Aldrin|aldrin
+Carl Sagan|sagan
+Celine Dion|dion
+Chadwick Boseman|boseman
+Charles Darwin|darwin
+Charles Dickens|dickens
+Charlie Chaplin|chaplin
+Chris Evans
+Chris Hemsworth|hemsworth
+Claude Monet|monet
+Cleopatra
+Cristiano Ronaldo|ronaldo|cr7
+Daniel Craig
+Daniel Radcliffe|radcliffe
+David Attenborough|attenborough
+David Beckham|beckham
+Dean Martin
+Deepika Padukone|deepika
+Denzel Washington|denzel
+Diana|princess diana|lady diana
+Dilip Kumar
+Dolly Parton|dolly
+Don Bradman|bradman
+Dua Lipa
+Dwayne Johnson|the rock|rock
+Ed Sheeran|sheeran
+Eddie Murphy
+Elton John
+Elvis Presley|elvis
+Emily Blunt
+Emma Stone
+Emma Watson
+Eric Clapton|clapton
+Fakhar Zaman
+Fawad Khan
+Florence Nightingale|nightingale
+Frank Sinatra|sinatra
+Freddie Mercury|mercury
+Gal Gadot|gadot
+Galileo|galileo galilei
+Ghalib|mirza ghalib
+Gordon Ramsay|ramsay
+Hanif Mohammad
+Harrison Ford
+Harry Styles
+Hrithik Roshan|hrithik
+Hugh Jackman|jackman
+Ian McKellen|mckellen
+Idris Elba|elba
+Inzamam-ul-Haq|inzamam|inzi
+Isaac Newton|newton
+Jackie Chan
+Jahangir Khan
+Jane Austen|austen
+Jane Goodall|goodall
+Jansher Khan
+Javed Miandad|miandad
+Jennifer Lawrence
+Jim Carrey|carrey
+Jimi Hendrix|hendrix
+Joe Root|root
+Johann Sebastian Bach|bach
+John Lennon|lennon
+Johnny Cash
+Judi Dench|dench
+Julia Roberts
+Justin Bieber|bieber
+Kane Williamson|williamson
+Katy Perry
+Keanu Reeves|keanu
+Kishore Kumar
+Kylian Mbappe|mbappe|mbappé
+Lady Gaga|gaga
+Lata Mangeshkar|mangeshkar|lata
+Lebron James|lebron
+Leonardo DiCaprio|dicaprio
+Leonardo da Vinci|da vinci|leonardo|davinci
+Lewis Hamilton|hamilton
+Lionel Messi|messi|leo messi
+Louis Armstrong
+Louis Pasteur|pasteur
+Luciano Pavarotti|pavarotti
+Madonna
+Mahatma Gandhi|gandhi
+Mahendra Singh Dhoni|ms dhoni|dhoni|mahi
+Mahira Khan
+Margot Robbie
+Marie Curie|curie|madame curie
+Marilyn Monroe|monroe
+Mark Ruffalo|ruffalo
+Mark Twain|twain
+Martin Luther King|mlk|martin luther king jr
+Mehdi Hassan
+Meryl Streep|streep
+Michael Jordan|jordan
+Michael Phelps|phelps
+Michael Schumacher|schumacher
+Michelangelo
+Mohamed Salah|salah
+Mohammad Hafeez|hafeez
+Moin Khan
+Morgan Freeman
+Mozart|wolfgang amadeus mozart
+Muhammad Ali Jinnah|jinnah|quaid e azam
+Muhammad Ali|cassius clay
+Muhammad Rafi|rafi|mohammed rafi
+Muhammad Rizwan|rizwan
+Mushtaq Ahmed
+Naseem Shah
+Neil Armstrong|armstrong
+Neil deGrasse Tyson|tyson
+Neymar|neymar jr
+Nikola Tesla|tesla
+Noor Jehan|noor jahan|malika e tarannum
+Nusrat Fateh Ali Khan|nusrat|nfak
+Oprah Winfrey|oprah
+Pablo Picasso|picasso
+Paul McCartney|mccartney
+Pele|pelé
+Prince
+Priyanka Chopra|priyanka
+Pythagoras
+Queen Elizabeth|queen elizabeth ii|queen elizabeth the second
+Rafael Nadal|nadal
+Rahat Fateh Ali Khan|rahat
+Rashid Khan
+Ricky Ponting|ponting
+Rihanna
+Ringo Starr
+Robert Downey Jr|robert downey|rdj|downey
+Robin Williams
+Roger Federer|federer
+Roger Moore
+Rowan Atkinson|mr bean|atkinson
+Rumi|jalaluddin rumi
+Ryan Reynolds|reynolds
+Sachin Tendulkar|tendulkar|sachin
+Saeed Anwar
+Samuel L Jackson|samuel jackson
+Sandra Bullock
+Saqlain Mushtaq|saqlain
+Sarfraz Ahmed|sarfaraz
+Scarlett Johansson|johansson
+Sean Connery|connery
+Selena Gomez
+Serena Williams|serena
+Shah Rukh Khan|srk|shahrukh khan|shahrukh
+Shaheen Afridi|shaheen
+Shahid Afridi|afridi|boom boom
+Shakira
+Shaquille O'Neal|shaq
+Shawn Mendes
+Simone Biles|biles
+Sonu Nigam
+Sridevi
+Stephen Curry|steph curry|curry
+Stephen Hawking|hawking
+Steve Irwin|irwin
+Stevie Wonder
+Sylvester Stallone|stallone|rocky
+Taylor Swift|swift
+The Beatles|beatles
+Thomas Edison|edison
+Tina Turner
+Tom Brady|brady
+Tom Hanks|hanks
+Tom Holland
+Usain Bolt|bolt
+Vincent van Gogh|van gogh|vangogh
+Virat Kohli|kohli
+Waqar Younis|waqar
+Wasim Akram|wasim
+Whitney Houston
+William Shakespeare|shakespeare
+Wright Brothers
+Younis Khan
+Yuri Gagarin|gagarin
+Zaheer Abbas
+Zendaya
+Zinedine Zidane|zidane

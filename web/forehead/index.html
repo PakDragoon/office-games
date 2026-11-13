@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Everyone has a secret card stuck on their forehead that everyone else can see. Ask yes-or-no questions and work out what yours says.">
+  <title>Forehead</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><g transform='rotate(-8 16 15)'><rect x='6' y='7' width='20' height='17' rx='2' fill='%23ffe98a'/><path d='M12.5 13.2c0-2 1.4-3 3.5-3s3.5 1 3.5 2.8c0 2.6-3.4 2.4-3.4 5M16 21.2v.2' fill='none' stroke='%232b2500' stroke-width='2' stroke-linecap='round'/></g></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Forehead">
+        <svg class="logo-mark" viewBox="0 0 96 80" aria-hidden="true">
+          <path class="head" d="M20 34C20 16 32 6 48 6s28 10 28 28v24c0 9-12 16-28 16s-28-7-28-16z"/>
+          <path class="head" d="M20 44c-6-1-8 3-7 7s5 6 8 5M76 44c6-1 8 3 7 7s-5 6-8 5"/>
+          <circle class="eye" cx="38" cy="54" r="2.6"/><circle class="eye" cx="58" cy="54" r="2.6"/>
+          <path class="head" d="M40 63c5 4 11 4 16 0"/>
+          <g class="logo-note" transform="rotate(-7 48 30)">
+            <path class="note-fill" d="M26 12h44v28l-9 9H26z"/>
+            <path class="note-fold" d="M70 40h-9v9z"/>
+            <path class="note-ink" d="M42 23.5c0-3.6 2.6-5.5 6-5.5s6 1.9 6 5c0 4.6-6 4.2-6 8.6M48 37.2v.2"/>
+          </g>
+        </svg>
+        <span class="logo-word" aria-hidden="true">Forehead</span>
+        <span class="logo-sub" aria-hidden="true">everyone can see your card but you</span>
+      </h1>
+      <p class="lede">Everyone gets a secret card stuck on their forehead. Everyone else can read it, you can’t. Ask yes-or-no questions, get answers, and work out what yours says.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Play now</h2>
+        <p>Jump into a public game with other players, or open a private room for friends.</p>
+        <button class="btn primary" id="quick-btn" type="button">Quick Play</button>
+        <button class="btn" id="host-btn" type="button">Host a private room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice steps">
+        <h2>How a round goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 8h20v13h-8l-4 4v-4H6z"/><path d="M13 14.5c0-1.7 1.2-2.5 3-2.5s3 .9 3 2.3c0 2.2-3 2-3 4"/></svg><b>Get a card</b><span>Everyone sees it except you.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M5 7h22v14H15l-6 5v-5H5z"/><path d="M10 12h12M10 16h7"/></svg><b>Ask on your turn</b><span>A yes-or-no question about your card.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="11" height="14" rx="3"/><rect x="17" y="9" width="11" height="14" rx="3"/><path d="M7.5 16l2 2 3-4"/></svg><b>Others answer</b><span>Yes, No, Sort of or Don’t know. The most common one shows.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M11 16.5l3.5 3.5L21 12"/></svg><b>Guess or pass</b><span>Fewer questions, more points.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">Deck</span>
+          <div class="deck-grid" id="set-deck" role="group" aria-label="Deck"></div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Round timer</span>
+          <div class="seg four" id="set-minutes" role="group" aria-label="Round timer">
+            <button type="button" data-value="5"><b>5</b><small>minutes</small></button>
+            <button type="button" data-value="8"><b>8</b><small>minutes</small></button>
+            <button type="button" data-value="12"><b>12</b><small>minutes</small></button>
+            <button type="button" data-value="0"><b>Off</b><small>no limit</small></button>
+          </div>
+        </div>
+        <div class="public-field">
+          <label class="toggle"><input type="checkbox" id="public-toggle"> Open to Quick Play</label>
+          <p class="small-note muted" id="public-note"></p>
+        </div>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start round</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <span class="round-clock" id="round-clock" hidden title="Time left in the round"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg><b id="round-clock-text"></b></span>
+    <span class="clock" id="clock" hidden>
+      <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="clock-track" cx="18" cy="18" r="15"/><circle class="clock-fill" id="clock-fill" cx="18" cy="18" r="15" pathLength="1"/></svg>
+      <b id="clock-text"></b>
+    </span>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="desk">
+      <ul class="seats" id="seats"></ul>
+      <p class="spectator-note" id="spectator-note" hidden>You joined mid-round, so you can see every card. You’ll play from the next round.</p>
+
+      <div class="stage" id="stage">
+        <!-- Someone's turn to ask -->
+        <div class="st" id="st-ask-me" hidden>
+          <p class="st-k" id="ask-title">Your turn: ask a yes-or-no question</p>
+          <form class="ask-form" id="ask-form" autocomplete="off">
+            <label class="sr-only" for="ask-input">Your question</label>
+            <input class="text-input" id="ask-input" maxlength="100" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" placeholder="Am I an animal?">
+            <button class="btn primary" id="ask-send" type="submit">Ask</button>
+            <span class="count" id="ask-count" aria-hidden="true">0/100</span>
+          </form>
+          <p class="st-hint" id="ask-hint">Everyone else can read your card. They’ll answer Yes, No, Sort of or Don’t know.</p>
+          <p class="error" id="ask-error" role="alert"></p>
+        </div>
+        <div class="st" id="st-ask-other" hidden>
+          <p class="st-k" id="ask-other-title"></p>
+          <p class="st-hint" id="ask-other-sub"></p>
+        </div>
+        <!-- A question is open for answers -->
+        <div class="st" id="st-answer" hidden>
+          <div class="q-block">
+            <span class="q-from" id="q-from"></span>
+            <p class="q-text" id="q-text"></p>
+          </div>
+          <div class="their-card" id="their-card" hidden>
+            <span class="st-hint" id="their-card-k"></span>
+            <span class="note inline" id="their-card-note"></span>
+          </div>
+          <div class="answers" id="answers" role="group" aria-label="Your answer"></div>
+          <p class="st-hint" id="answer-status" aria-live="polite"></p>
+        </div>
+        <!-- The tally is in: the asker guesses or passes -->
+        <div class="st" id="st-decide" hidden>
+          <div class="q-block">
+            <span class="q-from" id="d-from"></span>
+            <p class="q-text" id="d-text"></p>
+          </div>
+          <ul class="tally" id="tally"></ul>
+          <form class="guess-form" id="guess-form" autocomplete="off" hidden>
+            <label class="sr-only" for="guess-input">Your guess</label>
+            <input class="text-input" id="guess-input" maxlength="40" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Type your guess">
+            <button class="btn primary" id="guess-send" type="submit">Guess</button>
+            <button class="btn ghost" id="pass-btn" type="button">Pass</button>
+            <p class="error" id="guess-error" role="alert"></p>
+          </form>
+          <p class="st-hint" id="decide-wait" aria-live="polite"></p>
+        </div>
+        <div class="st" id="st-wait" hidden>
+          <p class="st-k">Waiting for someone to come back…</p>
+          <p class="st-hint">The round carries on as soon as a player who is still guessing is here.</p>
+        </div>
+        <!-- Your own card, once it's out -->
+        <div class="mine-done" id="mine-done" hidden></div>
+        <!-- The round is over -->
+        <div class="st result" id="st-result" hidden>
+          <h2 id="result-title">Round over</h2>
+          <ol class="result-list" id="result-list"></ol>
+          <div class="result-actions">
+            <button class="btn primary" id="next-round" type="button">Next round</button>
+            <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+          </div>
+          <p class="muted small-note" id="result-wait">The host starts the next round.</p>
+          <p class="muted small-note" id="crew-line"></p>
+        </div>
+      </div>
+      <div class="stage-foot">
+        <button class="btn link small" id="giveup-btn" type="button" hidden>Give up and show my card</button>
+        <button class="btn link small" id="endround-btn" type="button" hidden>End the round now</button>
+      </div>
+    </section>
+
+    <aside class="side">
+      <section class="log-panel">
+        <div class="panel-head"><h2>Questions</h2><span class="muted small-note" id="log-count"></span></div>
+        <div class="filter" id="log-filter" role="group" aria-label="Show questions about"></div>
+        <ol class="log" id="log"></ol>
+      </section>
+      <section class="scores">
+        <h2>Scores</h2>
+        <ol class="score-list" id="score-list"></ol>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound when it’s your turn</label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+  <div id="delete-data"></div>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>2 to 8 players. Everyone gets a secret card, like a sticky note on their forehead: <b>everyone else can read it, you can’t</b>. Your card shows as <b>?</b> on your screen. The host picks a deck (Animals, Food, Everyday objects, Jobs, Famous people or Numbers 1 to 100).</p>
+  <h3>On your turn</h3>
+  <ol class="rule-steps">
+    <li><b>Ask</b> a yes-or-no question about your card (up to 100 characters), like “Is it bigger than a car?”. You have 45 seconds, or your turn is skipped.</li>
+    <li>Everyone else <b>answers</b>: Yes, No, Sort of or Don’t know. In the Numbers deck the answers are Yes, No, Higher and Lower (ask “Is it 50?” and they say Higher or Lower). They have 20 seconds. The most common answer is highlighted for everyone.</li>
+    <li>Then you <b>guess</b> or <b>pass</b> (30 seconds). A wrong guess shows as “Not it” and ends your turn, same as passing.</li>
+  </ol>
+  <p>Turns go round the table in seat order. Anyone who has gone away or left is skipped, and the game never waits for them. Every question and its answers stay in the <b>Questions</b> list, so you can look back at what was asked about each player.</p>
+  <h3>Guessing</h3>
+  <p>Capital letters, accents, spaces and punctuation don’t matter, and common other names count (a cat is also a kitty). Small typos are forgiven in longer answers. Numbers must be exact. You can <b>give up</b> any time to show your card for 0 points.</p>
+  <h3>Points</h3>
+  <ul class="rule-points">
+    <li><b>A right guess:</b> 12 minus the questions you asked, but never less than 2.</li>
+    <li><b>First right guess of the round:</b> 2 extra.</li>
+    <li><b>Give up or run out of time:</b> 0.</li>
+  </ul>
+  <p>The round ends when everyone has guessed or given up, or when the host’s round timer runs out (5, 8 or 12 minutes, or off). Then every card is shown. Scores carry over to the next round in the same room.</p>
+  <p class="small-note muted">If someone types your card into a question or guess, it’s hidden from you so it can’t spoil it.</p>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>

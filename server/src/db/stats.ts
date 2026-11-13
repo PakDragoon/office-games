@@ -18,6 +18,8 @@ export interface StatWrites {
   stats?: Record<string, number>;
   /** Kept at the highest value seen. */
   max?: Record<string, number>;
+  /** Kept at the lowest value seen (the stat must be listed in BEST_STATS as 'min'). */
+  min?: Record<string, number>;
   /** Overwritten. */
   set?: Record<string, number>;
   /** Running streaks (see GameReport). */
@@ -33,9 +35,11 @@ export function statWrites(db: D1Database, id: string, game: string, w: StatWrit
     db.prepare(`INSERT INTO player_stats (player_id, game, stat, value) VALUES (?1, ?2, ?3, ?4) ON CONFLICT (player_id, game, stat) DO UPDATE SET ${tail}`);
   const addStat = upsert('value = value + excluded.value');
   const maxStat = upsert('value = MAX(value, excluded.value)');
+  const minStat = upsert('value = MIN(value, excluded.value)');
   const setStat = upsert('value = excluded.value');
   for (const [k, v] of Object.entries(w.stats || {})) if (Number.isFinite(v) && v !== 0) out.push(addStat.bind(id, game, k, v));
   for (const [k, v] of Object.entries(w.max || {})) if (Number.isFinite(v)) out.push(maxStat.bind(id, game, k, v));
+  for (const [k, v] of Object.entries(w.min || {})) if (Number.isFinite(v)) out.push(minStat.bind(id, game, k, v));
   for (const [k, v] of Object.entries(w.set || {})) if (Number.isFinite(v)) out.push(setStat.bind(id, game, k, v));
   for (const [name, hit] of Object.entries(w.streaks || {})) {
     if (!GROUP.test(name)) continue;
@@ -199,6 +203,7 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'rotten:bestDaily': 'min', // the daily's score is a time (order 'asc')
   'guesstimate:bestDaily': 'max', // the daily's score is points (order 'desc')
   'melonburst:bestDaily': 'min', // the daily's score is solved/wrong/time packed into one number (order 'asc')
+  'forehead:fewestQ': 'min', // fewest questions asked before a right guess (written with `min` in the GameReport)
   'rotten:practiceBest': 'max', // longest practice streak
   'lettuce-party:bestStreak': 'max',
   'guesstimate:bestStreak': 'max',
