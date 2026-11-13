@@ -193,14 +193,15 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 
 /* ---------- Logo: a sticky note on a forehead ---------- */
 .logo { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; column-gap: 0.9rem; row-gap: 0.1rem; margin-bottom: 0.25rem; }
-.logo-mark { grid-row: 1 / span 2; width: clamp(76px, 20vw, 104px); height: auto; overflow: visible; }
+.logo-mark { grid-row: 1 / span 2; width: clamp(84px, 22vw, 112px); height: auto; overflow: visible; }
+.logo-mark .skin { fill: var(--surface); }
 .logo-mark .head { fill: none; stroke: var(--ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .logo-mark .eye { fill: var(--ink); }
 .logo-mark .note-fill { fill: var(--note); stroke: var(--note-edge); stroke-width: 1.2; stroke-linejoin: round; }
 .logo-mark .note-fold { fill: var(--note-edge); }
 .logo-mark .note-ink { fill: none; stroke: var(--note-ink); stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
-.logo-note { transform-box: view-box; transform-origin: 48px 30px; animation: note-in 0.6s 0.1s cubic-bezier(.3, 1.5, .5, 1) both; }
-@keyframes note-in { from { transform: translateY(-16px) rotate(8deg); opacity: 0; } }
+.logo-note { transform-box: view-box; transform-origin: 50px 25px; animation: note-in 0.6s 0.1s cubic-bezier(.3, 1.5, .5, 1) both; }
+@keyframes note-in { from { transform: translateY(-16px) rotate(8deg) scale(1.15); opacity: 0; } }
 .logo-word { align-self: end; font-size: clamp(2.6rem, 9vw, 3.9rem); font-weight: 800; letter-spacing: -0.05em; line-height: 0.95; }
 
 /* ---------- Lobby extras ---------- */
@@ -484,3 +485,31 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .delete-data .delete-data-btn { border-color: var(--danger); color: var(--danger); }
 .delete-data .delete-data-btn.sure { background: var(--danger); border-color: var(--danger); color: #fff; }
 .delete-data .delete-data-note { margin: 0; text-align: left; }
+
+/* A small face next to each player's name (the note sits above it, so nothing covers the face) */
+.av { width: 1.5rem; height: 1.5rem; flex: none; color: var(--pc, var(--ink)); stroke: var(--pc, var(--ink)); stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+
+/* Player cards: a small head in the player's colour with a small note stuck on its forehead */
+.seats { gap: 0.5rem 0.6rem; }
+.seat { grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 0.2rem 0.7rem; padding: 0.45rem 0.65rem 0.45rem 0.45rem; }
+.seat-head { --hw: 84px; position: relative; display: block; width: var(--hw); height: var(--hw); flex: none; }
+.seat-head svg { display: block; width: 100%; height: 100%; color: var(--pc); stroke: var(--pc); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; overflow: visible; }
+.fnote {
+  position: absolute; left: 9%; top: 5%; width: 82%; height: 33%; display: grid; place-items: center; text-align: center; padding: 0 2px;
+  background: var(--note); color: var(--note-ink); border: 1px solid var(--note-edge); border-radius: 2px 2px 2px 7px;
+  font-weight: 800; font-size: 0.78rem; line-height: 1.02; letter-spacing: -0.01em; transform: rotate(-7deg);
+  box-shadow: 0 4px 6px -4px rgba(0, 0, 0, 0.55);
+}
+.seat:nth-child(2n) .fnote { transform: rotate(6deg); }
+.fnote > span { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.fnote.l1 { font-size: 0.66rem; } .fnote.l2 { font-size: 0.56rem; }
+.fnote.mine { outline: 1.5px dashed color-mix(in srgb, var(--note-ink) 55%, transparent); outline-offset: -3px; font-size: 1.3rem; }
+.fnote.ok { background: color-mix(in srgb, var(--hit) 38%, var(--note)); border-color: var(--hit); }
+.fnote.gaveup { filter: grayscale(0.7); opacity: 0.8; }
+.fnote .badge { position: absolute; top: -8px; right: -8px; display: grid; place-items: center; width: 1.15rem; height: 1.15rem; border-radius: 50%; background: var(--hit); color: #fff; font-size: 0.7rem; font-weight: 800; font-style: normal; box-shadow: 0 0 0 2px var(--surface); }
+.seat-info { display: grid; gap: 0.15rem; min-width: 0; align-content: center; }
+.seat .seat-name { display: block; }
+.seat .seat-name .nm { display: block; font-size: 0.98rem; }
+.seat-meta { gap: 0.1rem 0.5rem; }
+@media (max-width: 640px) { .seat-head { --hw: 72px; } .seats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .seats { grid-template-columns: minmax(0, 1fr); } .seat-head { --hw: 76px; } }

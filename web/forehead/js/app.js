@@ -307,6 +307,19 @@ function noteHTML(p, extra = '') {
   return `<span class="note l2${extra}">no card</span>`;
 }
 
+/** A player as a small head in their colour with a small tilted note on the forehead (the card). */
+function headHTML(p) {
+  const reveal = p.card !== null;
+  const len = reveal ? p.card.length : 0;
+  const size = len > 16 ? ' l2' : len > 9 ? ' l1' : '';
+  const state = p.done === 'guessed' ? ' ok' : p.done === 'gaveup' ? ' gaveup' : '';
+  const label = reveal ? `${p.name}’s card: ${p.card}${p.done === 'guessed' ? ' (got it)' : p.done === 'gaveup' ? ' (gave up)' : ''}` : p.hasCard ? 'Your card is hidden from you' : '';
+  const badge = p.done === 'guessed' ? '<i class="badge" aria-hidden="true">✓</i>' : '';
+  const note = reveal ? `<span class="fnote${size}${state}" title="${esc(p.card)}" aria-label="${esc(label)}"><span>${esc(p.card)}</span>${badge}</span>`
+    : p.hasCard ? `<span class="fnote mine" title="${esc(label)}" aria-label="${esc(label)}"><span>?</span></span>` : '';
+  return `<span class="seat-head"><svg viewBox="0 0 100 100" aria-hidden="true"><use href="#fh-face"/></svg>${note}</span>`;
+}
+
 function renderSeats(v) {
   const seats = v.players.filter((p) => p.inGame);
   $('seats').style.setProperty('--cols', String(Math.min(4, Math.max(1, seats.length))));
@@ -317,9 +330,11 @@ function renderSeats(v) {
           : !p.connected ? '<span class="tag">Left</span>' : p.away ? '<span class="tag">Away</span>' : '';
     const cls = `seat pc${p.color}${v.status === 'play' && v.asker === p.id ? ' asking' : ''}${S.filter === p.id ? ' filtered' : ''}${active(p) ? '' : ' off'}`;
     return `<li><button type="button" class="${cls}" data-pid="${esc(p.id)}" aria-pressed="${S.filter === p.id}" title="Show the questions asked about ${esc(p.name)}">
-      ${noteHTML(p)}
-      <span class="seat-name"><span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
-      <span class="seat-meta">${tag}<span>${p.asked} Q</span><span>${p.score} pts</span></span>
+      ${headHTML(p)}
+      <span class="seat-info">
+        <span class="seat-name"><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span></span>
+        <span class="seat-meta">${tag}<span>${p.asked} Q</span><span>${p.score} pts</span></span>
+      </span>
     </button></li>`;
   }).join('');
 }
