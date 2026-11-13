@@ -70,29 +70,37 @@
       </button>
     </div>
     <div class="lobby-inner">
-      <p class="muted">Room code</p>
-      <div id="lobby-code" class="room-code" aria-live="polite"></div>
-      <button id="copy-link-btn" class="btn ghost">Copy invite link</button>
+      <div class="lobby-left">
+        <p class="muted">Room code</p>
+        <div id="lobby-code" class="room-code" aria-live="polite"></div>
+        <button id="copy-link-btn" class="btn ghost">Copy invite link</button>
 
-      <ul id="lobby-players" class="lobby-players"></ul>
+        <ul id="lobby-players" class="lobby-players"></ul>
 
-      <p id="lobby-rules" class="rules"></p>
-      <p id="public-state" class="muted small-note" hidden></p>
+        <p id="lobby-rules" class="rules"></p>
+        <p id="public-state" class="muted small-note" hidden></p>
+        <p id="lobby-wait" class="muted" hidden></p>
+        <p id="crew-status" class="muted small-note" hidden></p>
+        <p id="word-status" class="muted small-note"></p>
+        <button id="leave-btn" class="btn link">Leave room</button>
+      </div>
 
-      <div id="host-controls" hidden>
-        <fieldset class="win-rule mode-pick">
+      <div id="host-controls" class="host-controls" hidden>
+        <fieldset class="mode-pick">
           <legend>Game mode</legend>
           <label><input type="radio" name="mode" value="classic" checked> Classic</label>
           <label><input type="radio" name="mode" value="counts"> Counts</label>
           <label><input type="radio" name="mode" value="ladder"> Word ladder</label>
         </fieldset>
         <p id="mode-blurb" class="muted small-note mode-blurb"></p>
-        <fieldset class="win-rule">
-          <legend>Who wins a round?</legend>
-          <label><input type="radio" name="win-rule" value="first" checked> <span id="rule-first-text">First to solve it</span></label>
-          <label><input type="radio" name="win-rule" value="fewest"> <span id="rule-fewest-text">Fewest guesses</span></label>
-        </fieldset>
-        <div class="match-settings">
+        <div class="select-grid">
+          <label class="select-field">
+            <span>Who wins a round?</span>
+            <select id="winrule-select">
+              <option value="first" id="rule-first-text">First to solve it</option>
+              <option value="fewest" id="rule-fewest-text">Fewest guesses</option>
+            </select>
+          </label>
           <label class="select-field">
             <span>Rounds</span>
             <select id="rounds-select">
@@ -125,6 +133,27 @@
             </select>
           </label>
         </div>
+        <details class="more" id="more-settings">
+          <summary>More settings</summary>
+          <div class="more-body">
+            <label class="toggle left" id="strict-label">
+              <input type="checkbox" id="strict-toggle" checked>
+              <span>Only accept words from the word list</span>
+            </label>
+            <label class="toggle left" id="hard-label">
+              <input type="checkbox" id="hard-toggle">
+              <span>Hard mode: revealed hints must be used</span>
+            </label>
+            <p id="hard-note" class="muted small-note hard-note" hidden>Hard mode is only for Classic: the other modes show no hints to reuse.</p>
+          </div>
+        </details>
+        <div class="public-field">
+          <label class="toggle left public-toggle">
+            <input type="checkbox" id="public-toggle">
+            <span>Open to Quick Play</span>
+          </label>
+          <p id="public-note" class="muted small-note public-note"></p>
+        </div>
         <div class="field crew-field">
           <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
           <div class="crew-row">
@@ -132,26 +161,8 @@
             <button id="crew-btn" class="btn">Use</button>
           </div>
         </div>
-        <label class="toggle" id="strict-label">
-          <input type="checkbox" id="strict-toggle" checked>
-          <span>Only accept words from the word list</span>
-        </label>
-        <label class="toggle" id="hard-label">
-          <input type="checkbox" id="hard-toggle">
-          <span>Hard mode: revealed hints must be used</span>
-        </label>
-        <p id="hard-note" class="muted small-note hard-note" hidden>Hard mode is only for Classic: the other modes show no hints to reuse.</p>
-        <label class="toggle public-toggle">
-          <input type="checkbox" id="public-toggle">
-          <span>Open to Quick Play</span>
-        </label>
-        <p id="public-note" class="muted small-note public-note"></p>
         <button id="start-btn" class="btn primary wide">Start game</button>
       </div>
-      <p id="lobby-wait" class="muted" hidden></p>
-      <p id="crew-status" class="muted small-note" hidden></p>
-      <p id="word-status" class="muted small-note"></p>
-      <button id="leave-btn" class="btn link">Leave room</button>
     </div>
   </main>
 
@@ -192,30 +203,38 @@
 
   <!-- RESULTS -->
   <div id="results" class="overlay" hidden>
-    <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="results-title">
+    <div id="results-sheet" class="sheet results-sheet" role="dialog" aria-modal="true" aria-labelledby="results-title">
       <h2 id="results-title">Round over</h2>
-      <p id="results-round-label" class="muted">The word was</p>
-      <div id="results-word" class="reveal-word"></div>
-      <p id="results-meaning" class="meaning" hidden></p>
-      <ol id="results-list" class="ranking"></ol>
-      <p id="results-rule" class="muted small-note"></p>
+      <div class="results-top">
+        <div class="results-hero">
+          <p id="results-round-label" class="muted">The word was</p>
+          <div id="results-word" class="reveal-word"></div>
+          <p id="results-meaning" class="meaning" hidden></p>
+        </div>
+        <div class="results-standings">
+          <ol id="results-list" class="ranking"></ol>
+          <p id="results-rule" class="muted small-note"></p>
+        </div>
+      </div>
       <div id="results-boards" class="result-boards" hidden></div>
       <div id="final-block" class="final-block" hidden>
         <h3 class="scores-sub">Final standings</h3>
         <div id="final-standings"></div>
       </div>
-      <button id="again-btn" class="btn primary wide" hidden>Play next round</button>
-      <button id="end-btn" class="btn wide" hidden>End game</button>
-      <button id="rematch-btn" class="btn primary wide" hidden>Rematch</button>
-      <button id="newgame-btn" class="btn wide" hidden>Change settings</button>
-      <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
-      <div class="sheet-row">
-        <button id="share-btn" class="btn ghost">Share my result</button>
-        <button id="results-scores-btn" class="btn ghost">Scores</button>
-      </div>
-      <div class="sheet-links">
-        <button id="see-boards-btn" class="btn link">Look at the boards</button>
-        <button id="results-leave-btn" class="btn link">Leave room</button>
+      <div class="results-actions">
+        <button id="again-btn" class="btn primary wide" hidden>Play next round</button>
+        <button id="end-btn" class="btn wide" hidden>End game</button>
+        <button id="rematch-btn" class="btn primary wide" hidden>Rematch</button>
+        <button id="newgame-btn" class="btn wide" hidden>Change settings</button>
+        <p id="again-wait" class="muted" hidden>Waiting for the host to start the next round.</p>
+        <div class="sheet-row">
+          <button id="share-btn" class="btn ghost">Share my result</button>
+          <button id="results-scores-btn" class="btn ghost">Scores</button>
+        </div>
+        <div class="sheet-links">
+          <button id="see-boards-btn" class="btn link">Look at the boards</button>
+          <button id="results-leave-btn" class="btn link">Leave room</button>
+        </div>
       </div>
     </div>
   </div>

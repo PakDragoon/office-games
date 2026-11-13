@@ -160,6 +160,7 @@ function onMessage(msg) {
       buildBoard();
       buildKeyboard();
       S.guesses.forEach((g, r) => paintGuess(r, g, false));
+      renderMarks();
       updateKeyboard();
       drawLadder();
       break;
@@ -206,6 +207,7 @@ function applyState(v) {
 
   showScreen('game');
   drawLadder();
+  renderMarks();
   $('game-code').textContent = v.code;
   $('game-round').textContent = v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
   renderRivals(v);
@@ -244,6 +246,7 @@ function startLocalRound(v) {
   S.roundShown = v.round;
   S.mode = v.mode;
   S.attempts = v.attempts;
+  forgetMarks(S.marksKey);
   S.guesses = [];
   S.current = '';
   S.pending = false;
@@ -275,11 +278,14 @@ function buildBoard() {
   arena.classList.add(S.mode);
   paintBoardNote();
   if (S.mode === 'ladder') return drawLadder();
+  loadMarks();
   for (let r = 0; r < rows; r++) {
     const row = document.createElement('div');
     row.className = `row ${S.mode}`;
     for (let c = 0; c < COLS; c++) {
-      const t = document.createElement('div');
+      // Counts: each tile is a button once its row is submitted (my own letter notes); until then it is disabled
+      const t = document.createElement(S.mode === 'counts' ? 'button' : 'div');
+      if (S.mode === 'counts') Object.assign(t, { type: 'button', disabled: true });
       t.className = 'tile';
       row.appendChild(t);
     }
@@ -468,6 +474,7 @@ function onResult(msg) {
     return;
   }
   paintGuess(r, g, true);
+  renderMarks();
   const wait = reduceMotion ? 0 : S.mode === 'counts' ? 600 : COLS * 250 + 250;
   const solved = S.mode === 'counts' ? g.counts[0] === COLS : g.pattern === 'hhhhh';
   setTimeout(() => {
@@ -534,8 +541,114 @@ function buildKeyboard() {
   }
 }
 
+/* =========================================================
+   Counts: my own letter notes. Tap a letter of a row I already sent: green, yellow, red, plain.
+   Purely a visual aid in this page: never sent anywhere, kept in sessionStorage for this room and round.
+   ========================================================= */
+const MARK_NAMES = ['', 'right place', 'wrong place', 'not in the word'];
+S.marks = {};      // "row,col" -> { m: 1..3, t: when it was tapped (a counter, so the latest tap wins) }
+S.markTick = 0;
+S.marksKey = '';
+
+const marksActive = () => S.mode === 'counts' && S.view?.status === 'playing';
+
+function forgetMarks(key) {
+  if (!key) return;
+  try { sessionStorage.removeItem(key); } catch {}
+}
+function loadMarks() {
+  S.marksKey = `lettuce-marks:${S.code}:${S.roundShown}`;
+  S.marks = {};
+  S.markTick = 0;
+  if (S.mode !== 'counts') return;
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(S.marksKey) || 'null');
+    if (saved && typeof saved === 'object') {
+      for (const [k, v] of Object.entries(saved.marks || {})) {
+        if (/^\d+,\d$/.test(k) && v && v.m >= 1 && v.m <= 3 && Number.isFinite(v.t)) S.marks[k] = { m: v.m, t: v.t };
+      }
+      S.markTick = Number(saved.tick) || 0;
+    }
+  } catch {}
+}
+function saveMarks() {
+  try { sessionStorage.setItem(S.marksKey, JSON.stringify({ marks: S.marks, tick: S.markTick })); } catch {}
+}
+
+/** Paint my notes on the submitted tiles (and switch the tiles on or off), then the keyboard. */
+function renderMarks() {
+  if (S.mode !== 'counts') return;
+  const on = marksActive();
+  [...$('my-board').children].forEach((row, r) => {
+    [...row.querySelectorAll('button.tile')].forEach((t, c) => {
+      const submitted = r < S.guesses.length;
+      const m = submitted && on ? S.marks[`${r},${c}`]?.m || 0 : 0;
+      t.disabled = !(submitted && on);
+      t.tabIndex = submitted && on ? 0 : -1;
+      t.classList.remove('mk1', 'mk2', 'mk3');
+      if (m) t.classList.add(`mk${m}`);
+      if (submitted && on) {
+        const letter = S.guesses[r].word[c].toUpperCase();
+        t.setAttribute('aria-pressed', m ? 'true' : 'false');
+        t.setAttribute('aria-label', m ? `${letter} marked ${MARK_NAMES[m]}` : `${letter} unmarked`);
+        t.title = m ? `Your note: ${MARK_NAMES[m]}. Tap to change.` : 'Tap to note this letter';
+      } else {
+        t.removeAttribute('aria-pressed');
+        t.removeAttribute('aria-label');
+        t.removeAttribute('title');
+      }
+    });
+  });
+  updateKeyboard();
+}
+
+function cycleMark(r, c) {
+  const k = `${r},${c}`;
+  const next = ((S.marks[k]?.m || 0) + 1) % 4;
+  if (next === 0) delete S.marks[k];
+  else S.marks[k] = { m: next, t: ++S.markTick };
+  saveMarks();
+  renderMarks();
+}
+
+// Per letter: the mark from the most recently tapped tile that still has one (none left = plain key)
+function letterMarks() {
+  const best = {};
+  for (const [k, v] of Object.entries(S.marks)) {
+    const [r, c] = k.split(',').map(Number);
+    const ch = S.guesses[r]?.word[c];
+    if (ch && (!best[ch] || v.t > best[ch].t)) best[ch] = v;
+  }
+  return best;
+}
+
+$('my-board').addEventListener('mousedown', (e) => {
+  if (e.target.closest('button.tile')) e.preventDefault();   // a tap on a note must not take focus from typing
+});
+$('my-board').addEventListener('click', (e) => {
+  const t = e.target.closest('button.tile');
+  if (!t || t.disabled) return;
+  const row = t.parentElement;
+  cycleMark([...$('my-board').children].indexOf(row), [...row.querySelectorAll('button.tile')].indexOf(t));
+  // A mouse or touch tap leaves no focus behind, so Enter still sends the word; a keyboard press (detail 0) keeps it
+  if (e.detail !== 0) t.blur();
+});
+
 function updateKeyboard() {
-  // Only Classic colours the keys: the other modes never tell you which letters are right
+  if (S.mode === 'counts') {
+    const marks = letterMarks();
+    const on = marksActive();
+    for (const b of $('keyboard').querySelectorAll('.key')) {
+      const m = on ? marks[b.dataset.key]?.m || 0 : 0;
+      b.className = 'key' + (b.dataset.key.length > 1 ? ' wide' : '') + (m ? ` mk${m}` : '');
+      if (b.dataset.key.length === 1) {
+        if (m) b.setAttribute('aria-label', `${b.dataset.key.toUpperCase()}, your note: ${MARK_NAMES[m]}`);
+        else b.removeAttribute('aria-label');
+      }
+    }
+    return;
+  }
+  // Only Classic colours the keys: Ladder never tells you which letters are right
   for (const g of S.mode === 'classic' ? S.guesses : []) {
     [...g.word].forEach((ch, i) => {
       const cls = CLASS[g.pattern[i]];
@@ -696,6 +809,7 @@ function renderLobby(v) {
   }
 
   $('host-controls').hidden = !S.isHost;
+  document.querySelector('.lobby-inner').classList.toggle('host', S.isHost);
   $('lobby-wait').hidden = S.isHost;
   $('lobby-rules').textContent = settingsSummary(v);
   $('lobby-rules').hidden = S.isHost;
@@ -711,7 +825,7 @@ function renderLobby(v) {
   if (S.isHost) {
     $('strict-toggle').checked = v.strict;
     paintPublic(v);
-    for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
+    $('winrule-select').value = v.winRule;
     for (const r of document.querySelectorAll('input[name="mode"]')) r.checked = r.value === v.mode;
     $('mode-blurb').textContent = MODE_BLURBS[v.mode] || '';
     const ladder = v.mode === 'ladder';
@@ -869,6 +983,7 @@ function ranked(players, rule = 'first') {
 
 function showResults(v) {
   const ladder = v.mode === 'ladder';
+  $('results-sheet').classList.toggle('wide', v.mode !== 'classic');
   const word = $('results-word');
   word.innerHTML = '';
   for (const ch of (ladder ? v.ladder?.target : v.word) || '') {
@@ -1375,11 +1490,9 @@ $('strict-toggle').addEventListener('change', (e) => {
   if (S.isHost) hostSettings({ strict: e.target.checked });
 });
 
-for (const r of document.querySelectorAll('input[name="win-rule"]')) {
-  r.addEventListener('change', (e) => {
-    if (S.isHost && e.target.checked) hostSettings({ winRule: e.target.value });
-  });
-}
+$('winrule-select').addEventListener('change', (e) => {
+  if (S.isHost) hostSettings({ winRule: e.target.value });
+});
 
 wirePublic(send);
 $('crew-btn').addEventListener('click', () => S.isHost && hostSetCrew($('crew-input').value));
@@ -1468,6 +1581,10 @@ document.addEventListener('keydown', (e) => {
   if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden || !$('scores-sheet').hidden || !$('settings-sheet').hidden) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
+  const onNote = e.target instanceof HTMLElement && e.target.matches('button.tile');
+  // Enter or Space on a focused note cycles that note; typing a letter or Backspace hands the keys back to the word
+  if (onNote && (e.key === 'Enter' || e.key === ' ')) return;
+  if (onNote && (e.key === 'Backspace' || /^[a-zA-Z]$/.test(e.key))) e.target.blur();
   if (e.key === 'Enter') { e.preventDefault(); pressKey('enter'); }
   else if (e.key === 'Backspace') pressKey('back');
   else if (/^[a-zA-Z]$/.test(e.key)) pressKey(e.key.toLowerCase());
