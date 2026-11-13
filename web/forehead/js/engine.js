@@ -6,7 +6,8 @@ export const MAX_PLAYERS = 8;
 export const QUESTION_MAX = 100;
 export const GUESS_MAX = 40;
 // How long each step of a turn may take
-export const TIMES = { askMs: 45000, answerMs: 20000, decideMs: 30000 };
+// tallyMs: how long everyone sees a question's answers before the next turn starts by itself
+export const TIMES = { askMs: 45000, answerMs: 20000, tallyMs: 3500 };
 // Host's round timer in minutes (0 = no timer)
 export const ROUND_MINUTES = [5, 8, 12, 0];
 export const DEFAULT_MINUTES = 8;
