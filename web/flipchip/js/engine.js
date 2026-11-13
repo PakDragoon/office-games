@@ -12,7 +12,10 @@ export const SIDE_NAME = { 1: 'Dark', 2: 'Light' };
 export const MAX_PLAYERS = 8;   // in a room: two play, the rest watch
 export const SIZES = [6, 8, 10];
 export const LEVELS = ['easy', 'normal', 'hard'];
-export const TIMES = { countdownMs: 0, offlineClaimMs: 45000 };
+// idleMs: how long a person may sit on their turn before the computer plays for them; after idleStrikes
+// of those in a row (none of their own moves between) they are removed from the game. idleWarnMs: the
+// browser starts showing the countdown when this little is left.
+export const TIMES = { countdownMs: 0, offlineClaimMs: 45000, idleMs: 90000, idleStrikes: 3, idleWarnMs: 30000 };
 export const REACTIONS = ['👏', '😮', '😂', '😬', '🔥', '🤝'];
 
 export const DEFAULT_SETTINGS = {

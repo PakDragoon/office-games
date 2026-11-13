@@ -342,6 +342,21 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
   transform-origin: left; transform: scaleX(var(--left, 1));
 }
 .player-card .clock.urgent { background: var(--danger); }
+/* Inactivity bar: hidden until the last 30 s, thicker and red in the last 10 s */
+.player-card .clock.idle { height: 0; transition: height 0.2s ease; }
+.player-card .clock.idle.show { height: 4px; }
+.player-card .clock.idle.show.urgent { height: 6px; animation: idle-blink 0.8s ease-in-out infinite; }
+@keyframes idle-blink { 50% { opacity: 0.45; } }
+.idle-note {
+  margin: 0; display: none; text-align: center; font-weight: 700; font-size: 0.9rem; line-height: 1.3;
+  padding: 0.35rem 0.7rem; border-radius: 10px; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--line);
+}
+.idle-note.show { display: block; }
+.idle-note.warn { color: var(--ink); border-color: var(--accent); }
+.idle-note.urgent { color: var(--danger); border-color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--surface)); }
+.idle-note.urgent.show { animation: idle-blink 1s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .player-card .clock.idle.show.urgent, .idle-note.urgent.show { animation: none; } }
 .player-card .count.bump { animation: bump 0.35s cubic-bezier(.3, 1.6, .5, 1); }
 @keyframes bump { 40% { transform: scale(1.25); } }
 .score-bar {
