@@ -299,7 +299,6 @@ function renderPlay(v) {
   paintAnswerState();
   $('zap-btn').hidden = zapped || !playing;
   $('done-btn').hidden = !playing || submitted;
-  $('done-btn').disabled = false;
   const note = !playing ? 'You joined in the middle of a game, so you\'re watching this round. You\'ll play the next game.'
     : submitted ? (v.players.filter((p) => p.inGame && !p.submitted && active(p)).length ? 'Handed in. Waiting for the others…' : 'Handed in.')
     : '';
@@ -326,6 +325,9 @@ function paintAnswerState() {
   const submitted = Boolean(v.mine && v.mine.submitted);
   $('zap-btn').disabled = !filled || submitted || !v.mine;
   $('zap-btn').title = filled ? '' : 'Fill in every box first';
+  // "I'm done" also needs every box (the server checks it too)
+  $('done-btn').disabled = !filled || submitted || !v.mine;
+  $('done-btn').title = filled ? '' : 'Fill in every box first';
 }
 
 form.addEventListener('input', (e) => {
@@ -354,6 +356,7 @@ $('zap-btn').addEventListener('click', () => {
   toHost({ t: 'zap', a: { ...A.answers } });
 });
 $('done-btn').addEventListener('click', () => {
+  if ($('done-btn').disabled) return;
   $('done-btn').disabled = true;
   A.dirty = false;
   toHost({ t: 'submit', a: { ...A.answers } });

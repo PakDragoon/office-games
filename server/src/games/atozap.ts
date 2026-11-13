@@ -270,6 +270,12 @@ class ZapRoom extends SeatRoom<Player, Room> {
     const before = E.filledCount(room.settings.categories, p.answers);
     if (!this.store(p, raw)) return;
     if (final) {
+      // Handing in early needs every box filled; with blanks you keep going until Zap! or the clock ends the round
+      if (!E.allFilled(room.settings.categories, p.answers)) {
+        this.tell(p.id, { t: 'toast', text: 'Fill in every category before you hand in' });
+        this.broadcast();
+        return;
+      }
       p.submitted = true;
       this.broadcast();
       this.checkAllIn();

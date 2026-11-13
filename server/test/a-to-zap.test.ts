@@ -32,6 +32,11 @@ async function fire(code: string, timer: string): Promise<void> {
 }
 
 /** Wait for the newest view that matches; older views are dropped (each player is sent a view after every change). */
+/** Let typed answers reach the room, then run the round clock out (answers with blanks can't be handed in). */
+async function lockRound(code: string): Promise<void> {
+  await sleep(80);
+  await fire(code, 'round');
+}
 async function seen(c: TestClient, pred: (s: Msg) => boolean, ms = 4000): Promise<Msg> {
   const end = Date.now() + ms;
   for (;;) {
@@ -273,7 +278,8 @@ describe('A to Zap: answers and the clock', () => {
     await fire(g.code, 'round');
     const r = await seen(g.host, (x) => x.status === 'results');
     g.host.send({ t: 'answers', a: { animal: 'alpaca', name: 'Ali' } });
-    g.host.send({ t: 'submit', a: { animal: 'alpaca' } });
+    g.host.send({ t: 'answers', a: { animal: 'alpaca' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     g.host.send({ t: 'zap', a: full({}) });
     await sleep(60);
     expect(await inRoom(g.code, (x) => ({ status: x.status, a: x.players[0].answers }))).toEqual({ status: 'results', a: { animal: 'ant' } });
@@ -287,7 +293,8 @@ describe('A to Zap: answers and the clock', () => {
     await pickLetter(g, 0, 'A');
     await inRoom(g.code, (r) => { r.lockAt = Date.now() - 1; });
     g.host.send({ t: 'answers', a: { animal: 'ant' } });
-    g.host.send({ t: 'submit', a: { animal: 'ant' } });
+    g.host.send({ t: 'answers', a: { animal: 'ant' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await sleep(50);
     expect(await inRoom(g.code, (r) => ({ a: r.players[0].answers, s: r.players[0].submitted }))).toEqual({ a: {}, s: false });
   });
@@ -322,6 +329,19 @@ describe('A to Zap: answers and the clock', () => {
     g.clients[1].send({ t: 'submit', a: full({ name: 'Anna' }) });
     const r = await seen(g.host, (x) => x.status === 'results');
     expect(total(r, 'Ann')).toBe(30);   // name Ali 10 (Bob wrote Anna), the other four are the same as Bob's: 5 each
+  });
+
+  it('"I\'m done" needs every box filled: with blanks the hand-in is refused and the player keeps typing', async () => {
+    const g = await lobby(['Ann', 'Bob']);
+    await start(g);
+    await pickLetter(g, 0, 'A');
+    g.host.send({ t: 'submit', a: { name: 'Ali', place: 'Athens' } });
+    await g.host.next((m) => m.t === 'toast');
+    expect(await inRoom(g.code, (r) => ({ s: r.status, sub: r.players[0].submitted, a: r.players[0].answers })))
+      .toEqual({ s: 'play', sub: false, a: { name: 'Ali', place: 'Athens' } });
+    // filled in: now it's accepted
+    g.host.send({ t: 'submit', a: full({}) });
+    await seen(g.clients[1], (x) => players(x).find((p) => p.name === 'Ann')?.submitted === true);
   });
 
   it('a player who joins in the middle watches: their answers do not count and do not hold the round', async () => {
@@ -405,8 +425,9 @@ describe('A to Zap: checking answers', () => {
     const g = await lobby(['Ann', 'Bob']);
     await start(g);
     await pickLetter(g, 0, 'A');
-    g.host.send({ t: 'submit', a: { name: 'ali', place: 'ATHENS', animal: 'Aardvark', produce: 'Banana', thing: '' } });
-    g.clients[1].send({ t: 'submit', a: { name: 'Ayesha', place: 'Accra', animal: 'Alpaca', produce: 'Avocado', thing: 'anchor' } });
+    g.host.send({ t: 'answers', a: { name: 'ali', place: 'ATHENS', animal: 'Aardvark', produce: 'Banana', thing: '' } });
+    g.clients[1].send({ t: 'answers', a: { name: 'Ayesha', place: 'Accra', animal: 'Alpaca', produce: 'Avocado', thing: 'anchor' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     const r = await seen(g.host, (x) => x.status === 'results');
     expect(cells(r, 'Ann')).toMatchObject({
       name: { st: 'list', pts: 10 }, place: { st: 'list', pts: 10 }, animal: { st: 'list', pts: 10 },
@@ -420,8 +441,9 @@ describe('A to Zap: checking answers', () => {
     const g = await lobby(['Ann', 'Bob']);
     await start(g);
     await pickLetter(g, 0, 'N');
-    g.host.send({ t: 'submit', a: { name: ' Nadía ', place: 'the Netherlands', animal: 'newts', produce: 'Nectarines', thing: 'needle' } });
-    g.clients[1].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { name: ' Nadía ', place: 'the Netherlands', animal: 'newts', produce: 'Nectarines', thing: 'needle' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     const r = await seen(g.host, (x) => x.status === 'results');
     expect(Object.values(cells(r, 'Ann')).map((c) => c.st)).toEqual(['list', 'list', 'list', 'list', 'list']);
   });
@@ -430,9 +452,10 @@ describe('A to Zap: checking answers', () => {
     const g = await lobby(['Ann', 'Bob', 'Cy']);
     await start(g);
     await pickLetter(g, 0, 'A');
-    g.host.send({ t: 'submit', a: { name: 'Ali', place: 'Athens', animal: 'ant', produce: 'apple', thing: 'axe' } });
-    g.clients[1].send({ t: 'submit', a: { name: '  ALI ', place: 'Accra', animal: 'Ant', produce: 'apricot', thing: 'anchor' } });
-    g.clients[2].send({ t: 'submit', a: { name: 'Aziz', place: 'Athens', animal: 'ant', produce: '', thing: 'anchor' } });
+    g.host.send({ t: 'answers', a: { name: 'Ali', place: 'Athens', animal: 'ant', produce: 'apple', thing: 'axe' } });
+    g.clients[1].send({ t: 'answers', a: { name: '  ALI ', place: 'Accra', animal: 'Ant', produce: 'apricot', thing: 'anchor' } });
+    g.clients[2].send({ t: 'answers', a: { name: 'Aziz', place: 'Athens', animal: 'ant', produce: '', thing: 'anchor' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     const r = await seen(g.host, (x) => x.status === 'results');
     // name: Ali x2 shared, Aziz unique; place: Athens x2 shared, Accra unique; animal: ant x3 shared; produce: all different; thing: axe unique, anchor x2 shared
     expect(cells(r, 'Ann')).toMatchObject({ name: { pts: 5, shared: true }, place: { pts: 5 }, animal: { pts: 5 }, produce: { pts: 10, shared: false }, thing: { pts: 10 } });
@@ -445,14 +468,16 @@ describe('A to Zap: checking answers', () => {
     const g = await lobby(['Ann', 'Bob']);
     await start(g);
     await pickLetter(g, 0, 'A');
-    g.host.send({ t: 'submit', a: { name: 'Ali' } });
-    g.clients[1].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { name: 'Ali' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.host, (x) => x.status === 'results');
     g.host.send({ t: 'next' });
     await seen(g.host, (x) => x.status === 'pick' && x.round === 2);
     await pickLetter(g, 1, 'B');
-    g.host.send({ t: 'submit', a: { name: 'Bilal', place: 'Berlin' } });
-    g.clients[1].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { name: 'Bilal', place: 'Berlin' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     const r = await seen(g.host, (x) => x.status === 'results' && x.round === 2);
     expect(players(r).map((p) => [p.name, p.score])).toEqual([['Ann', 30], ['Bob', 0]]);
   });
@@ -463,7 +488,8 @@ describe('A to Zap: the vote on unknown answers', () => {
     const g = await lobby(names);
     await start(g);
     await pickLetter(g, 0, 'A');
-    g.clients.forEach((c, i) => c.send({ t: 'submit', a: answers[i] }));
+    g.clients.forEach((c, i) => c.send({ t: 'answers', a: answers[i] }));
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     const views: Msg[] = [];
     for (const c of g.clients) views.push(await seen(c, (x) => x.status === 'review'));
     return { ...g, views };
@@ -593,8 +619,8 @@ describe('A to Zap: refresh and presence', () => {
     expect(v.mine).toEqual({ answers: { name: 'Ali', animal: 'ant' }, submitted: false });
     expect(players(v)).toHaveLength(2);
     expect(v.playLeft).toBeGreaterThan(80000);
-    // and it can carry on typing and submit
-    again.send({ t: 'submit', a: { name: 'Ali', animal: 'ant', place: 'Accra' } });
+    // and it can carry on typing and hand in once every box is filled
+    again.send({ t: 'submit', a: full({ animal: 'ant', place: 'Accra' }) });
     await seen(g.host, (x) => players(x).find((p) => p.name === 'Bob')?.submitted === true);
   });
 
@@ -610,23 +636,24 @@ describe('A to Zap: refresh and presence', () => {
     expect(v.pickerId).toBe(w.id);
     again.send({ t: 'pick', letter: 'A' });
     await seen(again, (x) => x.status === 'play');
-    again.send({ t: 'submit', a: { name: 'Ali' } });
+    again.send({ t: 'submit', a: full({}) });
     await seen(again, (x) => (x.mine as { submitted: boolean } | null)?.submitted === true);
     again.close();
     const third = await TestClient.open(`/${GAME}/ws?code=${g.code}`);
     third.join('Ann');
     await third.next((m) => m.t === 'welcome');
     const back = await seen(third, (x) => x.status === 'play' && x.mine !== null);
-    expect(back.mine).toEqual({ answers: { name: 'Ali' }, submitted: true });
+    expect(back.mine).toEqual({ answers: full({}), submitted: true });
   });
 
   it('a refresh during the vote keeps your own vote', async () => {
     const g = await lobby(['Ann', 'Bob', 'Cy']);
     await start(g);
     await pickLetter(g, 0, 'A');
-    g.host.send({ t: 'submit', a: { place: 'Aaaville' } });
-    g.clients[1].send({ t: 'submit', a: {} });
-    g.clients[2].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { place: 'Aaaville' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    g.clients[2].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.clients[1], (x) => x.status === 'review');
     g.clients[1].send({ t: 'vote', item: 0, v: -1 });
     await seen(g.clients[1], (x) => (x.review as { items: Array<{ vote: number }> }).items[0].vote === -1);
@@ -686,8 +713,9 @@ describe('A to Zap: the game', () => {
     await start(g);
     for (let round = 1; round <= 5; round++) {
       await pickLetter(g, (round - 1) % 2, 'ABCDE'[round - 1]);
-      g.host.send({ t: 'submit', a: { name: ['Ali', 'Bilal', 'Carla', 'Daniel', 'Eli'][round - 1] } });
-      g.clients[1].send({ t: 'submit', a: {} });
+      g.host.send({ t: 'answers', a: { name: ['Ali', 'Bilal', 'Carla', 'Daniel', 'Eli'][round - 1] } });
+      g.clients[1].send({ t: 'answers', a: {} });
+      await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
       const r = await seen(g.host, (x) => x.status === 'results' && x.round === round);
       expect((r.results as { last: boolean }).last).toBe(round === 5);
       g.host.send({ t: 'next' });
@@ -758,14 +786,16 @@ describe('A to Zap: stats', () => {
     g.host.send({ t: 'start' });
     await seen(g.host, (x) => x.status === 'pick' && x.round === 1);
     await pickLetter(g, 0, 'A');
-    g.host.send({ t: 'submit', a: { name: 'Ali', animal: 'ant' } });
-    g.clients[1].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { name: 'Ali', animal: 'ant' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.host, (x) => x.status === 'results' && x.round === 1);
     g.host.send({ t: 'next' });
     await seen(g.host, (x) => x.status === 'pick' && x.round === 2);
     await pickLetter(g, 1, 'B');
-    g.host.send({ t: 'submit', a: { name: 'Bilal' } });
-    g.clients[1].send({ t: 'submit', a: {} });
+    g.host.send({ t: 'answers', a: { name: 'Bilal' } });
+    g.clients[1].send({ t: 'answers', a: {} });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.host, (x) => x.status === 'results' && x.round === 2);
     g.host.send({ t: 'endGame' });
     await seen(g.host, (x) => x.status === 'over');
@@ -777,8 +807,9 @@ describe('A to Zap: stats', () => {
     g.host.send({ t: 'start' });
     await seen(g.host, (x) => x.status === 'pick' && x.round === 1);
     await pickLetter(g, 0, 'C');
-    g.host.send({ t: 'submit', a: { name: 'Cara' } });
-    g.clients[1].send({ t: 'submit', a: { name: 'Cara' } });
+    g.host.send({ t: 'answers', a: { name: 'Cara' } });
+    g.clients[1].send({ t: 'answers', a: { name: 'Cara' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.host, (x) => x.status === 'results' && x.round === 1);
     g.host.send({ t: 'endGame' });
     await seen(g.host, (x) => x.status === 'over');
@@ -801,8 +832,9 @@ describe('A to Zap: stats', () => {
     await seen(g.host, (x) => x.status === 'pick');
     await pickLetter(g, 0, 'A');
     g.clients[2].close();                                           // Cy leaves mid-game
-    g.host.send({ t: 'submit', a: { name: 'Ali' } });
-    g.clients[1].send({ t: 'submit', a: { name: 'Ayesha' } });
+    g.host.send({ t: 'answers', a: { name: 'Ali' } });
+    g.clients[1].send({ t: 'answers', a: { name: 'Ayesha' } });
+    await lockRound(g.code);   // with blanks nobody can hand in: the clock locks the round
     await seen(g.host, (x) => x.status === 'results');
     g.host.send({ t: 'endGame' });
     await seen(g.host, (x) => x.status === 'over');
