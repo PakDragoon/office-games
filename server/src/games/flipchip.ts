@@ -38,7 +38,11 @@ interface Room extends BaseRoom<Player> {
   pass: unknown;
   log: unknown[];
   turnEnd: number;
-  result: { reason: string; winner: number; counts: unknown; ids: Record<Side, string | null> } | null;
+  /** When the person to move runs out of time and the computer plays for them (0: nobody's turn, or a computer's). */
+  idleEnd: number;
+  /** Auto-moves played for each person in a row (player id -> count); a move of their own clears it. */
+  strikes: Record<string, number>;
+  result: { reason: string; winner: number; counts: unknown; ids: Record<Side, string | null>; loserName?: string } | null;
   matchWinner: string | null;
   /** A computer player's move is planned for this time (0: none), for this game and move. */
   botAt?: number;
@@ -63,6 +67,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
   protected remap(from: string, to: string): void {
     const room = this.room;
     for (const s of [DARK, LIGHT] as Side[]) if (room.seats[s] === from) room.seats[s] = to;
+    if (room.strikes[from] !== undefined) { room.strikes[to] = room.strikes[from]; delete room.strikes[from]; }
     if (room.result?.ids) for (const s of [DARK, LIGHT] as Side[]) if (room.result.ids[s] === from) room.result.ids[s] = to;
     if (room.matchWinner === from) room.matchWinner = to;
   }
@@ -177,6 +182,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
         return true;
       case 'lobby':
         this.ctx.clearTimer('turn');
+        room.turnEnd = room.idleEnd = 0;
         room.status = 'lobby';
         room.players = room.players.filter((x) => x.connected);
         this.afterPresence();
@@ -225,23 +231,29 @@ class FlipRoom extends SeatRoom<Player, Room> {
     }
     Object.assign(room, {
       status: 'play', board: E.newBoard(room.size), turn: DARK, moveSeq: 0, last: null, pass: null,
-      log: [], result: null, replayId: null, game: room.game + 1,
+      log: [], result: null, replayId: null, game: room.game + 1, strikes: {},
     });
     this.ctx.track('game_started', { size: room.size });
     this.afterTurn();
   }
 
-  // After every move (or at the start): the move timer
+  // After every move (or at the start): the move timer when the room has one (out of time = a move is played
+  // for them, as before; nobody is ever removed, the game keeps moving), otherwise for a person's turn the idle
+  // deadline E.TIMES.idleMs (auto-move + strikes). One room timer ('turn') serves both. A computer's turn has
+  // no idle deadline (it moves on the 'bot' timer).
   private afterTurn(): void {
     const room = this.room;
     this.ctx.clearTimer('turn');
     room.turnEnd = 0;
+    room.idleEnd = 0;
     if (room.status === 'play') {
+      const now = this.ctx.now();
       const ms = E.timerMs(room.settings);
-      if (ms) {
-        room.turnEnd = this.ctx.now() + ms;
-        this.ctx.setTimer('turn', room.turnEnd + 60);
-      }
+      if (ms) room.turnEnd = now + ms;
+      const mover = this.byId(room.seats[room.turn as Side]);
+      if (mover && !mover.bot && !room.turnEnd) room.idleEnd = now + E.TIMES.idleMs;
+      const at = room.turnEnd || room.idleEnd;
+      if (at) this.ctx.setTimer('turn', at + 60);
     }
     this.broadcast();
   }
@@ -275,13 +287,30 @@ class FlipRoom extends SeatRoom<Player, Room> {
     if (m >= 0) this.move(bot.id, m, room.moveSeq);
   }
 
-  // Out of time: a random legal move is played for them
+  /**
+   * The person to move ran out of time. With the room's move timer: a random move, as before. Without one
+   * (the idle limit): the first strikes - 1 times in a row the computer plays an Easy move for them through
+   * move(); on the last one they forfeit instead and are taken out of their seat.
+   */
   private timeUp(): void {
     const room = this.room;
-    if (room.status !== 'play' || !room.turnEnd || !room.board) return;
-    const m = E.chooseMove(room.board, room.size, room.turn, 'random', { rnd: this.rnd });
-    const id = room.seats[room.turn as Side];
-    if (id) this.move(id, m, room.moveSeq, true);
+    if (room.status !== 'play' || !room.board || !(room.turnEnd || room.idleEnd)) return;
+    const side = room.turn as Side;
+    const id = room.seats[side];
+    const p = this.byId(id);
+    if (!id || !p) return;
+    const rnd = { rnd: this.rnd, maxRoot: ROOT_CAP[room.size] || 3 };
+    // A timed room's move timer, or a computer that never got to move: a random move as before, no strike
+    if (p.bot || room.turnEnd) {
+      const m = E.chooseMove(room.board, room.size, side, 'random', rnd);
+      if (m >= 0) this.move(id, m, room.moveSeq, true);
+      return;
+    }
+    const n = (room.strikes[id] || 0) + 1;
+    room.strikes[id] = n;
+    if (n >= E.TIMES.idleStrikes) return this.gameOver('idle', E.other(side), p.name);
+    const m = E.chooseMove(room.board, room.size, side, 'easy', rnd);
+    if (m >= 0) this.move(id, m, room.moveSeq, true);
   }
 
   private move(pid: string, i: number, seq: number | undefined, auto = false): void {
@@ -291,6 +320,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
     const side = room.turn;
     const r = E.play(room.board, room.size, i, side);
     if (!r) return;
+    if (!auto) delete room.strikes[pid];   // they moved themselves: the idle count starts over
     room.board = r.board;
     room.moveSeq++;
     room.last = { i, side, flips: r.flips, auto };
@@ -305,7 +335,7 @@ class FlipRoom extends SeatRoom<Player, Room> {
     this.afterTurn();
   }
 
-  private gameOver(reason: string, winnerSide = 0): void {
+  private gameOver(reason: string, winnerSide = 0, loserName?: string): void {
     const room = this.room;
     if (!room.board) return;
     this.ctx.clearTimer('turn');
@@ -314,7 +344,9 @@ class FlipRoom extends SeatRoom<Player, Room> {
     room.status = 'over';
     room.turn = 0;
     room.turnEnd = 0;
+    room.idleEnd = 0;
     room.result = { reason, winner, counts, ids: { 1: room.seats[DARK], 2: room.seats[LIGHT] } };
+    if (loserName) room.result.loserName = loserName;
     const seated: Player[] = [];
     for (const s of [DARK, LIGHT] as Side[]) {
       const p = this.byId(room.seats[s]);
@@ -342,6 +374,9 @@ class FlipRoom extends SeatRoom<Player, Room> {
       });
     }), w ? w.name : null);
     this.rateGame(seated, winner, reason);
+    // Removed for being idle: the seat is freed (result.ids still says who played) so a rematch can't
+    // quietly put them back. They stay in the room as a spectator.
+    if (reason === 'idle' && winner) room.seats[E.other(winner) as Side] = null;
     this.broadcast();
   }
 
@@ -388,6 +423,9 @@ class FlipRoom extends SeatRoom<Player, Room> {
       last: room.last, pass: room.pass, log: room.log,
       turnLeft: room.turnEnd ? room.turnEnd - now : null,
       turnMs: E.timerMs(room.settings),
+      idleLeft: room.idleEnd ? room.idleEnd - now : null,
+      idleMs: E.TIMES.idleMs,
+      strikes: room.strikes, maxStrikes: E.TIMES.idleStrikes,
       result: room.result, matchWinner: room.matchWinner, replayId: room.status === 'over' ? room.replayId ?? null : null,
       canUndo: false,
       crewName: room.crew ? room.crew.name : '',
@@ -405,11 +443,13 @@ export const flipchip: GameModule = {
     return new FlipRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
       settings, seats: { 1: null, 2: null }, board: null, size: settings.size, turn: 0, moveSeq: 0,
-      last: null, pass: null, log: [], turnEnd: 0, result: null, matchWinner: null, replayId: null,
+      last: null, pass: null, log: [], turnEnd: 0, idleEnd: 0, strikes: {}, result: null, matchWinner: null, replayId: null,
     });
   },
   restore(ctx, snap) {
     const room = snap as Room;
+    room.strikes ??= {};   // snapshots from before the idle timer
+    room.idleEnd ??= 0;
     restoreSeats(ctx, room);
     return new FlipRoom(ctx, room);
   },

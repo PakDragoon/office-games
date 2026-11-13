@@ -609,7 +609,12 @@ function applyState(v) {
     S.moveSeen = v.moveSeq;
     S.preview = -1;
     paintBoard(v, v.last);
-    if (v.last.auto) flash(v.seats[v.last.side] === S.myId ? 'Time’s up: a random move was played for you' : `Time’s up: a random move for ${esc(nameOfSeat(v, v.last.side))}`);
+    if (v.last.auto) {
+      const who = v.seats[v.last.side];
+      const n = v.strikes && who ? v.strikes[who] : 0;
+      const of = n ? ` (${n} of ${v.maxStrikes || E.TIMES.idleStrikes})` : '';
+      flash(who === S.myId ? `The computer moved for you${of}` : `The computer moved for ${esc(nameOfSeat(v, v.last.side))}${of}`, '', 3200);
+    }
   } else if (v.moveSeq !== S.moveSeen) {
     S.moveSeen = v.moveSeq;
     S.preview = -1;
@@ -640,7 +645,7 @@ function applyState(v) {
 }
 
 function nameOfSeat(v, s) {
-  const p = seatPlayer(v, s);
+  const p = seatPlayer(v, s) || (v.status === 'over' && v.result ? pOf(v, v.result.ids[s]) : null);
   if (!p) return E.SIDE_NAME[s];
   return p.id === S.myId ? 'You' : p.name;
 }
@@ -879,7 +884,8 @@ function renderGame(v) {
 function renderDuel(v) {
   const c = E.counts(v.board);
   for (const s of [DARK, LIGHT]) {
-    const p = seatPlayer(v, s);
+    // Someone removed for being idle has no seat any more, but the result still shows who played
+    const p = seatPlayer(v, s) || (v.status === 'over' && v.result?.reason === 'idle' ? pOf(v, v.result.ids[s]) : null);
     const turn = v.status === 'play' && v.turn === s;
     const isMe = p && p.id === S.myId;
     let tag = E.SIDE_NAME[s];
@@ -887,7 +893,7 @@ function renderDuel(v) {
     else if (p && !p.isBot && !p.connected) tag = 'Left · reconnecting';
     else if (p && p.away) tag = 'Away';
     else if (p && p.isBot && !v.solo) tag = `Computer · ${levelName(p.botLevel)}`;
-    if (v.status === 'over' && v.result) tag = !v.result.winner ? 'Draw' : v.result.winner === s ? 'Winner' : E.SIDE_NAME[s];
+    if (v.status === 'over' && v.result) tag = !v.result.winner ? 'Draw' : v.result.winner === s ? 'Winner' : v.result.reason === 'idle' ? 'Removed · idle' : E.SIDE_NAME[s];
     if (p && p.rating != null && !v.solo) tag += ` · ${ratingLabel(p.rating, p.ratingProv)}`;
     const el = $(`card-${s}`);
     const prevCount = Number(el.dataset.count || -1);
@@ -895,7 +901,7 @@ function renderDuel(v) {
     el.innerHTML = `${miniChip(s)}
       <span class="who"><span class="nm">${p ? esc(p.name) + (isMe ? '<span class="you"> (you)</span>' : '') : 'Empty seat'}</span><span class="tag">${tag}</span></span>
       <b class="count${prevCount >= 0 && prevCount !== c[s] ? ' bump' : ''}">${c[s]}</b>
-      ${turn && v.turnMs ? '<span class="clock"></span>' : ''}`;
+      ${turn && (v.turnMs || v.idleLeft != null) ? `<span class="clock${v.turnMs ? '' : ' idle'}"></span>` : ''}`;
     el.dataset.count = c[s];
   }
   $('bar-d').style.flexGrow = c[1];
@@ -905,6 +911,7 @@ function renderDuel(v) {
 
 function renderTurnLine(v) {
   const el = $('turn-line');
+  updateIdleNote();
   el.className = 'turn-line';
   if (v.status === 'over') { el.innerHTML = resultLine(v); return; }
   const p = seatPlayer(v, v.turn);
@@ -934,7 +941,7 @@ function resultLine(v) {
 
 function resultText(v) {
   const r = v.result;
-  const side = mySide(v);
+  const side = mySide(v) || (r.reason === 'idle' ? (r.ids[1] === S.myId ? 1 : r.ids[2] === S.myId ? 2 : 0) : 0);
   const winName = r.winner ? nameOfSeat(v, r.winner) : '';
   const loseName = r.winner ? nameOfSeat(v, E.other(r.winner)) : '';
   let title, sub;
@@ -945,6 +952,7 @@ function resultText(v) {
   const score = `${Math.max(r.counts[1], r.counts[2])} to ${Math.min(r.counts[1], r.counts[2])}`;
   if (r.reason === 'resign') sub = side && r.winner !== side ? 'You resigned.' : `${loseName} resigned.`;
   else if (r.reason === 'forfeit') sub = `${loseName} left the game.`;
+  else if (r.reason === 'idle') sub = side && r.winner !== side ? 'You didn’t move for too long, so you were removed from the game.' : `${r.loserName || loseName} didn’t move for too long.`;
   else if (!r.winner) sub = `${r.counts[1]} chips each.`;
   else sub = `${score} in chips.`;
   if (v.matchWinner) {
@@ -986,7 +994,8 @@ function renderResult(v) {
     $('to-lobby').textContent = 'Change settings';
     $('to-lobby').hidden = !S.isHost;
     const swap = v.settings.colours === 'swap' ? ' Colours swap.' : v.settings.colours === 'random' ? ' Colours are picked at random.' : '';
-    $('result-wait').textContent = !ready ? (S.isHost ? 'A player has left. Change settings to pick who plays next.' : 'A player has left. The host can pick who plays next.')
+    $('result-wait').textContent = !ready && v.result.reason === 'idle' ? (S.isHost ? `${v.result.loserName || 'A player'} was removed for being idle. Change settings to pick who plays next.` : `${v.result.loserName || 'A player'} was removed for being idle. The host can pick who plays next.`)
+      : !ready ? (S.isHost ? 'A player has left. Change settings to pick who plays next.' : 'A player has left. The host can pick who plays next.')
       : (S.isHost ? `Rematch keeps the same two players.${swap}` : `The host starts the next game.${swap}`);
   }
   $('crew-line').textContent = v.crewName ? v.crewStatus : '';
@@ -1117,11 +1126,62 @@ function renderScores(v) {
   $('watching').textContent = watchers.length ? `Watching: ${watchers.map((p) => p.name + (p.id === S.myId ? ' (you)' : '')).join(', ')}` : '';
 }
 
+/* ---------- Inactivity: the countdown, warning and notices (all counted down here from the view's deadline) ---------- */
+const clockText = (ms) => `${Math.floor(Math.ceil(ms / 1000) / 60)}:${String(Math.ceil(ms / 1000) % 60).padStart(2, '0')}`;
+
+function idleState(v) {
+  if (!v || v.solo || v.status !== 'play' || v.idleLeft == null) return null;
+  const left = Math.max(0, v.idleLeft - (performance.now() - S.viewAt));
+  const mover = v.seats[v.turn];
+  return { left, mover, mine: mover === S.myId, name: nameOfSeat(v, v.turn), strikes: (v.strikes && v.strikes[mover]) || 0 };
+}
+
+function updateIdleNote() {
+  const el = $('idle-note');
+  const v = S.view;
+  const st = idleState(v);
+  const warn = E.TIMES.idleWarnMs;
+  const max = v && v.maxStrikes || E.TIMES.idleStrikes;
+  let text = '', cls = '';
+  if (st) {
+    const secs = Math.ceil(st.left / 1000);
+    if (st.mine) {
+      if (st.left < 10000) {
+        cls = 'urgent';
+        text = st.strikes >= max - 1 ? `Move in ${secs} s or you’ll be removed from the game` : `Move in ${secs} s or the computer will play for you`;
+      }
+    } else if (st.left < warn && !(v.strikes && v.strikes[S.myId])) {
+      cls = st.left < 10000 ? 'urgent' : 'warn';
+      text = `Waiting for ${st.name}… (auto-move in ${clockText(st.left)})`;
+    }
+  }
+  // Until they move themselves, the person it happened to keeps a reminder of the count
+  const mineN = v && !v.solo && v.status === 'play' && v.strikes ? v.strikes[S.myId] || 0 : 0;
+  if (!text && mineN) {
+    cls = 'warn';
+    text = `The computer moved for you (${mineN} of ${max}). ${mineN >= max - 1 ? 'One more and you’ll be removed from the game.' : 'Move yourself to reset it.'}`;
+  }
+  if (el.textContent !== text) el.textContent = text;
+  const cn = `idle-note${text ? ' show' : ''}${cls ? ` ${cls}` : ''}`;
+  if (el.className !== cn) el.className = cn;
+}
+
 /* ---------- The clock (and anything else that changes with time) ---------- */
 let lastTickSec = -1;
 function updateClock() {
   const v = S.view;
   if (!v || v.status !== 'play') return;
+  updateIdleNote();
+  // The idle bar on the active card: only once under the warning time, urgent in the last 10 s
+  const st = idleState(v);
+  if (st && !v.turnMs) {
+    const el = document.querySelector(`#card-${v.turn} .clock.idle`);
+    if (el) {
+      el.style.setProperty('--left', String(Math.min(1, st.left / E.TIMES.idleWarnMs)));
+      el.classList.toggle('show', st.left < E.TIMES.idleWarnMs);
+      el.classList.toggle('urgent', st.left < 10000);
+    }
+  }
   if (v.turnMs && v.turnLeft !== null) {
     const left = Math.max(0, v.turnLeft - (performance.now() - S.viewAt));
     const el = document.querySelector(`#card-${v.turn} .clock`);

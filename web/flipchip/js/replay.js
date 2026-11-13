@@ -97,7 +97,7 @@ function renderResult(r) {
   else {
     title = `${esc(name(r.winner))} wins!`;
     const loser = name(E.other(r.winner));
-    sub = r.reason === 'resign' ? `${loser} resigned.` : r.reason === 'forfeit' ? `${loser} left the game.`
+    sub = r.reason === 'resign' ? `${loser} resigned.` : r.reason === 'forfeit' ? `${loser} left the game.` : r.reason === 'idle' ? `${loser} didn’t move for too long.`
       : `${Math.max(c.dark, c.light)} to ${Math.min(c.dark, c.light)} in chips.`;
   }
   $('rp-head').className = 'result-head won';
