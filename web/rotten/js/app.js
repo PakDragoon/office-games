@@ -812,7 +812,7 @@ function settingsLines(st) {
 function renderLobby(v) {
   $('lobby-code').textContent = v.code;
   const rows = v.players.map((p) => `
-    <li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${botTag(p)}</span>
+    <li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${S.isHost ? '' : botTag(p)}</span>
       ${p.bot ? (S.isHost ? botControls(p) : `<span class="tag">${levelName(p.botLevel)}</span>`)
       : `<span class="tag">${p.isHost ? 'Host' : !active(p) ? 'Reconnecting' : ''}</span>`}</li>`);
   const missing = Math.max(0, E.MIN_PLAYERS - v.players.length);

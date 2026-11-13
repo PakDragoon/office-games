@@ -320,7 +320,7 @@ function renderLobby(v) {
     <li class="${p.online ? '' : 'offline'}">
       <span class="dot c${p.color}"></span>
       ${p.photo ? `<img class="avatar" src="${esc(p.photo)}" alt="" referrerpolicy="no-referrer">` : ''}
-      <span class="nm">${esc(disp(p.name))}${botTag(p)}${ratingChip(p.rating, p.ratingProv)}</span>
+      <span class="nm">${esc(disp(p.name))}${isHost ? "" : botTag(p)}${ratingChip(p.rating, p.ratingProv)}</span>
       ${p.bot ? (isHost ? botControls(p) : `<span class="tag">${levelName(p.botLevel)}</span>`)
       : `<span class="tag">${[p.isHost && 'Host', p.id === v.you && 'You', !p.online && 'Offline'].filter(Boolean).join(', ')}</span>`}
     </li>`).join('') + (list.length < MAX_PLAYERS
