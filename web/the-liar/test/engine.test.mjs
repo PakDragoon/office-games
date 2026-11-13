@@ -85,6 +85,8 @@ assert.equal(E.tally({ a: 'b', b: 'a' }).accused, null, 'tie accuses nobody');
 assert.equal(E.tally({}).accused, null);
 assert.equal(E.tally({ a: 'c' }).accused, 'c');
 
+assert.equal(E.TIMES.guessMs, 10000, "the caught liar's last chance is 10 seconds");
+
 // 7. Outcomes and points
 assert.equal(E.outcome({ liar: 'x', accused: 'y', guess: null, word: 'chai' }), 'escaped');
 assert.equal(E.outcome({ liar: 'x', accused: null, guess: null, word: 'chai' }), 'escaped');

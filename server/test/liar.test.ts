@@ -1,4 +1,4 @@
-import { env, runInDurableObject } from 'cloudflare:test';
+import { env, runInDurableObject, runDurableObjectAlarm } from 'cloudflare:test';
 import { describe, expect, it } from 'vitest';
 import { playersOf, room, type Msg } from './helpers';
 
@@ -66,5 +66,26 @@ describe('the liar', () => {
     expect(r.result).toBe('caught');
     expect(r.liar).toBe(ids[liarIdx]);
     expect(r.word).toBe(secrets[(liarIdx + 1) % 3].word);
+  });
+
+  it('gives the caught liar 10 seconds to guess, and counts a silent liar as caught', async () => {
+    const { clients, ids, code } = await room('the-liar', ['Ann', 'Bob', 'Cat']);
+    clients[0].send({ t: 'begin', settings: { play: 'words' } });
+    const secrets = await Promise.all(clients.map((c) => c.next((m) => m.t === 'secret')));
+    const liarIdx = secrets.findIndex((s) => s.liar === true);
+    for (const c of clients) c.send({ t: 'ready' });
+    await clients[0].state((s) => s.status === 'draw');
+    for (const c of clients) c.send({ t: 'votenow', on: true });
+    await clients[0].state((s) => s.status === 'vote');
+    clients.forEach((c, i) => c.send({ t: 'vote', target: ids[i === liarIdx ? (liarIdx + 1) % 3 : liarIdx] }));
+    const g = await clients[liarIdx].state((s) => s.status === 'guess');
+    expect(g.endsIn as number).toBeGreaterThan(9000);
+    expect(g.endsIn as number).toBeLessThanOrEqual(10000);
+    // Time runs out without a pick: the liar stays caught
+    await runInDurableObject(stub(code), (i) => { (i as unknown as { timers: Record<string, number> }).timers.phase = Date.now(); });
+    await runDurableObjectAlarm(stub(code));
+    const r: Msg = await clients[0].state((s) => s.status === 'result');
+    expect(r.result).toBe('caught');
+    expect(r.guess).toBeNull();
   });
 });
