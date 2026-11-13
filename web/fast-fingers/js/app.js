@@ -593,7 +593,7 @@ function focusInput() {
 }
 
 function renderFocusHint() {
-  $('focus-hint').hidden = !(canFocus() && !openSheet && document.activeElement !== input);
+  $('focus-hint').hidden = !(canFocus() && !openSheet && document.activeElement !== input) || $('type-box').classList.contains('counting');
 }
 
 document.addEventListener('keydown', (e) => {
@@ -635,11 +635,49 @@ function renderGame(v) {
   } else renderResult(v);
   renderStatus(v);
   renderLanes(v);
+  renderCountdown(v);
   renderFocusHint();
   const watchers = v.solo ? [] : v.players.filter((p) => p.connected && !p.g);
   $('watching').textContent = watchers.length ? `Watching: ${watchers.map((p) => p.name + (p.id === S.myId ? ' (you)' : '')).join(', ')}` : '';
   $('host-actions').hidden = !(S.isHost && !v.solo && !over);
   $('end-race').hidden = !racing(v);
+}
+
+// The big 3-2-1-Go! over the paragraph. Everything comes from the server's phase and timers (phaseLeft,
+// elapsed), so a refresh mid-countdown shows the right number and watchers see it too. Practice has none.
+// The typing itself is blocked by canType() (racing only), so keys during the countdown never count.
+const GO_SHOW_MS = 700;
+function renderCountdown(v = S.view) {
+  const box = $('count-overlay');
+  let label = '';
+  if (v && !$('game').hidden && v.status === 'play' && !v.solo) {
+    if (v.phase === 'countdown') {
+      const n = Math.max(1, Math.ceil(phaseLeft(v) / 1000));
+      label = String(n);
+      if (n !== S.lastCount) { S.lastCount = n; SOUND.tick(); }
+    } else if (racing(v) && elapsedNow(v) < GO_SHOW_MS) label = 'Go!';
+  }
+  const on = label !== '';
+  if (on !== $('type-box').classList.contains('counting')) {
+    $('type-box').classList.toggle('counting', on);
+    renderFocusHint();
+  }
+  if (box.dataset.label === label) return;
+  box.dataset.label = label;
+  // A fresh element per number restarts its little animation
+  box.replaceChildren();
+  if (!on) return;
+  const el = document.createElement('div');
+  el.className = label === 'Go!' ? 'count-go' : 'count-big';
+  const num = document.createElement('b');
+  num.textContent = label;
+  el.appendChild(num);
+  if (label !== 'Go!') {
+    const sub = document.createElement('span');
+    sub.textContent = 'Typing starts on Go';
+    el.appendChild(sub);
+  }
+  box.appendChild(el);
 }
 
 function renderStatus(v) {
@@ -648,9 +686,8 @@ function renderStatus(v) {
   let html = '';
   if (v.status === 'over') html = '';
   else if (v.phase === 'countdown') {
-    const s = Math.max(1, Math.ceil(phaseLeft(v) / 1000));
-    if (s !== S.lastCount) { S.lastCount = s; SOUND.tick(); }
-    html = `<span>${mine ? 'Get ready' : 'Race starting'}</span><b class="count-num">${s}</b>`;
+    // The big 3-2-1 sits over the paragraph (renderCountdown)
+    html = `<span>${mine ? 'Get ready' : 'Race starting'}</span>`;
   } else if (v.solo) {
     html = R.started ? '' : '<span>The clock starts on your first key</span>';
   } else {
@@ -782,6 +819,9 @@ $('result-view').addEventListener('click', (e) => {
 $('end-race').addEventListener('click', () => { if (S.isHost) toHost({ t: 'endRace' }); });
 $('end-game').addEventListener('click', () => { if (S.isHost) toHost({ t: 'lobby' }); });
 $('quit-btn').addEventListener('click', () => { closeRoom(); goHome(); });
+
+// The 3-2-1 is checked more often than the clocks so each number changes on the second
+setInterval(() => { if (S.view && S.view.status === 'play') renderCountdown(S.view); }, 50);
 
 // Clocks, speeds and lanes tick on every screen without waiting for the host
 setInterval(() => {
