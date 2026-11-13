@@ -8,6 +8,7 @@
   --hit: #3e9b5e;
   --near: #d39b22;
   --miss: #7a7f99;
+  --red: #c4454d;
   --on-tile: #ffffff;
   --danger: #c2334d;
   --p0: #3f7ef0;
@@ -33,6 +34,7 @@
     --hit: #48a868;
     --near: #d5a332;
     --miss: #2e3250;
+    --red: #d05a62;
     color-scheme: dark;
   }
 }
@@ -217,9 +219,12 @@ h1, h2 { line-height: 1.15; margin: 0; }
 
 /* Wide screens: scores | my board | rivals */
 .arena {
+  /* --rows (how many rows the board has) and --note (height of the line above it) are set by app.js */
   --tile: 60px;
-  --tile: max(34px, min(60px, calc((100vh - 340px) / 6)));
-  --tile: max(34px, min(60px, calc((100dvh - 340px) / 6)));
+  --tile: max(var(--tile-min, 34px), min(60px, calc((100vh - 310px - var(--note, 0px) - (var(--rows, 6) - 1) * 6px) / var(--rows, 6))));
+  --tile: max(var(--tile-min, 34px), min(60px, calc((100dvh - 310px - var(--note, 0px) - (var(--rows, 6) - 1) * 6px) / var(--rows, 6))));
+  --mini: min(22px, max(10px, calc((100dvh - 300px - 8px * (var(--rows, 6) - 1)) / (2 * var(--rows, 6)))));
+  --mgap: 4px;
   flex: 1;
   min-height: 0;
   display: grid;
@@ -240,7 +245,7 @@ h1, h2 { line-height: 1.15; margin: 0; }
 }
 @media (min-width: 1100px) { #scores-btn { display: none; } }
 
-.board { display: grid; grid-template-rows: repeat(6, var(--tile)); gap: 6px; }
+.board { display: grid; grid-auto-rows: var(--tile); gap: 6px; }
 .row { display: grid; grid-template-columns: repeat(5, var(--tile)); gap: 6px; }
 .row.shake { animation: shake 0.4s; }
 
@@ -282,10 +287,10 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .rival-name { font-weight: 800; font-size: 1.05rem; max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rival-status { font-size: 0.9rem; color: var(--muted); }
 .rival.solved .rival-status { color: var(--hit); font-weight: 600; }
-.mini { --mini: 22px; display: grid; gap: 4px; }
-.mini .mrow { display: grid; grid-template-columns: repeat(5, var(--mini)); gap: 4px; }
+.mini { display: grid; gap: var(--mgap); }
+.mini .mrow { display: grid; grid-template-columns: repeat(5, var(--mini)); gap: var(--mgap); }
 .mini i { width: var(--mini); height: var(--mini); border-radius: 4px; border: 2px solid var(--line); }
-.mini i.hit, .mini i.near, .mini i.miss { border-color: transparent; }
+.mini i.hit, .mini i.near, .mini i.miss, .mini i.red { border-color: transparent; }
 .mini .mrow.new i { animation: pop 0.35s ease; }
 .mini .mrow.new i:nth-child(2) { animation-delay: 0.05s; }
 .mini .mrow.new i:nth-child(3) { animation-delay: 0.10s; }
@@ -342,15 +347,20 @@ h1, h2 { line-height: 1.15; margin: 0; }
 @media (max-width: 1099px) {
   .arena { grid-template-columns: auto auto; grid-template-areas: "me rivals"; justify-content: center; gap: 1.5rem; }
   .scoreboard { display: none; }
-  .mini { --mini: 18px; gap: 3px; }
-  .mini .mrow { gap: 3px; }
+  .arena { --mini: min(18px, max(10px, calc((100dvh - 300px - 8px * (var(--rows, 6) - 1)) / (2 * var(--rows, 6))))); --mgap: 3px; }
+}
+
+/* Tablets only: Counts and Ladder rows are wider (three boxes, a label), so the tiles stop at 46px to keep the row beside the rivals */
+@media (min-width: 761px) and (max-width: 1099px) {
+  .keyboard { width: min(500px, calc(100vw - 390px)); }   /* beside the rivals column; it used to push the page 23px too wide at 768px */
+  .arena.counts, .arena.ladder { --tile: max(var(--tile-min, 34px), min(46px, calc((100dvh - 310px - var(--note, 0px) - (var(--rows, 6) - 1) * 6px) / var(--rows, 6)))); }
 }
 
 /* Phones: rivals in a strip above the board, keyboard at the bottom */
 @media (max-width: 760px) {
   .arena {
-    --tile: max(32px, min(56px, 11.5vw, calc((100vh - 470px) / 6)));
-    --tile: max(32px, min(56px, 11.5vw, calc((100dvh - 470px) / 6)));
+    --tile: max(var(--tile-min, 32px), min(56px, 11.5vw, calc((100vh - 470px - var(--note, 0px) - (var(--rows, 6) - 6) * 6px) / var(--rows, 6))));
+    --tile: max(var(--tile-min, 32px), min(56px, 11.5vw, calc((100dvh - 470px - var(--note, 0px) - (var(--rows, 6) - 6) * 6px) / var(--rows, 6))));
     display: flex; flex-direction: column;
     gap: 0.75rem;
     padding: 0.6rem 0.5rem 0;
@@ -361,10 +371,10 @@ h1, h2 { line-height: 1.15; margin: 0; }
     grid-template-columns: auto 1fr; grid-template-rows: auto auto;
     justify-items: start; align-items: center;
     column-gap: 0.6rem; row-gap: 0.1rem;
-    padding: 0.5rem 0.6rem; border-width: 2px;
+    padding: 0.4rem 0.55rem; border-width: 2px;
   }
-  .rival .mini { grid-row: 1 / 3; --mini: 12px; gap: 2px; }
-  .rival .mini .mrow { gap: 2px; }
+  .arena { --mgap: 2px; }
+  .rival .mini { grid-row: 1 / 3; --mini: clamp(6px, calc(84px / var(--rows, 6) - 2px), 12px); }
   .rival .mini i { border-width: 1px; border-radius: 2px; }
   .rival-name { font-size: 0.95rem; max-width: 100%; }
   .rival-status { font-size: 0.78rem; line-height: 1.25; }
@@ -493,3 +503,87 @@ body.contrast { --hit: #f5793a; --near: #3b8eea; }
 .delete-data .delete-data-btn { border-color: var(--danger); color: var(--danger); }
 .delete-data .delete-data-btn.sure { background: var(--danger); border-color: var(--danger); color: #fff; }
 .delete-data .delete-data-note { margin: 0; text-align: left; }
+
+/* ---------- Modes: lobby ---------- */
+.mode-pick { margin-bottom: 0.5rem; }
+.mode-blurb { margin: 0 0 1rem; min-height: 2.6em; }
+.toggle.disabled { opacity: 0.5; cursor: not-allowed; }
+.toggle.disabled input { cursor: not-allowed; }
+.hard-note { margin: -0.6rem 0 1rem; }
+.match-settings #attempts-field { grid-column: 1 / -1; }
+.match-settings #attempts-field[hidden] + .select-field { grid-column: auto; }
+
+/* ---------- Modes: the board ---------- */
+.board-note { min-height: 1.4rem; margin: 0 0 -0.6rem; font-size: 0.9rem; font-weight: 600; color: var(--muted); text-align: center; }
+.board-note[hidden] { display: none; }
+.board-note.legend { display: flex; flex-wrap: wrap; gap: 0.2rem 0.9rem; justify-content: center; }
+.board-note.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.board-note.legend i { width: 0.8rem; height: 0.8rem; border-radius: 3px; display: inline-block; }
+.red { background: var(--red); }
+.tile.locked { border-color: var(--muted); color: var(--ink); }
+.tile.locked.hit { color: var(--on-tile); border-color: transparent; }
+
+/* Counts: three numbers beside each row */
+.row.counts { grid-template-columns: repeat(5, var(--tile)) auto; gap: 6px 10px; }
+.cboxes { display: flex; gap: 4px; }
+.cbox {
+  display: grid; place-items: center;
+  width: calc(var(--tile) * 0.72); height: var(--tile);
+  border-radius: 6px; font-weight: 800; font-size: calc(var(--tile) * 0.5);
+  color: var(--on-tile); font-variant-numeric: tabular-nums;
+}
+.cbox.empty { background: transparent; border: 2px dashed var(--line); }
+.cbox.near { color: #1b1e3a; }
+
+/* Word ladder rows: a word plus a small tag (Start, Step 2, Target) */
+.row.ladder-row { grid-template-columns: repeat(5, var(--tile)) auto; align-items: center; gap: 6px; }
+.ladder-row .tile { height: var(--tile); }
+.row-tag { margin-left: 0.4rem; min-width: 4.2rem; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+.ladder-row.start .tile, .ladder-row.goal .tile { border-style: solid; }
+.ladder-row.start .tile:not(.hit) { background: var(--bg); }
+.ladder-row.goal .tile { border: 2px dashed var(--muted); color: var(--ink); background: transparent; }
+.ladder-row.goal .tile { font-weight: 800; }
+.ladder-row.blank .tile { opacity: 0.35; border-style: dashed; }
+
+/* Rivals' small boards in Counts: three little boxes per row, five cells wide like Classic */
+.mini .mrow.cnt { grid-template-columns: repeat(3, 1fr); width: calc(var(--mini) * 5 + var(--mgap) * 4); }
+.mini .mrow.cnt i {
+  width: auto; display: grid; place-items: center; font-style: normal; font-weight: 800;
+  font-size: calc(var(--mini) * 0.62); line-height: 1; color: var(--on-tile); overflow: hidden;
+}
+.mini .mrow.cnt i.near { color: #1b1e3a; }
+.mini.ladder .mrow i { border-radius: 50%; }
+.mini.ladder { margin: 0.2rem 0; }
+
+/* ---------- Modes: results ---------- */
+.result-boards { text-align: left; display: grid; gap: 0.6rem; border-top: 2px solid var(--line); padding-top: 0.75rem; }
+.result-boards .scores-sub { margin: 0; }
+.result-board { display: grid; gap: 0.3rem; background: var(--bg); border-radius: 10px; padding: 0.5rem 0.65rem; }
+.rb-name { display: flex; align-items: center; gap: 0.45rem; font-weight: 700; }
+.rrow { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.rtiles { display: flex; gap: 3px; }
+.rtiles i {
+  width: 1.55rem; height: 1.55rem; display: grid; place-items: center; font-style: normal;
+  font-weight: 800; font-size: 0.85rem; text-transform: uppercase; color: var(--on-tile); border-radius: 4px;
+}
+.rnums { display: flex; gap: 3px; }
+.rnums .cbox { width: 1.4rem; height: 1.4rem; font-size: 0.8rem; border-radius: 4px; }
+.chain { margin: 0; font-size: 0.9rem; line-height: 1.8; overflow-wrap: anywhere; }
+.chain b { text-transform: uppercase; letter-spacing: 0.05em; }
+.chain b.reached { color: var(--hit); }
+.ladder-path { display: grid; gap: 0.3rem; }
+.stats-mode { margin: 1rem 0 0.4rem; font-size: 0.95rem; }
+.stat-grid + .stats-note, .stats-mode:first-child { margin-top: 0.4rem; }
+
+/* Many rows (7 to 10 guesses) and the phone keyboard: smaller keys so everything still fits */
+@media (max-width: 760px) {
+  .arena.many { --tile-min: 20px; }
+  .arena.many .key { height: 38px; }
+  .arena.many .me { gap: 0.4rem; }
+  .arena.many { gap: 0.45rem; padding-top: 0.4rem; }
+  .arena.many .keyboard { gap: 4px; padding-bottom: 0.35rem; }
+  .row.counts { gap: 5px 6px; }
+  .row.ladder-row { gap: 5px; }
+  .row-tag { min-width: 0; font-size: 0.7rem; margin-left: 0.2rem; }
+  .board-note { min-height: 1.1rem; font-size: 0.8rem; margin-bottom: -0.7rem; }
+}

@@ -33,7 +33,7 @@
         </span>
         <span class="logo-sub">party</span>
       </h1>
-      <p class="lede">Everyone gets the same word. You see your friends’ colors fill in live, never their letters.</p>
+      <p class="lede">Everyone gets the same word. You see your friends’ progress live, never their letters.</p>
 
       <label class="field">
         <span>Your name</span>
@@ -80,10 +80,17 @@
       <p id="public-state" class="muted small-note" hidden></p>
 
       <div id="host-controls" hidden>
+        <fieldset class="win-rule mode-pick">
+          <legend>Game mode</legend>
+          <label><input type="radio" name="mode" value="classic" checked> Classic</label>
+          <label><input type="radio" name="mode" value="counts"> Counts</label>
+          <label><input type="radio" name="mode" value="ladder"> Word ladder</label>
+        </fieldset>
+        <p id="mode-blurb" class="muted small-note mode-blurb"></p>
         <fieldset class="win-rule">
           <legend>Who wins a round?</legend>
-          <label><input type="radio" name="win-rule" value="first" checked> First to solve it</label>
-          <label><input type="radio" name="win-rule" value="fewest"> Fewest guesses</label>
+          <label><input type="radio" name="win-rule" value="first" checked> <span id="rule-first-text">First to solve it</span></label>
+          <label><input type="radio" name="win-rule" value="fewest"> <span id="rule-fewest-text">Fewest guesses</span></label>
         </fieldset>
         <div class="match-settings">
           <label class="select-field">
@@ -93,6 +100,18 @@
               <option value="3">3 rounds</option>
               <option value="5">5 rounds</option>
               <option value="10">10 rounds</option>
+            </select>
+          </label>
+          <label class="select-field" id="attempts-field">
+            <span>Guesses per round</span>
+            <select id="attempts-select">
+              <option value="4">4 guesses</option>
+              <option value="5">5 guesses</option>
+              <option value="6">6 guesses</option>
+              <option value="7">7 guesses</option>
+              <option value="8">8 guesses</option>
+              <option value="9">9 guesses</option>
+              <option value="10">10 guesses</option>
             </select>
           </label>
           <label class="select-field">
@@ -113,14 +132,15 @@
             <button id="crew-btn" class="btn">Use</button>
           </div>
         </div>
-        <label class="toggle">
+        <label class="toggle" id="strict-label">
           <input type="checkbox" id="strict-toggle" checked>
           <span>Only accept words from the word list</span>
         </label>
-        <label class="toggle">
+        <label class="toggle" id="hard-label">
           <input type="checkbox" id="hard-toggle">
           <span>Hard mode: revealed hints must be used</span>
         </label>
+        <p id="hard-note" class="muted small-note hard-note" hidden>Hard mode is only for Classic: the other modes show no hints to reuse.</p>
         <label class="toggle public-toggle">
           <input type="checkbox" id="public-toggle">
           <span>Open to Quick Play</span>
@@ -153,6 +173,7 @@
         <div id="scoreboard-body"></div>
       </aside>
       <section class="me" aria-label="Your board">
+        <div id="board-note" class="board-note"></div>
         <div id="my-board" class="board"></div>
         <div id="keyboard" class="keyboard" aria-label="Keyboard"></div>
       </section>
@@ -178,6 +199,7 @@
       <p id="results-meaning" class="meaning" hidden></p>
       <ol id="results-list" class="ranking"></ol>
       <p id="results-rule" class="muted small-note"></p>
+      <div id="results-boards" class="result-boards" hidden></div>
       <div id="final-block" class="final-block" hidden>
         <h3 class="scores-sub">Final standings</h3>
         <div id="final-standings"></div>

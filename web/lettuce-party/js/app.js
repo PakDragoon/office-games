@@ -1,17 +1,27 @@
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
+import * as E from './engine.js';
 
 /* =========================================================
    Lettuce Party
    The game runs on the server (server/src/games/lettuce.ts): it picks the
-   word, checks every guess and sends everyone the colour patterns.
+   word, checks every guess and sends everyone the colour patterns (Classic),
+   the three counts (Counts) or step counts (Word ladder).
    Nobody receives the word or anyone else's letters until the round ends.
    ========================================================= */
 
 const MAX_PLAYERS = 5;
-const ROWS = 6;
 const COLS = 5;
+const LADDER_STEPS_SHOWN = 5;   // the ladder board shows the start, your latest steps, and the target
+const LADDER_ROWS = LADDER_STEPS_SHOWN + 2;
+
+const MODE_NAMES = { classic: 'Classic', counts: 'Counts', ladder: 'Word ladder' };
+const MODE_BLURBS = {
+  classic: 'Everyone gets the same secret word. Tiles turn green, yellow or grey after each guess.',
+  counts: 'Same secret word, but no tile colors: after each guess you only get three numbers, how many letters are in the right place, in the wrong place, and not in the word.',
+  ladder: 'Everyone gets the same start word and target word. Change one letter at a time, every step a real word, until you reach the target.',
+};
 
 /* ---------- Preferences (this device only) ---------- */
 const PREFS = { sound: true, contrast: false, analytics: true };
@@ -47,6 +57,12 @@ const WIN_RULES = {
   first: 'First to solve it wins.',
   fewest: 'Fewest guesses wins, and the faster time breaks ties.',
 };
+const LADDER_WIN_RULES = {
+  first: 'First to reach the target wins.',
+  fewest: 'Fewest steps wins, and the faster time breaks ties.',
+};
+const winRules = (v) => (v.mode === 'ladder' ? LADDER_WIN_RULES : WIN_RULES);
+const rowsOf = (mode, attempts) => (mode === 'ladder' ? LADDER_ROWS : attempts || E.ATTEMPTS.default);
 const CLASS = { h: 'hit', n: 'near', m: 'miss' };
 const RANK = { miss: 1, near: 2, hit: 3 };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -62,7 +78,9 @@ const S = {
   creating: false,
   view: null,          // latest room state from the server
   roundShown: 0,       // which round my board was built for
-  guesses: [],         // my guesses: [{ word, pattern }]
+  mode: 'classic',     // the mode my board was built for
+  attempts: 6,
+  guesses: [],         // my guesses: [{ word, pattern }] (Classic), [{ word, counts }] (Counts), [{ word }] (Ladder)
   current: '',
   pending: false,      // waiting for the server to score my guess
   keyState: {},
@@ -134,13 +152,16 @@ function onMessage(msg) {
     case 'board':
       // Coming back after a disconnect: redraw my earlier guesses.
       S.roundShown = msg.round;
+      S.mode = MODE_NAMES[msg.mode] ? msg.mode : 'classic';
+      S.attempts = msg.attempts || E.ATTEMPTS.default;
       S.guesses = msg.guesses;
       S.current = '';
       S.pending = false;
       buildBoard();
       buildKeyboard();
-      S.guesses.forEach((g, r) => paintRow(r, g.word, g.pattern, false));
+      S.guesses.forEach((g, r) => paintGuess(r, g, false));
       updateKeyboard();
+      drawLadder();
       break;
     case 'state':
       applyState(msg);
@@ -152,6 +173,7 @@ function onMessage(msg) {
       S.pending = false;
       shakeRow(S.guesses.length);
       toast(msg.reason);
+      drawLadder();
       break;
   }
 }
@@ -183,6 +205,7 @@ function applyState(v) {
   }
 
   showScreen('game');
+  drawLadder();
   $('game-code').textContent = v.code;
   $('game-round').textContent = v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
   renderRivals(v);
@@ -211,14 +234,16 @@ function applyState(v) {
 function trackMyRound(v) {
   const m = me();
   if (!m || S.trackedRound === v.round || !v.word) return;
-  if (!m.done && m.patterns.length === 0) return;
+  if (!m.done && m.used === 0) return;
   S.trackedRound = v.round;
-  cloud.track('round_played', { solved: m.solved ? 1 : 0, guesses: m.patterns.length });
+  cloud.track('round_played', { solved: m.solved ? 1 : 0, guesses: m.used, mode: v.mode });
 }
 
 
 function startLocalRound(v) {
   S.roundShown = v.round;
+  S.mode = v.mode;
+  S.attempts = v.attempts;
   S.guesses = [];
   S.current = '';
   S.pending = false;
@@ -237,16 +262,72 @@ function me() {
    ========================================================= */
 function buildBoard() {
   const board = $('my-board');
+  const rows = rowsOf(S.mode, S.attempts);
   board.innerHTML = '';
-  for (let r = 0; r < ROWS; r++) {
+  board.className = `board ${S.mode}`;
+  const arena = $('screen-game').querySelector('.arena');
+  arena.style.setProperty('--rows', String(rows));
+  // Past six rows the tiles are allowed to get smaller so the board and keyboard still fit without scrolling
+  arena.style.setProperty('--tile-min', rows > 6 ? '20px' : '');
+  arena.style.setProperty('--note', S.mode === 'classic' ? '0px' : '30px');
+  arena.classList.toggle('many', rows > 6);
+  arena.classList.remove('classic', 'counts', 'ladder');
+  arena.classList.add(S.mode);
+  paintBoardNote();
+  if (S.mode === 'ladder') return drawLadder();
+  for (let r = 0; r < rows; r++) {
     const row = document.createElement('div');
-    row.className = 'row';
+    row.className = `row ${S.mode}`;
     for (let c = 0; c < COLS; c++) {
       const t = document.createElement('div');
       t.className = 'tile';
       row.appendChild(t);
     }
+    if (S.mode === 'counts') {
+      const boxes = document.createElement('div');
+      boxes.className = 'cboxes';
+      for (const kind of COUNT_KINDS) boxes.appendChild(countBox(kind, null));
+      row.appendChild(boxes);
+    }
     board.appendChild(row);
+  }
+}
+
+/* ---------- Counts: three boxes beside each row ---------- */
+const COUNT_KINDS = [
+  { cls: 'hit', one: 'right place', title: (n) => `${n} right place` },
+  { cls: 'near', one: 'wrong place', title: (n) => `${n} wrong place` },
+  { cls: 'red', one: 'not in the word', title: (n) => `${n} not in the word` },
+];
+
+/** One count box. The number is inside, and the title / aria label say what it means (never colour alone). */
+function countBox(kind, n) {
+  const b = document.createElement('span');
+  b.className = `cbox ${kind.cls}` + (n == null ? ' empty' : '');
+  if (n == null) {
+    b.setAttribute('aria-hidden', 'true');
+  } else {
+    b.textContent = String(n);
+    b.title = kind.title(n);
+    b.setAttribute('aria-label', kind.title(n));
+  }
+  return b;
+}
+
+function paintBoardNote() {
+  const note = $('board-note');
+  note.innerHTML = '';
+  note.hidden = S.mode === 'classic';
+  if (S.mode === 'counts') {
+    note.className = 'board-note legend';
+    for (const k of COUNT_KINDS) {
+      const item = document.createElement('span');
+      const sw = document.createElement('i');
+      sw.className = k.cls;
+      sw.setAttribute('aria-hidden', 'true');
+      item.append(sw, k.one);
+      note.appendChild(item);
+    }
   }
 }
 
@@ -255,13 +336,21 @@ function rowEl(r) {
 }
 
 function drawCurrent() {
+  if (S.mode === 'ladder') return drawLadder();
   const row = rowEl(S.guesses.length);
   if (!row) return;
-  [...row.children].forEach((t, i) => {
+  [...row.querySelectorAll('.tile')].forEach((t, i) => {
     const ch = S.current[i] || '';
     t.textContent = ch;
     t.className = 'tile' + (ch ? ' filled' : '');
   });
+}
+
+/** Draw one of my guesses on its row. Classic: coloured tiles. Counts: plain tiles plus the three boxes. */
+function paintGuess(r, g, animate) {
+  if (S.mode === 'ladder') return;
+  if (S.mode === 'counts') return paintCounts(r, g.word, g.counts, animate);
+  paintRow(r, g.word, g.pattern, animate);
 }
 
 function paintRow(r, word, pattern, animate) {
@@ -279,7 +368,81 @@ function paintRow(r, word, pattern, animate) {
   });
 }
 
+function paintCounts(r, word, counts, animate) {
+  const row = rowEl(r);
+  if (!row) return;
+  const tiles = [...row.querySelectorAll('.tile')];
+  tiles.forEach((t, i) => {
+    t.textContent = word[i];
+    t.className = 'tile locked';
+  });
+  const boxes = row.querySelector('.cboxes');
+  boxes.innerHTML = '';
+  COUNT_KINDS.forEach((k, i) => {
+    const b = countBox(k, counts[i]);
+    if (animate && !reduceMotion) b.style.animation = `pop 0.35s ease ${i * 0.08}s both`;
+    boxes.appendChild(b);
+  });
+  row.setAttribute('aria-label', `${word.toUpperCase()}: ${counts[0]} right place, ${counts[1]} wrong place, ${counts[2]} not in the word`);
+}
+
+/* ---------- Word ladder board: start word, my steps, target ---------- */
+function ladderRow(word, kind, target, label, current) {
+  const row = document.createElement('div');
+  row.className = `row ladder-row ${kind}`;
+  for (let c = 0; c < COLS; c++) {
+    const t = document.createElement('div');
+    const ch = word[c] || '';
+    t.textContent = ch;
+    // Letters already in the right place for the target are green: the target is public, so this reveals nothing
+    const inPlace = ch && target && ch === target[c];
+    t.className = 'tile' + (ch ? (kind === 'draft' ? ' filled' : ' locked') : '') + (inPlace && kind !== 'draft' ? ' hit' : '');
+    row.appendChild(t);
+  }
+  const tag = document.createElement('span');
+  tag.className = 'row-tag';
+  tag.textContent = label;
+  row.appendChild(tag);
+  if (word && kind !== 'draft') row.setAttribute('aria-label', `${label ? `${label}: ` : ''}${word.toUpperCase()}`);
+  return row;
+}
+
+function drawLadder() {
+  if (S.mode !== 'ladder') return;
+  const board = $('my-board');
+  const lad = S.view?.ladder;
+  board.innerHTML = '';
+  const note = $('board-note');
+  note.hidden = false;
+  note.className = 'board-note';
+  if (!lad) {
+    note.textContent = 'Waiting for the words…';
+    return;
+  }
+  const steps = S.guesses.map((g) => g.word);
+  const reached = steps[steps.length - 1] === lad.target;
+  note.textContent = `Par ${lad.par}: ${lad.par} step${lad.par === 1 ? '' : 's'} is the fewest. You: ${steps.length} step${steps.length === 1 ? '' : 's'}.`;
+  board.appendChild(ladderRow(lad.start, 'start', lad.target, 'Start'));
+  const m = me();
+  const drafting = !reached && S.view?.status === 'playing' && Boolean(m) && !m.done;
+  const first = Math.max(0, steps.length - (drafting ? LADDER_STEPS_SHOWN - 1 : LADDER_STEPS_SHOWN));
+  for (let i = first; i < steps.length; i++) board.appendChild(ladderRow(steps[i], 'step', lad.target, `Step ${i + 1}`));
+  if (drafting) board.appendChild(ladderRow(S.current, 'draft', lad.target, `Step ${steps.length + 1}`));
+  // Keep the board the same height whether you are on step 1 or step 12
+  while (board.children.length < LADDER_ROWS - 1) {
+    const blank = ladderRow('', 'blank', lad.target, '');
+    blank.setAttribute('aria-hidden', 'true');
+    board.appendChild(blank);
+  }
+  board.appendChild(ladderRow(lad.target, 'goal', lad.target, 'Target'));
+}
+
 function shakeRow(r) {
+  if (S.mode === 'ladder') {
+    const draft = $('my-board').querySelector('.draft');
+    if (draft) { draft.classList.remove('shake'); void draft.offsetWidth; draft.classList.add('shake'); }
+    return;
+  }
   const row = rowEl(r);
   if (!row) return;
   row.classList.remove('shake');
@@ -290,18 +453,30 @@ function shakeRow(r) {
 function onResult(msg) {
   if (msg.round !== S.roundShown) return;
   const r = S.guesses.length;
-  S.guesses.push({ word: msg.word, pattern: msg.pattern });
+  const g = { word: msg.word };
+  if (msg.pattern) g.pattern = msg.pattern;
+  if (msg.counts) g.counts = msg.counts;
+  S.guesses.push(g);
   S.current = '';
   S.pending = false;
-  paintRow(r, msg.word, msg.pattern, true);
-  const wait = reduceMotion ? 0 : COLS * 250 + 250;
+  if (S.mode === 'ladder') {
+    drawLadder();
+    if (msg.word === S.view?.ladder?.target) {
+      toast(`You reached the target in ${S.guesses.length} step${S.guesses.length === 1 ? '' : 's'}!`);
+      sfx('win');
+    }
+    return;
+  }
+  paintGuess(r, g, true);
+  const wait = reduceMotion ? 0 : S.mode === 'counts' ? 600 : COLS * 250 + 250;
+  const solved = S.mode === 'counts' ? g.counts[0] === COLS : g.pattern === 'hhhhh';
   setTimeout(() => {
     updateKeyboard();
-    if (msg.pattern === 'hhhhh') {
+    if (solved) {
       toast(winLine(S.guesses.length));
       sfx('win');
     }
-    else if (S.guesses.length >= ROWS) toast('Out of guesses. Waiting for the others.');
+    else if (S.guesses.length >= S.attempts) toast('Out of guesses. Waiting for the others.');
   }, wait);
 }
 
@@ -313,7 +488,7 @@ function winLine(n) {
 function canType() {
   const v = S.view;
   const m = me();
-  return v && v.status === 'playing' && m && !m.done && !S.pending && S.guesses.length < ROWS;
+  return v && v.status === 'playing' && m && !m.done && !S.pending && (S.mode === 'ladder' || S.guesses.length < S.attempts);
 }
 
 function pressKey(k) {
@@ -360,7 +535,8 @@ function buildKeyboard() {
 }
 
 function updateKeyboard() {
-  for (const g of S.guesses) {
+  // Only Classic colours the keys: the other modes never tell you which letters are right
+  for (const g of S.mode === 'classic' ? S.guesses : []) {
     [...g.word].forEach((ch, i) => {
       const cls = CLASS[g.pattern[i]];
       if (!S.keyState[ch] || RANK[cls] > RANK[S.keyState[ch]]) S.keyState[ch] = cls;
@@ -384,25 +560,54 @@ function renderRivals(v) {
 }
 
 function rivalCard(p) {
+  const v = S.view;
   const card = document.createElement('div');
   card.className = `rival c${p.color}` + (p.solved ? ' solved' : '') + (p.connected ? '' : ' offline');
 
   const mini = document.createElement('div');
-  mini.className = 'mini';
+  mini.className = `mini ${v.mode}`;
   mini.setAttribute('aria-hidden', 'true');
+  const rows = rowsOf(v.mode, v.attempts);
+  mini.style.setProperty('--rows', String(rows));
   const seen = S.seenRows[p.id] || 0;
-  for (let r = 0; r < ROWS; r++) {
+  if (v.mode === 'ladder') {
+    // Ladder words stay secret: five pips show how many letters of their current word match the target in place
     const row = document.createElement('div');
-    const pat = p.patterns[r];
-    row.className = 'mrow' + (pat && r >= seen && !reduceMotion ? ' new' : '');
+    row.className = 'mrow';
     for (let c = 0; c < COLS; c++) {
       const cell = document.createElement('i');
-      if (pat) cell.className = CLASS[pat[c]];
+      if (p.match != null && c < p.match) cell.className = 'hit';
       row.appendChild(cell);
     }
     mini.appendChild(row);
+  } else {
+    for (let r = 0; r < rows; r++) {
+      const row = document.createElement('div');
+      const isNew = r >= seen && !reduceMotion;
+      if (v.mode === 'counts') {
+        const c3 = p.counts[r];
+        row.className = 'mrow cnt' + (c3 && isNew ? ' new' : '');
+        COUNT_KINDS.forEach((k, i) => {
+          const cell = document.createElement('i');
+          if (c3) {
+            cell.className = k.cls;
+            cell.textContent = String(c3[i]);
+          }
+          row.appendChild(cell);
+        });
+      } else {
+        const pat = p.patterns[r];
+        row.className = 'mrow' + (pat && isNew ? ' new' : '');
+        for (let c = 0; c < COLS; c++) {
+          const cell = document.createElement('i');
+          if (pat) cell.className = CLASS[pat[c]];
+          row.appendChild(cell);
+        }
+      }
+      mini.appendChild(row);
+    }
   }
-  S.seenRows[p.id] = p.patterns.length;
+  S.seenRows[p.id] = p.used;
 
   const name = document.createElement('div');
   name.className = 'rival-name';
@@ -412,20 +617,33 @@ function rivalCard(p) {
   status.className = 'rival-status';
   status.textContent = rivalStatus(p);
 
-  card.setAttribute('aria-label', `${label(p.name)}: ${status.textContent}`);
+  let detail = status.textContent;
+  if (v.mode === 'counts' && p.counts.length) {
+    const last = p.counts[p.counts.length - 1];
+    detail += `. Last guess: ${last[0]} right place, ${last[1]} wrong place, ${last[2]} not in the word`;
+  }
+  card.setAttribute('aria-label', `${label(p.name)}: ${detail}`);
   card.append(mini, name, status);
   return card;
 }
 
 function rivalStatus(p) {
-  const n = p.patterns.length;
+  const v = S.view;
+  const n = p.used;
   if (!p.connected) return 'Disconnected';
+  if (v.mode === 'ladder') {
+    if (p.solved) return `Reached it in ${n} (${fmtTime(p.finishMs)})`;
+    if (p.timedOut) return `Out of time, ${n} step${n === 1 ? '' : 's'}`;
+    if (p.stopped) return 'Round ended';
+    if (v.status !== 'playing') return `${n} step${n === 1 ? '' : 's'}`;
+    return n === 0 ? 'Thinking…' : `${n} step${n === 1 ? '' : 's'}, ${p.match} of 5 match`;
+  }
   if (p.solved) return `Solved in ${n} (${fmtTime(p.finishMs)})`;
   if (p.timedOut) return 'Out of time';
   if (p.stopped) return 'Round ended';
   if (p.done) return 'Out of guesses';
-  if (S.view.status !== 'playing') return `${n} of 6 used`;
-  return n === 0 ? 'Thinking…' : `${n} of 6 guesses`;
+  if (v.status !== 'playing') return `${n} of ${v.attempts} used`;
+  return n === 0 ? 'Thinking…' : `${n} of ${v.attempts} guesses`;
 }
 
 function announceRivals(prev, v) {
@@ -434,7 +652,7 @@ function announceRivals(prev, v) {
     if (p.id === S.myId) continue;
     const before = prev.players.find((x) => x.id === p.id || x.name === p.name);
     if (before && !before.solved && p.solved) {
-      toast(`${label(p.name)} solved it in ${p.patterns.length}!`);
+      toast(v.mode === 'ladder' ? `${label(p.name)} reached the target in ${p.used}!` : `${label(p.name)} solved it in ${p.used}!`);
       sfx('rival');
     }
   }
@@ -494,9 +712,22 @@ function renderLobby(v) {
     $('strict-toggle').checked = v.strict;
     paintPublic(v);
     for (const r of document.querySelectorAll('input[name="win-rule"]')) r.checked = r.value === v.winRule;
+    for (const r of document.querySelectorAll('input[name="mode"]')) r.checked = r.value === v.mode;
+    $('mode-blurb').textContent = MODE_BLURBS[v.mode] || '';
+    const ladder = v.mode === 'ladder';
+    $('rule-first-text').textContent = ladder ? 'First to reach the target' : 'First to solve it';
+    $('rule-fewest-text').textContent = ladder ? 'Fewest steps' : 'Fewest guesses';
     $('rounds-select').value = String(v.maxRounds);
+    $('attempts-field').hidden = ladder;
+    $('attempts-select').value = String(v.attempts);
+    $('strict-label').hidden = ladder;
+    // Hard mode needs revealed hints, which only Classic has
     $('hard-toggle').checked = v.hard;
-    $('timer-select').value = String(v.timer);
+    $('hard-toggle').disabled = v.mode !== 'classic';
+    $('hard-label').classList.toggle('disabled', v.mode !== 'classic');
+    $('hard-note').hidden = v.mode === 'classic';
+    paintTimerOptions(ladder);
+    $('timer-select').value = String(ladder ? v.ladderTime : v.timer);
     const n = v.players.length;
     $('start-btn').textContent = n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
   } else {
@@ -505,10 +736,26 @@ function renderLobby(v) {
   }
 }
 
+// The time limit list: Word ladder always has a limit (1, 2, 3 or 5 minutes); the others can have none
+function paintTimerOptions(ladder) {
+  const sel = $('timer-select');
+  if (sel.dataset.ladder === String(ladder)) return;
+  sel.dataset.ladder = String(ladder);
+  sel.innerHTML = '';
+  for (const secs of ladder ? E.LADDER_TIMES : E.TIMERS) {
+    const o = document.createElement('option');
+    o.value = String(secs);
+    o.textContent = secs === 0 ? 'No timer' : `${secs / 60} minute${secs === 60 ? '' : 's'}`;
+    sel.appendChild(o);
+  }
+}
+
 function settingsSummary(v) {
   const rounds = v.maxRounds ? `${v.maxRounds} rounds` : 'Unlimited rounds';
-  const timer = v.timer ? `${v.timer / 60} minute${v.timer === 60 ? '' : 's'} per round` : 'no timer';
-  return `${WIN_RULES[v.winRule] || ''} ${rounds}, ${timer}.${v.hard ? ' Hard mode.' : ''}`;
+  const limit = E.effectiveTimer(v);
+  const timer = limit ? `${limit / 60} minute${limit === 60 ? '' : 's'} per round` : 'no timer';
+  const attempts = v.mode === 'ladder' ? '' : `, ${v.attempts} guesses`;
+  return `${MODE_NAMES[v.mode] || 'Classic'}. ${winRules(v)[v.winRule] || ''} ${rounds}${attempts}, ${timer}.${v.hard ? ' Hard mode.' : ''}`;
 }
 
 /* =========================================================
@@ -595,7 +842,7 @@ function roomScoresHTML(v, withHistory = true) {
 
   return `
     <table class="scores">
-      <thead><tr><th scope="col">Player</th><th scope="col">Wins</th><th scope="col">Solved</th><th scope="col" title="Average guesses when solved">Avg</th><th scope="col" title="Fastest solve">Best</th></tr></thead>
+      <thead><tr><th scope="col">Player</th><th scope="col">Wins</th><th scope="col">Solved</th><th scope="col" title="Average guesses (or ladder steps) when solved">Avg</th><th scope="col" title="Fastest solve">Best</th></tr></thead>
       <tbody>${body}</tbody>
     </table>
     ${history && withHistory ? `<p class="history-title">Past words</p><ul class="history">${history}</ul>` : ''}`;
@@ -605,22 +852,26 @@ function roomScoresHTML(v, withHistory = true) {
    Results
    ========================================================= */
 function ranked(players, rule = 'first') {
+  // How close an unsolved player got: green tiles (Classic), the green count (Counts), letters matching the target (Ladder)
   const greens = (p) => {
+    if (p.match != null) return p.match;
+    if (p.counts.length) return p.counts[p.counts.length - 1][0];
     const last = p.patterns[p.patterns.length - 1] || '';
     return [...last].filter((c) => c === 'h').length;
   };
   return [...players].sort((a, b) => {
     if (a.solved !== b.solved) return a.solved ? -1 : 1;
-    if (a.solved && rule === 'fewest') return a.patterns.length - b.patterns.length || a.finishMs - b.finishMs;
-    if (a.solved) return a.finishMs - b.finishMs || a.patterns.length - b.patterns.length;
+    if (a.solved && rule === 'fewest') return a.used - b.used || a.finishMs - b.finishMs;
+    if (a.solved) return a.finishMs - b.finishMs || a.used - b.used;
     return greens(b) - greens(a);
   });
 }
 
 function showResults(v) {
+  const ladder = v.mode === 'ladder';
   const word = $('results-word');
   word.innerHTML = '';
-  for (const ch of v.word || '') {
+  for (const ch of (ladder ? v.ladder?.target : v.word) || '') {
     const i = document.createElement('i');
     i.textContent = ch;
     word.appendChild(i);
@@ -629,7 +880,7 @@ function showResults(v) {
   const list = $('results-list');
   list.innerHTML = '';
   const order = ranked(v.players, v.winRule);
-  $('results-rule').textContent = WIN_RULES[v.winRule] || '';
+  $('results-rule').textContent = `${MODE_NAMES[v.mode]}. ${winRules(v)[v.winRule] || ''}${ladder && v.ladder ? ` Par was ${v.ladder.par}.` : ''}`;
   order.forEach((p, idx) => {
     const li = document.createElement('li');
     if (idx === 0 && p.solved) li.className = 'first';
@@ -641,12 +892,12 @@ function showResults(v) {
     who.textContent = label(p.name) + (p.id === S.myId ? ' (you)' : '');
     const how = document.createElement('span');
     how.className = 'how';
-    if (p.solved) how.textContent = `${p.patterns.length}/6 in ${fmtTime(p.finishMs)}`;
+    if (p.solved) how.textContent = ladder ? `${p.used} steps in ${fmtTime(p.finishMs)}` : `${p.used}/${v.attempts} in ${fmtTime(p.finishMs)}`;
     else if (!p.connected) how.textContent = 'Left';
-    else if (p.timedOut) how.textContent = 'Out of time';
+    else if (p.timedOut) how.textContent = ladder ? `Out of time (${p.used} steps)` : 'Out of time';
     else if (p.stopped) how.textContent = 'Round ended';
-    else if (p.patterns.length === 0 && !p.done) how.textContent = 'Joined late';
-    else how.textContent = 'X/6';
+    else if (p.used === 0 && !p.done) how.textContent = 'Joined late';
+    else how.textContent = ladder ? `${p.used} steps` : `X/${v.attempts}`;
     li.append(dot, who, how);
     list.appendChild(li);
   });
@@ -654,7 +905,7 @@ function showResults(v) {
   const winner = order[0];
   const over = v.status === 'over';
   const roundTitle = !winner?.solved
-    ? 'Nobody got it'
+    ? (ladder ? 'Nobody reached the target' : 'Nobody got it')
     : winner.id === S.myId
       ? 'You win the round!'
       : `${label(winner.name)} wins the round`;
@@ -667,24 +918,100 @@ function showResults(v) {
     $('results-title').textContent = !champ
       ? 'Game over: it’s a tie!'
       : champ.me ? 'You win the game!' : `${label(champ.name)} wins the game!`;
-    const lastRound = !winner?.solved ? 'nobody got it' : winner.id === S.myId ? 'you won it' : `${label(winner.name)} won it`;
-    $('results-round-label').textContent = `Last round: ${lastRound}. The word was`;
+    const lastRound = !winner?.solved ? (ladder ? 'nobody reached it' : 'nobody got it') : winner.id === S.myId ? 'you won it' : `${label(winner.name)} won it`;
+    $('results-round-label').textContent = `Last round: ${lastRound}. ${ladder ? 'The target was' : 'The word was'}`;
   } else {
     $('results-title').textContent = roundTitle;
-    $('results-round-label').textContent = (v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`) + '. The word was';
+    $('results-round-label').textContent = (v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`) + (ladder ? '. The target was' : '. The word was');
   }
+  renderResultBoards(v, order);
 
   $('again-btn').hidden = !S.isHost || over;
   $('end-btn').hidden = !S.isHost || over;
   $('rematch-btn').hidden = !S.isHost || !over;
   $('newgame-btn').hidden = !S.isHost || !over;
-  $('share-btn').hidden = !me() || me().patterns.length === 0;
-  showMeaning(v.word);
+  $('share-btn').hidden = !me() || me().used === 0;
+  showMeaning(ladder ? v.ladder?.target : v.word);
   $('again-wait').hidden = S.isHost;
   $('again-wait').textContent = over
     ? 'Waiting for the host to set up a new game.'
     : 'Waiting for the host to start the next round.';
   $('results').hidden = false;
+}
+
+/* ---------- Counts and Word ladder: everyone's board, revealed once the round is over ---------- */
+function renderResultBoards(v, order) {
+  const box = $('results-boards');
+  box.innerHTML = '';
+  box.hidden = v.mode === 'classic';
+  if (v.mode === 'classic') return;
+  const title = (text) => {
+    const h = document.createElement('h3');
+    h.className = 'scores-sub';
+    h.textContent = text;
+    return h;
+  };
+  if (v.mode === 'ladder' && v.ladder?.path) {
+    const path = document.createElement('div');
+    path.className = 'ladder-path';
+    path.append(title(`One shortest way (${v.ladder.par} steps)`), chain(v.ladder.path, v.ladder.target));
+    box.appendChild(path);
+  }
+  box.appendChild(title(v.mode === 'ladder' ? 'Everyone’s ladder' : 'Everyone’s guesses'));
+  for (const p of order) {
+    if (!p.rows || !p.rows.length) continue;
+    const item = document.createElement('div');
+    item.className = 'result-board';
+    const name = document.createElement('div');
+    name.className = 'rb-name';
+    name.innerHTML = `<span class="dot" style="background: var(--p${p.color})"></span>`;
+    const who = document.createElement('span');
+    who.textContent = label(p.name) + (p.id === S.myId ? ' (you)' : '');
+    name.appendChild(who);
+    item.appendChild(name);
+    if (v.mode === 'ladder') {
+      item.appendChild(chain([v.ladder.start, ...p.rows.map((r) => r.word)], v.ladder.target));
+    } else {
+      for (const r of p.rows) item.appendChild(resultRow(r));
+    }
+    box.appendChild(item);
+  }
+}
+
+/** A ladder as words joined by arrows; the target is picked out if it was reached. */
+function chain(words, target) {
+  const el = document.createElement('p');
+  el.className = 'chain';
+  words.forEach((w, i) => {
+    if (i) el.append(document.createTextNode(' › '));
+    const b = document.createElement('b');
+    b.textContent = w;
+    if (w === target && i > 0) b.className = 'reached';
+    el.appendChild(b);
+  });
+  el.setAttribute('aria-label', words.join(', then '));
+  return el;
+}
+
+/** One Counts guess with its tile colors, shown at the end of the round. */
+function resultRow(r) {
+  const row = document.createElement('div');
+  row.className = 'rrow';
+  const tiles = document.createElement('span');
+  tiles.className = 'rtiles';
+  [...r.word].forEach((ch, i) => {
+    const t = document.createElement('i');
+    t.textContent = ch;
+    t.className = CLASS[r.pattern[i]];
+    tiles.appendChild(t);
+  });
+  const [g, y, red] = E.counts(r.pattern);
+  const nums = document.createElement('span');
+  nums.className = 'rnums';
+  nums.setAttribute('aria-label', `${g} right place, ${y} wrong place, ${red} not in the word`);
+  COUNT_KINDS.forEach((k, i) => nums.appendChild(countBox(k, [g, y, red][i])));
+  row.append(tiles, nums);
+  return row;
 }
 
 /* ---------- word meaning (free dictionary API, no key) ---------- */
@@ -721,12 +1048,30 @@ async function shareResult() {
   const v = S.view;
   const m = me();
   if (!v || !m) return;
-  const squares = PREFS.contrast ? { h: '🟧', n: '🟦', m: '⬛' } : { h: '🟩', n: '🟨', m: '⬛' };
-  const score = m.solved ? `${m.patterns.length}/6` : 'X/6';
-  const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
   const roundLabel = v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
-  const grid = m.patterns.map((p) => [...p].map((c) => squares[c]).join('')).join('\n');
-  const text = `Lettuce Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
+  const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
+  let text;
+  if (v.mode === 'ladder') {
+    const par = v.ladder?.par;
+    const head = m.solved
+      ? `reached the target in ${m.used} step${m.used === 1 ? '' : 's'} (par ${par})${time}`
+      : `didn’t reach the target (${m.used} step${m.used === 1 ? '' : 's'}, par ${par})`;
+    // One row per step, a green square for every letter already in the target's place (the words stay secret)
+    const target = v.ladder?.target || '';
+    const squares = PREFS.contrast ? '🟧' : '🟩';
+    const grid = (m.rows || []).map((r) => [...r.word].map((ch, i) => (ch === target[i] ? squares : '⬛')).join('')).join('\n');
+    text = `Lettuce Party, word ladder, ${roundLabel}: ${head}\n\n${grid}`;
+  } else if (v.mode === 'counts') {
+    const score = m.solved ? `${m.used}/${v.attempts}` : `X/${v.attempts}`;
+    const boxes = PREFS.contrast ? ['🟧', '🟦', '🟥'] : ['🟩', '🟨', '🟥'];
+    const grid = (m.rows || []).map((r) => E.counts(r.pattern).map((n, i) => `${boxes[i]}${n}`).join(' ')).join('\n');
+    text = `Lettuce Party, counts, ${roundLabel}: ${score}${time}\n\n${grid}`;
+  } else {
+    const squares = PREFS.contrast ? { h: '🟧', n: '🟦', m: '⬛' } : { h: '🟩', n: '🟨', m: '⬛' };
+    const score = m.solved ? `${m.patterns.length}/${v.attempts}` : `X/${v.attempts}`;
+    const grid = m.patterns.map((p) => [...p].map((c) => squares[c]).join('')).join('\n');
+    text = `Lettuce Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
+  }
   try {
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       await navigator.share({ text });
@@ -773,8 +1118,9 @@ function tickClock() {
   if (!v || v.status === 'lobby') return;
   const m = me();
   const clock = $('game-clock');
-  if (v.timer && v.status === 'playing') {
-    const left = Math.max(0, v.timer * 1000 - (Date.now() - S.localStart));
+  const limit = E.effectiveTimer(v);
+  if (limit && v.status === 'playing') {
+    const left = Math.max(0, limit * 1000 - (Date.now() - S.localStart));
     clock.textContent = fmtTime(left + 999);
     clock.classList.toggle('urgent', left < 10000);
     if (left < 10000 && left > 0 && S.tickedRound !== v.round) {
@@ -898,23 +1244,55 @@ async function loadMyStats() {
   }
 }
 
+const stat = (n, t) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`;
+const pct = (n, of) => (of ? `${Math.round((n / of) * 100)}%` : '–');
+
 function myStatsHTML(st) {
-  if (!st.games) return '<p class="stats-note">Play a round and your stats will show up here.</p>';
-  const winPct = Math.round((st.wins / st.games) * 100);
+  const others = st.counts.plays + st.ladder.plays;
+  if (!st.games && !others) return '<p class="stats-note">Play a round and your stats will show up here.</p>';
+  return [
+    st.games ? classicStatsHTML(st, Boolean(others)) : '',
+    st.counts.plays ? countsStatsHTML(st.counts) : '',
+    st.ladder.plays ? ladderStatsHTML(st.ladder) : '',
+  ].join('');
+}
+
+function classicStatsHTML(st, withTitle) {
   const avg = st.solved ? (st.guessSum / st.solved).toFixed(1) : '–';
-  const max = Math.max(1, ...st.dist);
+  // The distribution shows 1 to 6 as it always did, and grows to the longest game the player has solved (up to 10)
+  const last = st.dist.reduce((m, n, i) => (n > 0 ? i + 1 : m), 0);
+  const dist = st.dist.slice(0, Math.max(6, last));
+  const max = Math.max(1, ...dist);
   const opener = Object.entries(st.openers).sort((a, b) => b[1] - a[1])[0];
-  const stat = (n, t) => `<div class="stat"><b>${n}</b><span>${t}</span></div>`;
-  const bars = st.dist.map((n, i) =>
+  const bars = dist.map((n, i) =>
     `<div class="dist-row"><span>${i + 1}</span><span class="dist-bar ${n === max && n > 0 ? 'top' : ''}" style="width: ${Math.max(8, (n / max) * 100)}%">${n}</span></div>`).join('');
   return `
+    ${withTitle ? '<h4 class="stats-mode">Classic</h4>' : ''}
     <div class="stat-grid">
-      ${stat(st.games, 'Played')}${stat(`${winPct}%`, 'Rounds won')}${stat(avg, 'Avg guesses')}
+      ${stat(st.games, 'Played')}${stat(pct(st.wins, st.games), 'Rounds won')}${stat(avg, 'Avg guesses')}
       ${stat(st.streak, 'Win streak')}${stat(st.bestStreak, 'Best streak')}${stat(st.bestMs == null ? '–' : fmtTime(st.bestMs), 'Fastest')}
     </div>
     <p class="stats-note">Guesses needed when solved</p>
     <div class="dist">${bars}</div>
     ${opener ? `<p class="stats-note">Favorite opener: <b>${esc(opener[0].toUpperCase())}</b>, used ${opener[1]} time${opener[1] === 1 ? '' : 's'}</p>` : ''}`;
+}
+
+function countsStatsHTML(c) {
+  return `
+    <h4 class="stats-mode">Counts</h4>
+    <div class="stat-grid">
+      ${stat(c.plays, 'Played')}${stat(pct(c.wins, c.plays), 'Rounds won')}${stat(c.solved ? (c.guessSum / c.solved).toFixed(1) : '–', 'Avg guesses')}
+      ${stat(c.wins, 'Wins')}${stat(c.solved, 'Solved')}${stat(c.fastest == null ? '–' : fmtTime(c.fastest), 'Fastest')}
+    </div>`;
+}
+
+function ladderStatsHTML(l) {
+  return `
+    <h4 class="stats-mode">Word ladder</h4>
+    <div class="stat-grid">
+      ${stat(l.plays, 'Played')}${stat(pct(l.wins, l.plays), 'Rounds won')}${stat(pct(l.solved, l.plays), 'Reached target')}
+      ${stat(l.solved ? (l.steps / l.solved).toFixed(1) : '–', 'Avg steps')}${stat(l.bestOver == null ? '–' : l.bestOver === 0 ? 'Par' : `+${l.bestOver}`, 'Best vs par')}${stat(l.fastest == null ? '–' : fmtTime(l.fastest), 'Fastest')}
+    </div>`;
 }
 
 /* =========================================================
@@ -1049,9 +1427,18 @@ $('endround-btn').addEventListener('click', () => {
   if (S.isHost && confirm('End this round now for everyone? Anyone still guessing won’t get the word.')) send({ t: 'endRound' });
 });
 $('results-leave-btn').addEventListener('click', () => leaveRoom());
-for (const id of ['rounds-select', 'timer-select']) {
+for (const id of ['rounds-select', 'timer-select', 'attempts-select']) {
   $(id).addEventListener('change', () => {
-    if (S.isHost) hostSettings({ maxRounds: Number($('rounds-select').value), timer: Number($('timer-select').value) });
+    if (!S.isHost || !S.view) return;
+    const patch = { maxRounds: Number($('rounds-select').value) };
+    if ($('timer-select').dataset.ladder === 'true') patch.ladderTime = Number($('timer-select').value);
+    else Object.assign(patch, { timer: Number($('timer-select').value), attempts: Number($('attempts-select').value) });
+    hostSettings(patch);
+  });
+}
+for (const r of document.querySelectorAll('input[name="mode"]')) {
+  r.addEventListener('change', (e) => {
+    if (S.isHost && e.target.checked) hostSettings({ mode: e.target.value });
   });
 }
 
