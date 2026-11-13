@@ -435,7 +435,9 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
   position: absolute; inset: 0; z-index: 3; display: grid; place-content: center; justify-items: center; gap: 0.3rem;
   background: color-mix(in srgb, var(--bg) 80%, transparent); border-radius: 16px;
 }
-.countdown b { font-size: clamp(4rem, 12vw, 6rem); font-weight: 800; line-height: 1; animation: tile-in 0.3s ease both; }
+.countdown b { font-size: clamp(4rem, 12vw, 6rem); font-weight: 800; line-height: 1; animation: count-fade 1s linear both; }
+@keyframes count-fade { 0% { opacity: 0; } 25% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .countdown b { animation: none !important; opacity: 1; } }
 .countdown span { color: var(--muted); font-weight: 700; }
 .flash {
   position: fixed; left: 50%; top: 4.2rem; z-index: 12; transform: translate(-50%, -8px);

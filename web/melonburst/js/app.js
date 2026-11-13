@@ -1295,13 +1295,23 @@ $('reveal-view').addEventListener('click', async (e) => {
   }
 });
 
+/* Calm countdown: draw each number once and let CSS fade it in and out. Re-writing the same
+   number every tick would restart the fade, so only touch the DOM when the number or label changes. */
+function paintCountdown(el, n, label, leftMs) {
+  const key = `${n}|${label}`;
+  if (el.dataset.key === key) return;
+  el.dataset.key = key;
+  const into = Math.min(900, Math.max(0, 1000 - (leftMs - (n - 1) * 1000)));
+  el.innerHTML = `<b style="animation-delay:-${Math.round(into)}ms">${n}</b><span>${label}</span>`;
+}
+
 function renderCountdown(v) {
   const el = $('countdown');
   const on = v.status === 'play' && v.phase === 'countdown' && v.phaseLeft > 200;
   el.hidden = !on;
-  if (!on) return;
-  const s = Math.ceil(phaseLeft(v) / 1000);
-  el.innerHTML = `<b>${s || 1}</b><span>${v.round === 0 ? 'Get ready' : `Round ${v.round + 1}`}</span>`;
+  if (!on) { delete el.dataset.key; return; }
+  const left = phaseLeft(v);
+  paintCountdown(el, Math.ceil(left / 1000) || 1, v.round === 0 ? 'Get ready' : `Round ${v.round + 1}`, left);
 }
 
 /* ---------- Players down the side ---------- */
