@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 /** Server clocks, in milliseconds. */
 export const PICK_MS = 10000;       // the picker has this long to tap a letter, then the server picks one
 export const ZAP_MS = 10000;        // after Zap! everyone else has exactly this long
-export const VOTE_MS = 20000;       // the room's vote on answers that aren't on a list
+export const VOTE_MS = 60000;       // the room's vote on answers that aren't on a list
 export const RESULTS_MS = 40000;    // results stay up this long, then the next round starts by itself
 export const MAX_ANSWER_CHARS = 40;
 

@@ -496,13 +496,13 @@ describe('A to Zap: the vote on unknown answers', () => {
   }
   const items = (s: Msg) => (s.review as { waiting: number; items: Array<{ i: number; cat: string; text: string; owners: string[]; mine: boolean; vote: number; canVote: boolean }> }).items;
 
-  it('unknown answers go to a vote for 20 seconds; nobody votes on their own; the tally stays hidden', async () => {
+  it('unknown answers go to a vote for 60 seconds; nobody votes on their own; the tally stays hidden', async () => {
     const g = await toReview(['Ann', 'Bob', 'Cy'], [
       { name: 'Ali', place: 'Aaaville' },
       { name: 'Ali', place: 'aaaville' },
       { name: 'Ali', place: 'Athens', animal: 'Aquaflop' },
     ]);
-    expect(g.views[0].voteLeft).toBeGreaterThan(19000);
+    expect(g.views[0].voteLeft).toBeGreaterThan(E.VOTE_MS - 5000);
     expect(g.views[0].voteLeft).toBeLessThanOrEqual(E.VOTE_MS);
     expect(await inRoom(g.code, (_r, i) => i.timers.vote - Date.now())).toBeLessThanOrEqual(E.VOTE_MS);
     // two items: place "Aaaville" (Ann + Bob) and animal "Aquaflop" (Cy)
@@ -550,7 +550,7 @@ describe('A to Zap: the vote on unknown answers', () => {
     expect(cells(r, 'Ann').place).toMatchObject({ st: 'voted', pts: 10 });
   });
 
-  it('nobody voting also accepts, when the 20 seconds run out', async () => {
+  it('nobody voting also accepts, when the 60 seconds run out', async () => {
     const g = await toReview(['Ann', 'Bob'], [{ place: 'Aaaville' }, { place: 'Aaaville' }]);
     // Both wrote it, so nobody may vote at all: the review does not wait
     expect((await seen(g.host, (x) => x.status === 'results')).results).toBeTruthy();
