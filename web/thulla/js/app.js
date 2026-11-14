@@ -3,9 +3,11 @@
 // checks every move and decides tricks. Each player only receives their own cards plus
 // public information; this page draws them and sends your moves.
 
+import '../../shared/carry.js';   // first: settings carried over from the old address
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { markInvite } from '../../shared/invite.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { deltaChip, myRatingHTML, ratingChip } from '../../shared/rating.js';
 import { addBotButton, botControls, botTag, levelName, wireBots } from '../../shared/bots.js';
@@ -1004,7 +1006,9 @@ try { $('#name-input').value = localStorage.getItem('thulla-name') || $('#name-i
       $('#name-input').value = sess.name;
       joinRoom(room, sess.name);
     } else {
-      $('#name-input').focus();
+      // Enter in the name box already joins when a code is filled in
+      markInvite(room, { enterJoins: false });
+      ($('#name-input').value ? $('#join-btn') : $('#name-input')).focus();
     }
   }
 }

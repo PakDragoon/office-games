@@ -1,6 +1,8 @@
+import '../../shared/carry.js';   // first: settings carried over from the old address
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { markInvite } from '../../shared/invite.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 import { startReplay } from './replay.js';
 import { deltaChip, myRatingHTML, ratingChip, ratingLabel } from '../../shared/rating.js';
@@ -1520,6 +1522,7 @@ if (new URLSearchParams(location.search).has('debug')) window.__flipchip = { S, 
   const room = new URLSearchParams(location.search).get('room');
   if (room && /^[A-Za-z]{4}$/.test(room)) {
     $('code-input').value = room.toUpperCase();
+    markInvite(room.toUpperCase());
     ($('name-input').value ? $('join-btn') : $('name-input')).focus();
   }
   renderCpuCard();

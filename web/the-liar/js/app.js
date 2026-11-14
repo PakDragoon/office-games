@@ -1,8 +1,10 @@
+import '../../shared/carry.js';   // first: settings carried over from the old address
 import * as E from './engine.js';
 import { CATEGORY_NAMES } from './words.js';
 import { createSheet } from './sketch.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { markInvite } from '../../shared/invite.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
@@ -1271,6 +1273,7 @@ $('rp-votes').addEventListener('pointerleave', () => highlightReplay(null));
   const room = new URLSearchParams(location.search).get('room');
   if (room && /^[A-Za-z]{4}$/.test(room)) {
     $('code-input').value = room.toUpperCase();
+    markInvite(room.toUpperCase());
     ($('name-input').value ? $('join-btn') : $('name-input')).focus();
   }
   showScreen('home');

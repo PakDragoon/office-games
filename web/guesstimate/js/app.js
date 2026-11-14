@@ -1,7 +1,9 @@
+import '../../shared/carry.js';   // first: settings carried over from the old address
 import * as R from './rounds.js';
 import { TESTS, icon, blank } from './play.js';
 import * as cloud from './cloud.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
+import { markInvite } from '../../shared/invite.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
@@ -921,6 +923,7 @@ if (new URLSearchParams(location.search).has('debug')) window.__guesstimate = { 
   const room = new URLSearchParams(location.search).get('room');
   if (room && /^[A-Za-z]{4}$/.test(room)) {
     $('code-input').value = room.toUpperCase();
+    markInvite(room.toUpperCase());
     ($('name-input').value ? $('join-btn') : $('name-input')).focus();
   }
   renderDailyCard();
