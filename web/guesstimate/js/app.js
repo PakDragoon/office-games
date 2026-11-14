@@ -705,6 +705,11 @@ $('next-btn').addEventListener('click', () => {
 });
 
 /* ---------- Final standings ---------- */
+// Same order as the server's winner: highest total, a tie goes to the best single round
+function standings(players) {
+  return [...players].sort((a, b) => b.total - a.total || Math.max(...b.points, 0) - Math.max(...a.points, 0));
+}
+
 function renderOver(v) {
   stopLive();
   stopClock();
