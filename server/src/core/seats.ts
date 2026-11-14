@@ -73,6 +73,11 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
   }
   protected goneForGood(_p: P): void {}
   /** Average rating of the people seated, for Quick Play matching (rated games override this). */
+  /** How full the room looks to Quick Play: everyone connected out of the room's size by default. */
+  protected listingSeats(): { players: number; max: number } {
+    return { players: this.room.players.filter((p) => p.connected).length, max: this.maxPlayers };
+  }
+
   protected listingRating(): number | null {
     return null;
   }
@@ -317,8 +322,7 @@ export abstract class SeatRoom<P extends Seat, R extends BaseRoom<P>> implements
     this.ctx.listing(room.players.some((p) => p.connected && !p.bot) ? {
       public: room.public,
       status: room.status,
-      players: room.players.filter((p) => p.connected).length,
-      max: this.maxPlayers,
+      ...this.listingSeats(),
       host: host ? host.name : '',
       rating: this.listingRating(),
     } : null);

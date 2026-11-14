@@ -37,6 +37,11 @@ async function room(game: string, names: string[]): Promise<{ code: string; clie
     clients.push(c);
   }
   await host.state((m) => (viewOf(m).players as unknown[]).length === names.length);
+  // Flipchip has two seats and Quick Play only offers a free one: the guest watches instead
+  if (game === 'flipchip' && clients[1]) {
+    clients[1].send({ t: 'stand' });
+    await host.state((m) => (viewOf(m).seats as Record<string, string | null>)[2] === null);
+  }
   return { code, clients };
 }
 

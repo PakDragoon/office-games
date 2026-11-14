@@ -120,6 +120,15 @@ class FlipRoom extends SeatRoom<Player, Room> {
     return rated.length ? Math.round(rated.reduce((n, p) => n + (p.rating as RatingInfo).rating, 0) / rated.length) : null;
   }
 
+  // Only the two seats count: watchers don't fill the room, and a bot's seat is free for a person
+  protected listingSeats(): { players: number; max: number } {
+    const people = ([DARK, LIGHT] as Side[]).filter((s) => {
+      const p = this.byId(this.room.seats[s]);
+      return p && p.connected && !p.bot;
+    }).length;
+    return { players: people, max: 2 };
+  }
+
   private seatOf = (id: string): Side | 0 => (this.room.seats[DARK] === id ? DARK : this.room.seats[LIGHT] === id ? LIGHT : 0);
 
   protected playerMessage(p: Player, msg: Msg): void {

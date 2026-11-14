@@ -150,7 +150,8 @@ describe('Flipchip bots', () => {
     await h.c.state((x) => botsOf(x).length === 1);
     await sleep(100);
     let list = (await (await SELF.fetch(`${BASE}/api/flipchip/rooms`)).json()) as { rooms: Array<{ code: string; players: number }> };
-    expect(list.rooms.find((r) => r.code === h.code)?.players).toBe(2);
+    // Quick Play counts only people in seats: a person who joins takes the bot's seat
+    expect(list.rooms.find((r) => r.code === h.code)?.players).toBe(1);
     h.c.send({ t: 'start', settings: { size: 6 } });
     await h.c.state((x) => x.status === 'play');
     h.c.close();
