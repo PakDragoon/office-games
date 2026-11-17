@@ -1,13 +1,15 @@
 // Alzheimer's: game rules. Pure functions, no network or page code, so the server and the tests share them.
 //
-// 1 vs 1. Each player writes 12 things for the other to draw. Then the other player's words flash one at a
+// 2 to 8 players in a circle. Each player writes 12 things for the next player round the table (the circle
+// shifts one place every round). Then the words written for you flash one at a
 // time, each for a moment, and you doodle each one in its own box of a 4 × 3 grid as it comes. When drawing
 // is over the words are gone: your boxes light up one by one in a random order and you type what you drew
 // in each (close is good enough). One point per right box; equal scores go to whoever was faster.
 import { CATEGORIES, CATEGORY_NAMES } from '../../the-liar/js/words.js';
 import { editDistance, squash, tolerance } from '../../forehead/js/engine.js';
 
-export const PLAYERS = 2;
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 8;
 export const BOXES = 12;
 export const COLS = 4;
 export const ROWS = 3;
@@ -24,7 +26,8 @@ export const TIMES = {
 };
 export const WORD = { maxChars: 24, maxWords: 3 };
 export const ANSWER_MAX = 40;   // characters in a typed answer
-export const INK = { perStroke: 800, perPlayer: 16000 };   // numbers (x, y pairs) kept per stroke and per player
+// Numbers (x, y pairs) kept per stroke and per player: 8 players' ink must stay small enough to save after every stroke
+export const INK = { perStroke: 800, perPlayer: 10000 };
 
 export function cleanSettings(raw) {
   const r = raw && typeof raw === 'object' ? raw : {};
@@ -161,6 +164,17 @@ export function nameMatches(raw, word, others = []) {
 
 /** How many boxes a player got right: answers are { i: box, right }. */
 export const points = (answers) => answers.filter((a) => a.right).length;
+
+/**
+ * Who writes for whom this round: the players in seat order, each writing for the one `shift` places on.
+ * The shift is 1 in the first round, then 2, … and back to 1, so you write for someone new each round.
+ * Returns { writer: id -> the id they write for }.
+ */
+export function circle(ids, game) {
+  const n = ids.length;
+  const shift = n > 1 ? ((Math.max(1, game) - 1) % (n - 1)) + 1 : 0;
+  return Object.fromEntries(ids.map((id, i) => [id, ids[(i + shift) % n]]));
+}
 
 /**
  * Standings: most right boxes first, then the faster test. Players are { id, points, ms }.

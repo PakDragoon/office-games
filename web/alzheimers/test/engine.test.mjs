@@ -96,6 +96,29 @@ ok('typed answers are tidied and capped', () => {
   assert.equal(E.cleanAnswer('x'.repeat(60)).length, E.ANSWER_MAX);
 });
 
+ok('the circle: everyone writes for someone else, and it moves on each round', () => {
+  assert.deepEqual(E.circle(['a', 'b'], 1), { a: 'b', b: 'a' });
+  assert.deepEqual(E.circle(['a', 'b'], 7), { a: 'b', b: 'a' });
+  assert.deepEqual(E.circle(['a', 'b', 'c'], 1), { a: 'b', b: 'c', c: 'a' });
+  assert.deepEqual(E.circle(['a', 'b', 'c'], 2), { a: 'c', b: 'a', c: 'b' });
+  assert.deepEqual(E.circle(['a', 'b', 'c'], 3), { a: 'b', b: 'c', c: 'a' });
+  for (let n = 2; n <= E.MAX_PLAYERS; n++) {
+    const ids = Array.from({ length: n }, (_, i) => `p${i}`);
+    for (let g = 1; g <= 10; g++) {
+      const w = E.circle(ids, g);
+      const targets = Object.values(w);
+      assert.equal(new Set(targets).size, n, 'everyone is written for exactly once');
+      assert.ok(ids.every((id) => w[id] !== id), 'nobody writes for themselves');
+    }
+  }
+});
+
+ok('standings with more players: most right, then fastest', () => {
+  const { order, winner } = E.standings([{ id: 'a', points: 7, ms: 9 }, { id: 'b', points: 9, ms: 50 }, { id: 'c', points: 9, ms: 40 }, { id: 'd', points: 2, ms: 1 }]);
+  assert.deepEqual(order.map((p) => p.id), ['c', 'b', 'a', 'd']);
+  assert.equal(winner, 'c');
+});
+
 ok('suggestions avoid what is already written', () => {
   const s = E.suggestions(rnd, 30, ['pizza']);
   assert.equal(s.length, 30);

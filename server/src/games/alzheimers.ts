@@ -1,5 +1,5 @@
-// Alzheimer's on the server. 1 vs 1: each player writes 12 things for the other, the server flashes the
-// other player's words one at a time while you draw, then lights up your boxes one by one and you type what
+// Alzheimer's on the server. 2 to 8 players in a circle: each player writes 12 things for the next one round the
+// table (the circle shifts every round), the server flashes the words written for you one at a time while you draw, then lights up your boxes one by one and you type what
 // you drew in each. A word goes to the player drawing it only while it is on screen; the test sends the box,
 // never its word, until you've answered; every answer is checked here.
 import * as E from '../../../web/alzheimers/js/engine.js';
@@ -15,7 +15,7 @@ interface Answer { i: number; text: string; right: boolean; ms: number }
 interface Player extends Seat {
   /** Rounds won in this room. */
   score: number;
-  /** What this player wrote for the other one (their draft until the round starts). */
+  /** What this player wrote for the player they write for (their draft until drawing starts). */
   words: string[];
   ready: boolean;
   strokes: Stroke[];
@@ -36,6 +36,8 @@ interface Room extends BaseRoom<Player> {
   drawStart: number;
   testStart: number;
   winner: string | null;
+  /** This round's circle: player id -> the id they write for. */
+  writesFor: Record<string, string>;
 }
 
 const cleanSettings = (raw: unknown): Settings => E.cleanSettings(raw) as Settings;
@@ -43,7 +45,7 @@ const fresh = { words: [] as string[], ready: false, strokes: [] as Stroke[], in
 
 class AlzheimersRoom extends SeatRoom<Player, Room> {
   protected readonly gameId = GAME;
-  protected readonly maxPlayers = E.PLAYERS;
+  protected readonly maxPlayers = E.MAX_PLAYERS;
   protected perPlayerView = true;
   private rnd = () => this.ctx.random();
 
@@ -51,14 +53,23 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
     return { ...base, score: 0, ...structuredClone(fresh) };
   }
 
-  /** The other player: the one who wrote my words. */
-  private other(p: Player): Player | undefined {
-    return this.inGame().find((x) => x.id !== p.id);
+  /** The player who writes my words this round. */
+  private writerOf(p: Player): Player | undefined {
+    const room = this.room;
+    return this.inGame().find((x) => room.writesFor[x.id] === p.id);
   }
 
-  /** The 12 words this player draws (written by the other one). */
+  /** The 12 words this player draws (written by the one before them in the circle). */
   private wordsFor(p: Player): string[] {
-    return this.other(p)?.words ?? [];
+    return this.writerOf(p)?.words ?? [];
+  }
+
+  protected remap(oldId: string, newId: string): void {
+    const room = this.room;
+    const w: Record<string, string> = {};
+    for (const [a, b] of Object.entries(room.writesFor)) w[a === oldId ? newId : a] = b === oldId ? newId : b;
+    room.writesFor = w;
+    if (room.winner === oldId) room.winner = newId;
   }
 
   // Coming back mid-game: your own drawing; at the result, both
@@ -129,8 +140,8 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     if (room.status !== 'lobby' && room.status !== 'result') return;
     const players = room.players.filter((p) => p.connected);
-    if (players.length !== E.PLAYERS) {
-      this.toHost({ t: 'toast', text: 'Alzheimer’s is for 2 players' });
+    if (players.length < E.MIN_PLAYERS) {
+      this.toHost({ t: 'toast', text: `You need at least ${E.MIN_PLAYERS} players` });
       return;
     }
     if (typeof msg.crew === 'string') {
@@ -142,8 +153,9 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
     room.players = players;
     for (const p of players) Object.assign(p, { inGame: true }, structuredClone(fresh));
     Object.assign(room, { game: room.game + 1, status: 'write', phaseEnd: this.ctx.now() + E.TIMES.writeMs, drawStart: 0, testStart: 0, winner: null });
+    room.writesFor = E.circle(players.map((p) => p.id), room.game);
     this.ctx.setTimer('phase', room.phaseEnd);
-    this.ctx.track('game_started', { pace: room.settings.pace, flash: room.settings.flash });
+    this.ctx.track('game_started', { pace: room.settings.pace, flash: room.settings.flash, players: players.length });
     this.broadcast();
   }
 
@@ -258,15 +270,16 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
       // Unanswered words count as wrong; anyone who didn't finish took the whole test time
       p.ms = p.answers.length >= E.BOXES ? p.answers.reduce((n, a) => n + a.ms, 0) : E.TIMES.testMs;
     }
-    const { winner } = E.standings(players.map((p) => ({ id: p.id, points: p.points, ms: p.ms })));
+    const { order, winner } = E.standings(players.map((p) => ({ id: p.id, points: p.points, ms: p.ms })));
     room.winner = winner;
+    const place = (p: Player) => 1 + order.filter((o) => o.points > p.points || (o.points === p.points && o.ms < p.ms)).length;
     const champ = this.byId(winner);
     if (champ) champ.score += 1;
     room.status = 'result';
     room.phaseEnd = 0;
     this.ctx.track('game_finished', { points: players.map((p) => p.points).join('-') });
     if (players.some((p) => p.answers.length)) {
-      this.saveGame(players.map((p) => reportPlayer(p, p.id === winner ? 1 : 2, p.id === winner, {
+      this.saveGame(players.map((p) => reportPlayer(p, place(p), p.id === winner, {
         points: p.points, perfect: p.points === E.BOXES ? 1 : 0, drawn: p.strokes.length ? 1 : 0,
       }, { best: p.points })), champ ? champ.name : null);
     }
@@ -278,7 +291,7 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
   private sendDrawings(id: string): void {
     this.tell(id, {
       t: 'drawings', game: this.room.game,
-      boards: this.inGame().map((p) => ({ id: p.id, strokes: p.strokes, words: this.wordsFor(p) })),
+      boards: this.inGame().map((p) => ({ id: p.id, writer: this.writerOf(p)?.id ?? null, strokes: p.strokes, words: this.wordsFor(p) })),
     });
   }
 
@@ -309,6 +322,9 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
       question: room.status === 'test' && mine && q < E.BOXES ? { q, box: mine.order[q] } : null,
       myAnswers: mine && (room.status === 'test' || reveal) ? mine.answers.map((a) => ({ box: a.i, right: a.right, text: a.text, word: this.wordsFor(mine)[a.i] })) : [],
       winner: reveal ? room.winner : null,
+      // Who I write for this round, and who writes for me
+      writeFor: mine ? room.writesFor[mine.id] ?? null : null,
+      writtenBy: mine ? this.writerOf(mine)?.id ?? null : null,
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
         connected: p.connected, away: p.away, inGame: p.inGame, score: p.score,
@@ -333,12 +349,17 @@ export const alzheimers: GameModule = {
   create(ctx: RoomCtx, opts) {
     return new AlzheimersRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
-      settings: cleanSettings({}), phaseEnd: 0, drawStart: 0, testStart: 0, winner: null, replayId: null,
+      settings: cleanSettings({}), phaseEnd: 0, drawStart: 0, testStart: 0, winner: null, writesFor: {}, replayId: null,
     });
   },
   restore(ctx, snap) {
     const room = snap as Room;
     restoreSeats(ctx, room);
+    // Saved while the game was 1 vs 1: the two players write for each other
+    if (!room.writesFor) {
+      const ids = room.players.filter((p) => p.inGame).map((p) => p.id);
+      room.writesFor = E.circle(ids, 1);
+    }
     return new AlzheimersRoom(ctx, room);
   },
 };

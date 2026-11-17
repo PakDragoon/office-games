@@ -6,7 +6,8 @@ import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
 
 /* =========================================================
    Alzheimer's
-   1 vs 1. You each write 12 things for the other; their words flash one at a time and you doodle each in
+   2 to 8 players in a circle. Everyone writes 12 things for the next player round the table (the circle shifts
+   every round); the words written for you flash one at a time and you doodle each in
    its own box; then the words come back in a random order and you tap the box you drew each one in.
    The game runs on the server (server/src/games/alzheimers.ts): it sends you a word only while it is on
    screen, keeps your drawing and scores every tap. This page draws what it is sent and passes on what you do.
@@ -207,7 +208,7 @@ function onMessage(msg) {
 }
 
 const me = (v) => v.players.find((p) => p.id === S.myId);
-const opponent = (v) => v.players.find((p) => p.id !== S.myId && p.inGame) || v.players.find((p) => p.id !== S.myId);
+const nameOf = (v, id) => v.players.find((p) => p.id === id)?.name;
 
 function applyState(v) {
   const prev = S.view;
@@ -354,8 +355,7 @@ const writeList = () => writeInputs().map((i) => i.value);
 
 function renderWrite(v) {
   const mine = me(v);
-  const opp = opponent(v);
-  $('write-for').textContent = opp ? opp.name : 'your opponent';
+  $('write-for').textContent = nameOf(v, v.writeFor) || 'the next player';
   const ready = Boolean(mine.ready);
   // After a refresh, put back the draft the server kept (never over what's being typed)
   if (writeInputs().every((i) => !i.value) && v.myWords?.some(Boolean)) writeInputs().forEach((i, k) => { i.value = v.myWords[k] || ''; });
@@ -555,7 +555,8 @@ function renderTest(v, prev) {
     $('test-box').textContent = 'All done';
     $('test-n').textContent = '';
     const right = v.myAnswers.filter((a) => a.right).length;
-    $('feedback').textContent = `${right} of ${E.BOXES} right. Waiting for ${opponent(v)?.name || 'the other player'}…`;
+    const waiting = v.players.filter((p) => p.inGame && active(p) && p.id !== S.myId && p.answered < E.BOXES).map((p) => p.name);
+    $('feedback').textContent = `${right} of ${E.BOXES} right. Waiting for ${waiting.length ? waiting.join(', ') : 'the others'}…`;
     $('feedback').className = 'feedback';
   }
 }
@@ -588,16 +589,18 @@ function onNamed(msg) {
 
 /* ---------- The result ---------- */
 function renderResult(v) {
-  const players = v.players.filter((p) => p.inGame);
+  // Ranked: most right, then fastest (the same order the server used)
+  const players = E.standings(v.players.filter((p) => p.inGame)).order;
   const winner = players.find((p) => p.id === v.winner);
-  $('result-title').textContent = winner ? (winner.id === S.myId ? 'You win the round!' : `${winner.name} wins the round`) : 'It’s a tie!';
+  $('result-title').textContent = winner ? (winner.id === S.myId ? 'You win the round!' : `${winner.name} wins the round`) : 'It’s a tie at the top!';
   $('result-sub').textContent = players.map((p) => `${p.name}: ${p.points} of ${E.BOXES} right, ${p.answers.length < E.BOXES ? 'ran out of time' : `in ${secs(p.ms)}`}`).join(' · ');
   const boards = S.boards?.game === v.game ? S.boards.boards : [];
   const host = $('result-boards');
   host.innerHTML = '';
-  for (const p of [...players].sort((a, b) => (a.id === S.myId ? -1 : b.id === S.myId ? 1 : 0))) {
+  players.forEach((p, k) => {
     const fig = document.createElement('figure');
-    fig.innerHTML = `<figcaption class="pc${p.color}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}<span class="pts">${p.points} right</span></figcaption>`;
+    const by = nameOf(v, boards.find((b) => b.id === p.id)?.writer) || '';
+    fig.innerHTML = `<figcaption class="pc${p.color}"><span class="pen-dot"></span>${players.length > 2 ? `${k + 1}. ` : ''}${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${by ? ` <span class="by">words by ${esc(by)}</span>` : ''}<span class="pts">${p.points} right</span></figcaption>`;
     const wrap = document.createElement('div');
     wrap.className = 'sheet-wrap';
     fig.appendChild(wrap);
@@ -609,7 +612,7 @@ function renderResult(v) {
       const right = new Set((p.answers || []).filter((a) => a.right).map((a) => a.i));
       b.words.forEach((w, i) => boxLabel(board.over, i, w, right.has(i) ? 'right' : 'wrong'));
     }
-  }
+  });
   $('again-btn').hidden = !S.isHost;
   $('to-lobby').hidden = !S.isHost;
   $('result-wait').hidden = S.isHost;
@@ -645,7 +648,7 @@ function renderLobby(v) {
   const rows = v.players.map((p) => `
     <li class="pc${p.color}${active(p) ? '' : ' off'}"><span class="pen-dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}
       <span class="tag">${p.isHost ? 'Host' : !active(p) ? 'Reconnecting' : ''}</span></li>`);
-  if (v.players.length < E.PLAYERS) rows.push('<li class="empty">Waiting for a friend to join…</li>');
+  if (v.players.length < E.MAX_PLAYERS) rows.push('<li class="empty">Waiting for friends to join…</li>');
   $('lobby-players').innerHTML = rows.join('');
   $('host-settings').hidden = !S.isHost;
   $('guest-settings').hidden = S.isHost;
@@ -655,8 +658,8 @@ function renderLobby(v) {
     $('crew-status').textContent = v.crewStatus;
     paintPublic(v);
     const ready = v.players.filter((p) => p.connected).length;
-    $('start-btn').disabled = ready !== E.PLAYERS;
-    $('start-note').textContent = ready < E.PLAYERS ? 'Needs 2 players to start.' : '';
+    $('start-btn').disabled = ready < E.MIN_PLAYERS;
+    $('start-note').textContent = ready < E.MIN_PLAYERS ? `Needs ${E.MIN_PLAYERS} players to start.` : `Everyone writes for the next player round the table.`;
   } else {
     $('settings-summary').innerHTML = `<li><b>A new word every ${v.settings.pace} s</b></li><li>Each word shows for ${v.settings.flash / 1000} s</li>`
       + (v.crewName ? `<li>Crew: <b>${esc(v.crewName)}</b></li>` : '') + `<li>${publicLine(v)}</li>`;
@@ -687,7 +690,7 @@ function cleanName(n) {
 function readName() {
   const name = cleanName($('name-input').value);
   if (!name) {
-    homeError('Type your name first so your opponent knows who you are.');
+    homeError('Type your name first so the others know who you are.');
     $('name-input').focus();
     return null;
   }

@@ -383,6 +383,7 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .boards-two figure { margin: 0; display: grid; gap: 0.4rem; }
 .boards-two figcaption { display: flex; align-items: center; gap: 0.5rem; font-weight: 700; }
 .boards-two figcaption .pts { margin-left: auto; color: var(--muted); font-weight: 600; font-size: 0.9rem; }
+.boards-two figcaption .by { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
 .boards-two .board { width: 100%; }
 .result-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 .score-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.35rem; }

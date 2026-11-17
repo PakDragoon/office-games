@@ -36,7 +36,7 @@ async function toDrawing() {
 }
 
 describe('Alzheimer’s', () => {
-  it('needs exactly 2 players', async () => {
+  it('needs at least 2 players', async () => {
     const { clients } = await room('alzheimers', ['Ann']);
     clients[0].send({ t: 'begin' });
     expect(String((await clients[0].next((m) => m.t === 'toast')).text)).toContain('2 players');
@@ -145,5 +145,46 @@ describe('Alzheimer’s', () => {
     const wrongButClose = TWELVE[(box + 1) % 12];
     bob.send({ t: 'name', q: 0, text: wrongButClose });
     expect((await bob.next((m) => m.t === 'named')).right).toBe(false);
+  });
+
+  it('with 3 players everyone draws the words of the player before them, and the circle moves on next round', async () => {
+    const { code, clients } = await room('alzheimers', ['Ann', 'Bob', 'Cat']);
+    const [ann, bob, cat] = clients;
+    const lists: Record<string, string[]> = {
+      Ann: TWELVE,
+      Bob: ['kite', 'drum', 'lamp', 'bell', 'cake', 'frog', 'star', 'ring', 'sock', 'bus', 'key', 'cup'],
+      Cat: ['pen', 'egg', 'leaf', 'duck', 'bed', 'door', 'cloud', 'shark', 'tent', 'axe', 'bat', 'van'],
+    };
+    const round = async (game: number) => {
+      ann.send(game === 1 ? { t: 'begin', settings: { pace: 5, flash: 1000 } } : { t: 'begin' });
+      const views = await Promise.all(clients.map((c) => c.state((s) => s.status === 'write' && s.game === game)));
+      const byName = (s: Msg) => Object.fromEntries(playersOf(s).map((p) => [p.id as string, p.name as string]));
+      const names = byName(views[0]);
+      // Each player is told who they write for
+      const writeFor = Object.fromEntries(views.map((v, k) => [['Ann', 'Bob', 'Cat'][k], names[v.writeFor as string]]));
+      clients.forEach((c, k) => c.send({ t: 'words', list: lists[['Ann', 'Bob', 'Cat'][k]], ready: true }));
+      await Promise.all(clients.map((c) => c.state((s) => s.status === 'draw' && s.game === game)));
+      await inRoom(code, (r) => { r.drawStart = Date.now() - 100; });
+      await fire(code, 'word');
+      const first = await Promise.all(clients.map((c) => c.state((s) => s.game === game && s.word !== null)));
+      return { writeFor, first: Object.fromEntries(first.map((v, k) => [['Ann', 'Bob', 'Cat'][k], v.word])) };
+    };
+    const r1 = await round(1);
+    expect(r1.writeFor).toEqual({ Ann: 'Bob', Bob: 'Cat', Cat: 'Ann' });
+    // Bob draws Ann's words, Cat draws Bob's, Ann draws Cat's
+    expect(r1.first).toEqual({ Bob: 'cat', Cat: 'kite', Ann: 'pen' });
+    // Finish the round: drawing ends, nobody answers, the test runs out
+    await fire(code, 'phase');
+    await ann.state((s) => s.status === 'test');
+    await fire(code, 'phase');
+    const end = await ann.state((s) => s.status === 'result');
+    expect(playersOf(end)).toHaveLength(3);
+    const boards = await cat.next((m) => m.t === 'drawings');
+    expect((boards.boards as unknown[]).length).toBe(3);
+    // Round 2: the circle moves on, so everyone writes for someone new
+    const r2 = await round(2);
+    expect(r2.writeFor).toEqual({ Ann: 'Cat', Bob: 'Ann', Cat: 'Bob' });
+    expect(r2.first).toEqual({ Cat: 'cat', Ann: 'kite', Bob: 'pen' });
+    void bob;
   });
 });

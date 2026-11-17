@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="light dark">
-  <meta name="description" content="A 1 vs 1 memory game. Your opponent picks 12 things, you see each one for a moment and doodle it in a box. Then a box lights up: what did you draw there?">
+  <meta name="description" content="A memory game for 2 to 8. The player before you picks 12 things, you see each one for a moment and doodle it in a box. Then a box lights up: what did you draw there?">
   <title>Alzheimer’s</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><g fill='none' stroke='%23f4f5fb' stroke-width='1.6'><rect x='5' y='6' width='10' height='9' rx='2'/><rect x='17' y='6' width='10' height='9' rx='2'/><rect x='5' y='17' width='10' height='9' rx='2'/><rect x='17' y='17' width='10' height='9' rx='2'/></g><path d='M20 20c0-1.500 1-2 2-2s2 .7 2 1.700c0 1.500-2 1.300-2 2.800' fill='none' stroke='%23ffb03b' stroke-width='1.600' stroke-linecap='round'/><circle cx='10' cy='10.500' r='2' fill='none' stroke='%235f9cff' stroke-width='1.600'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -44,7 +44,7 @@
         <span class="logo-word" aria-hidden="true">Alzheimer’s<span class="beta-tag">BETA</span></span>
         <span class="logo-sub" aria-hidden="true">draw it fast, then remember where</span>
       </h1>
-      <p class="lede">A 1 vs 1 memory game. You each write 12 things for the other. Their words flash one at a time and you doodle each in its own box. Then your boxes light up in a random order: type what you drew in each.</p>
+      <p class="lede">A memory game for 2 to 8 players. Everyone writes 12 things for the next player round the table. The words written for you flash one at a time and you doodle each in its own box. Then your boxes light up in a random order: type what you drew in each.</p>
       <label class="field">Your name
         <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
       </label>
@@ -68,7 +68,7 @@
       <section class="choice steps">
         <h2>How a round goes</h2>
         <ol class="step-list">
-          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h18v22H7z"/><path d="M11 11h10M11 16h10M11 21h6"/></svg><b>Write 12 things</b><span>For your opponent to draw.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h18v22H7z"/><path d="M11 11h10M11 16h10M11 21h6"/></svg><b>Write 12 things</b><span>For the next player to draw.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="24" height="14" rx="3"/><path d="M10 16h12"/></svg><b>A word flashes</b><span>For a moment. Then it’s gone.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="11" height="11" rx="2"/><rect x="17" y="4" width="11" height="11" rx="2"/><rect x="4" y="17" width="11" height="11" rx="2"/><path d="M19 25l3-5 3 5"/></svg><b>Doodle it</b><span>In its box, before the next word.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M11 16.5l3.5 3.5L21 12"/></svg><b>What was it?</b><span>Name each box. Most right wins.</span></li>
@@ -145,7 +145,7 @@
   </header>
   <div class="arena">
     <section class="main">
-      <!-- Write 12 things for the other player -->
+      <!-- Write 12 things for the next player in the circle -->
       <div id="st-write" hidden>
         <div class="panel">
           <p class="status" id="write-title">Write 12 things for <span id="write-for"></span> to draw</p>
@@ -225,14 +225,14 @@
 
 <section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-  <p>2 players, one against the other.</p>
+  <p>2 to 8 players, sitting in a circle: everyone writes for the next player round the table. The circle moves on one place every round, so you write for someone new each time (with 2 players you simply write for each other).</p>
   <ol class="rule-steps">
-    <li><b>Write.</b> You each write 12 things for the other to draw (2 minutes). Things you can doodle quickly work best: an animal, a food, an object. <b>Fill the rest for me</b> adds random ones, and anything not written in time is filled in for you.</li>
-    <li><b>Draw.</b> After 3, 2, 1 your opponent’s words appear one at a time, each for a moment (1, 1.5 or 2 seconds, the host picks), and a box on your sheet lights up. Doodle the word in that box. A new word comes every 5, 8 or 12 seconds. After the last word you get 10 more seconds, and you can add to any box until then.</li>
+    <li><b>Write.</b> You write 12 things for the next player to draw (2 minutes); the game tells you who. Things you can doodle quickly work best: an animal, a food, an object. <b>Fill the rest for me</b> adds random ones, and anything not written in time is filled in for you.</li>
+    <li><b>Draw.</b> After 3, 2, 1 the words written for you appear one at a time, each for a moment (1, 1.5 or 2 seconds, the host picks), and a box on your sheet lights up. Doodle the word in that box. A new word comes every 5, 8 or 12 seconds. After the last word you get 10 more seconds, and you can add to any box until then.</li>
     <li><b>Remember.</b> Now the words are gone and only your doodles are left. Your boxes light up one at a time in a random order: type what you drew in each one. It doesn’t have to be exact: capitals, plurals and a small typo are fine (but naming one of your other words doesn’t count). You see straight away if you were right, and what it really was. Not sure? <b>I don’t know</b> moves on.</li>
   </ol>
   <h3>Winning</h3>
-  <p>One point for every right box. The most points wins the round; if it’s a tie, the one who answered faster wins. At the end you see both sheets with the words written under each box.</p>
+  <p>One point for every right box. The most points wins the round; if it’s a tie, the one who answered faster wins. At the end you see everyone’s sheet with the words written under each box.</p>
   <p class="small-note muted">BETA: tell us what you think.</p>
 </section>
 
