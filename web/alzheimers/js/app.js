@@ -447,8 +447,12 @@ function renderDraw(v, prev) {
   drawTick();
 }
 
+// Redraw my finished strokes. A line still being drawn (the next word often arrives mid-stroke) is put back
+// on top, or it would vanish until the redraw after next.
 function drawMine() {
-  if (drawBoard) inkStrokes(drawBoard.ink, S.mine);
+  if (!drawBoard) return;
+  inkStrokes(drawBoard.ink, S.mine);
+  if (pen) drawBoard.ink.append(pen.el);
 }
 
 // Runs a few times a second while drawing: the 3-2-1, which box is lit, the progress bar and the status line
