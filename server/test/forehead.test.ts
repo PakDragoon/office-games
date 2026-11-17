@@ -145,7 +145,7 @@ async function goAway(code: string, id: string): Promise<void> {
   });
   await runDurableObjectAlarm(stub(code));
 }
-type RoomPeek = { cards: Record<string, number>; used: number[]; order: string[]; players: Array<{ id: string; guest: string | null; uid: string | null }> };
+type RoomPeek = { cards: Record<string, number>; used: number[]; phase: string; order: string[]; players: Array<{ id: string; guest: string | null; uid: string | null }> };
 const peek = <T>(code: string, fn: (r: RoomPeek) => T): Promise<T> =>
   runInDurableObject(stub(code), (i) => fn((i as unknown as { game: { room: RoomPeek } }).game.room));
 const closeAll = (g: Game) => g.p.forEach((p) => p.c.close());
@@ -326,18 +326,20 @@ describe('forehead: turns', () => {
     expect(latest(first)!.endsIn).toBeGreaterThan(44000);
     expect(latest(first)!.endsIn).toBeLessThanOrEqual(45000);
 
-    // not the asker: ignored
+    // not the asker: ignored. A guess from someone else and an answer before there is a question: ignored.
+    // They go on another socket than the asker's, so they are sent before the asker's refused questions
+    // and the room is read once more below: by then they're handled and can't land after the real ask.
     others[0].c.send({ t: 'ask', q: 'Can I ask?' });
+    others[0].c.send({ t: 'guess', text: 'x' });
+    others[0].c.send({ t: 'answer', a: 'yes' });
     // the asker: empty and non-text questions are refused with a hint, nothing starts
     first.c.send({ t: 'ask', q: '   ' });
     first.c.send({ t: 'ask', q: 12345 });
     await first.c.next((m) => m.t === 'nope');
     expect(latest(first)!.phase).toBe('ask');
-    // the old pass, a guess from someone else, an answer before there is a question: ignored
+    // the old pass: ignored
     first.c.send({ t: 'pass' });
-    others[0].c.send({ t: 'guess', text: 'x' });
-    others[0].c.send({ t: 'answer', a: 'yes' });
-    expect(latest(first)!.phase).toBe('ask');
+    expect(await peek(g.code, (r) => r.phase)).toBe('ask');
 
     // a long question with markup is cleaned and cut at 100 characters
     first.c.send({ t: 'ask', q: `<b>Is it</b> ${'very '.repeat(40)}big?` });
