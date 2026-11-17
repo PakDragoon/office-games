@@ -17,6 +17,7 @@ const GAME_NAMES = {
   guesstimate: 'Guesstimate', thulla: 'Thulla', 'lettuce-party': 'Lettuce Party',
   forehead: 'Forehead',
   'a-to-zap': 'A to Zap',
+  alzheimers: 'Alzheimer’s',
 };
 const gameName = (id) => GAME_NAMES[id] || id;
 

@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="A 1 vs 1 memory game. Your opponent picks 12 things, you see each one for a moment and doodle it in a box. Then: where did you draw each one?">
+  <title>Alzheimer’s</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><g fill='none' stroke='%23f4f5fb' stroke-width='1.6'><rect x='5' y='6' width='10' height='9' rx='2'/><rect x='17' y='6' width='10' height='9' rx='2'/><rect x='5' y='17' width='10' height='9' rx='2'/><rect x='17' y='17' width='10' height='9' rx='2'/></g><path d='M20 20c0-1.500 1-2 2-2s2 .7 2 1.700c0 1.500-2 1.300-2 2.800' fill='none' stroke='%23ffb03b' stroke-width='1.600' stroke-linecap='round'/><circle cx='10' cy='10.500' r='2' fill='none' stroke='%235f9cff' stroke-width='1.600'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+
+<!-- ============ Home ============ -->
+<main id="home" class="screen home">
+  <a class="all-games" href="/" aria-label="All office games">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 4l8 7.5"/><path d="M6.5 9.5V20h11V9.5"/><path d="M10 20v-5h4v5"/></svg>
+    <span>All games</span>
+  </a>
+  <div class="top-right">
+    <button class="account-chip" id="home-account" type="button">
+      <img class="avatar" id="home-avatar" alt="" hidden>
+      <span id="home-account-label">Sign in</span>
+    </button>
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="home-inner">
+    <div class="home-intro">
+      <h1 class="logo" aria-label="Alzheimer’s">
+        <svg class="logo-mark" viewBox="0 0 100 76" aria-hidden="true">
+          <rect class="cell" x="2" y="2" width="30" height="34" rx="5"/><rect class="cell" x="35" y="2" width="30" height="34" rx="5"/><rect class="cell" x="68" y="2" width="30" height="34" rx="5"/>
+          <rect class="cell" x="2" y="40" width="30" height="34" rx="5"/><rect class="cell" x="35" y="40" width="30" height="34" rx="5"/><rect class="cell" x="68" y="40" width="30" height="34" rx="5"/>
+          <g class="fade"><circle class="doodle c0" cx="17" cy="19" r="8"/><path class="doodle c0" d="M17 7v-2M17 33v-2M5 19h2M27 19h2"/></g>
+          <path class="doodle c1 fade d2" d="M41 28l9-16 9 16zM47 28v-5h6v5"/>
+          <path class="doodle" d="M76 26c3-12 11-12 14 0M80 15l3-6 3 6"/>
+          <path class="doodle c3 fade d3" d="M8 66c4-9 10-9 18 0M10 62q7-12 14 0"/>
+          <path class="doodle" d="M43 66h14M50 50v16M45 55l5-5 5 5"/>
+          <path class="doodle c1" d="M78 52c0-3.500 2.500-5 5-5s5 1.700 5 4.300c0 3.700-5 3.200-5 7M83 66v.2"/>
+        </svg>
+        <span class="logo-word" aria-hidden="true">Alzheimer’s<span class="beta-tag">BETA</span></span>
+        <span class="logo-sub" aria-hidden="true">draw it fast, then remember where</span>
+      </h1>
+      <p class="lede">A 1 vs 1 memory game. You each write 12 things for the other. Their words flash one at a time and you doodle each in its own box. Then the words come back in a random order: tap the box you drew each one in.</p>
+      <label class="field">Your name
+        <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
+      </label>
+      <p class="error" id="home-error" role="alert"></p>
+      <button class="btn link" type="button" data-open="rules">How to play</button>
+    </div>
+
+    <div class="home-cards">
+      <section class="choice">
+        <h2>Play now</h2>
+        <p>Jump into a public game with another player, or open a private room for a friend.</p>
+        <button class="btn primary" id="quick-btn" type="button">Quick Play</button>
+        <button class="btn" id="host-btn" type="button">Host a private room</button>
+      </section>
+      <section class="choice">
+        <h2>Join a room</h2>
+        <label class="sr-only" for="code-input">Room code</label>
+        <input class="text-input" id="code-input" maxlength="4" autocomplete="off" placeholder="Room code">
+        <button class="btn" id="join-btn" type="button">Join room</button>
+      </section>
+      <section class="choice steps">
+        <h2>How a round goes</h2>
+        <ol class="step-list">
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M7 5h18v22H7z"/><path d="M11 11h10M11 16h10M11 21h6"/></svg><b>Write 12 things</b><span>For your opponent to draw.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="9" width="24" height="14" rx="3"/><path d="M10 16h12"/></svg><b>A word flashes</b><span>For a moment. Then it’s gone.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="11" height="11" rx="2"/><rect x="17" y="4" width="11" height="11" rx="2"/><rect x="4" y="17" width="11" height="11" rx="2"/><path d="M19 25l3-5 3 5"/></svg><b>Doodle it</b><span>In its box, before the next word.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="11"/><path d="M11 16.5l3.5 3.5L21 12"/></svg><b>Where was it?</b><span>Tap the right box. Most right wins.</span></li>
+        </ol>
+      </section>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Lobby ============ -->
+<main id="lobby" class="screen lobby" hidden>
+  <div class="top-right">
+    <button class="icon-btn" type="button" data-open="settings" aria-label="Settings">⚙️</button>
+  </div>
+  <div class="lobby-inner">
+    <div class="lobby-room">
+      <p class="muted">Room code</p>
+      <div class="room-code" id="lobby-code">····</div>
+      <button class="btn ghost" id="copy-link" type="button">Copy invite link</button>
+      <ul class="roster" id="lobby-players"></ul>
+      <button class="btn link" id="leave-lobby" type="button">Leave room</button>
+    </div>
+    <div class="lobby-setup">
+      <div id="host-settings" class="host-settings" hidden>
+        <div class="setting">
+          <span class="setting-label">A new word every</span>
+          <div class="seg" id="set-pace" role="group" aria-label="A new word every">
+            <button type="button" data-value="5"><b>5 s</b><small>fast</small></button>
+            <button type="button" data-value="8"><b>8 s</b><small>normal</small></button>
+            <button type="button" data-value="12"><b>12 s</b><small>relaxed</small></button>
+          </div>
+        </div>
+        <div class="setting">
+          <span class="setting-label">Each word shows for</span>
+          <div class="seg" id="set-flash" role="group" aria-label="Each word shows for">
+            <button type="button" data-value="1000"><b>1 s</b><small>blink</small></button>
+            <button type="button" data-value="1500"><b>1.5 s</b><small>normal</small></button>
+            <button type="button" data-value="2000"><b>2 s</b><small>easier</small></button>
+          </div>
+        </div>
+        <div class="public-field">
+          <label class="toggle"><input type="checkbox" id="public-toggle"> Open to Quick Play</label>
+          <p class="small-note muted" id="public-note"></p>
+        </div>
+        <div class="crew-field">
+          <label for="crew-input">Crew name <span class="muted">(optional, saves all-time scores)</span></label>
+          <div class="crew-row">
+            <input class="text-input" id="crew-input" maxlength="40" autocomplete="off" placeholder="e.g. Fourth floor">
+            <button class="btn ghost" id="crew-save" type="button">Use</button>
+          </div>
+          <p class="small-note muted" id="crew-status"></p>
+        </div>
+        <button class="btn primary wide" id="start-btn" type="button">Start round</button>
+        <p class="small-note muted" id="start-note"></p>
+      </div>
+      <div id="guest-settings" hidden>
+        <ul class="settings-summary" id="settings-summary"></ul>
+        <p class="muted">Waiting for the host to start.</p>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- ============ Game ============ -->
+<main id="game" class="screen game" hidden>
+  <header class="game-bar">
+    <span class="bar-code" id="bar-code"></span>
+    <span class="bar-phase" id="bar-phase"></span>
+    <span class="round-clock" id="round-clock" hidden title="Time left"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l2.5 2M9.5 3h5"/></svg><b id="round-clock-text"></b></span>
+    <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
+    <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </header>
+  <div class="arena">
+    <section class="main">
+      <!-- Write 12 things for the other player -->
+      <div id="st-write" hidden>
+        <div class="panel">
+          <p class="status" id="write-title">Write 12 things for <span id="write-for"></span> to draw</p>
+          <p class="status-sub">Things you can doodle quickly: an animal, a food, an object. Every word flashes for a moment in the next part.</p>
+          <form class="write-grid" id="write-grid" autocomplete="off"></form>
+          <p class="error" id="write-error" role="alert"></p>
+          <div class="write-actions">
+            <button class="btn ghost small" id="fill-btn" type="button">Fill the rest for me</button>
+            <button class="btn primary" id="ready-btn" type="button">I’m ready</button>
+          </div>
+        </div>
+      </div>
+      <!-- Draw as the words flash -->
+      <div id="st-draw" hidden>
+        <div class="progress" id="progress"></div>
+        <div class="sheet-wrap" id="draw-wrap">
+          <div class="countdown" id="countdown" hidden></div>
+          <div class="flash" id="flash" hidden><small id="flash-k"></small><b id="flash-word"></b></div>
+        </div>
+        <div class="draw-tools">
+          <button class="btn ghost small" id="undo-btn" type="button">Undo</button>
+          <span class="status-sub" id="draw-status" aria-live="polite"></span>
+        </div>
+      </div>
+      <!-- Where did you draw it? -->
+      <div id="st-test" hidden>
+        <div class="ask"><span class="status-sub">Where did you draw</span><span class="q" id="test-word"></span><span class="n" id="test-n"></span></div>
+        <div class="sheet-wrap" id="test-wrap"></div>
+        <p class="feedback" id="feedback" aria-live="polite"></p>
+      </div>
+      <!-- The result -->
+      <div id="st-result" hidden>
+        <div class="result-head">
+          <h2 id="result-title"></h2>
+          <p class="status-sub" id="result-sub"></p>
+        </div>
+        <div class="boards-two" id="result-boards"></div>
+        <div class="result-actions">
+          <button class="btn primary" id="again-btn" type="button">Play again</button>
+          <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+        </div>
+        <p class="muted small-note" id="result-wait">The host starts the next round.</p>
+        <p class="muted small-note" id="crew-line"></p>
+      </div>
+    </section>
+    <aside class="side">
+      <section class="panel">
+        <h2 id="side-title">Players</h2>
+        <ul class="who-list" id="who-list"></ul>
+      </section>
+      <section class="panel">
+        <h2>Rounds won</h2>
+        <ol class="score-list" id="score-list"></ol>
+      </section>
+    </aside>
+  </div>
+</main>
+
+<!-- ============ Sheets ============ -->
+<div class="scrim" id="scrim" hidden></div>
+
+<section class="sheet-panel" id="settings" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+  <header><h2 id="settings-title">Settings</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <div class="account-box" id="account-box"></div>
+  <div id="my-stats"></div>
+  <label class="toggle"><input type="checkbox" id="sound-toggle"> Sound when a word appears</label>
+  <label class="toggle" id="analytics-row" hidden><input type="checkbox" id="analytics-toggle"> Share anonymous usage stats</label>
+  <p class="small-note muted">Your name and settings stay in this browser. Signing in with Google saves your stats and lets a host save crew scores.</p>
+  <div id="delete-data"></div>
+</section>
+
+<section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
+  <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
+  <p>2 players, one against the other.</p>
+  <ol class="rule-steps">
+    <li><b>Write.</b> You each write 12 things for the other to draw (2 minutes). Things you can doodle quickly work best: an animal, a food, an object. <b>Fill the rest for me</b> adds random ones, and anything not written in time is filled in for you.</li>
+    <li><b>Draw.</b> After 3, 2, 1 your opponent’s words appear one at a time, each for a moment (1, 1.5 or 2 seconds, the host picks), and a box on your sheet lights up. Doodle the word in that box. A new word comes every 5, 8 or 12 seconds. After the last word you get 10 more seconds, and you can add to any box until then.</li>
+    <li><b>Remember.</b> Now the words are gone and only your doodles are left. The 12 words come back one at a time in a random order: tap the box you drew each one in. You see straight away if you were right.</li>
+  </ol>
+  <h3>Winning</h3>
+  <p>One point for every right box. The most points wins the round; if it’s a tie, the one who answered faster wins. At the end you see both sheets with the words written under each box.</p>
+  <p class="small-note muted">BETA: tell us what you think.</p>
+</section>
+
+<div class="notice" id="notice" role="alertdialog" aria-modal="true" aria-labelledby="notice-title" hidden>
+  <div class="notice-card">
+    <h2 id="notice-title"></h2>
+    <p id="notice-text"></p>
+    <button class="btn primary wide" id="notice-ok" type="button">OK</button>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
