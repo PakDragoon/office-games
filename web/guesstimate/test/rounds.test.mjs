@@ -100,7 +100,7 @@ rnd = R.mulberry32(3);
 for (let i = 0; i < 20000; i++) {
   const kind = NUMERIC[i % NUMERIC.length];
   const pz = sample[kind];
-  const spread = { count: 200, track: R.BOX.h, angle: 360, split: 1, time: 12 }[kind];
+  const spread = { count: 200, track: R.BOX.h, angle: 360, split: 1, time: 12, balance: 100000 }[kind];
   const g1 = rnd() * spread, g2 = rnd() * spread;
   const s1 = R.score(pz, g1), s2 = R.score(pz, g2);
   assert.ok(Number.isInteger(s1) && s1 >= 0 && s1 <= 100);
@@ -155,7 +155,8 @@ assert.notDeepEqual(R.dailySet('2026-12-01'), R.dailySet('2026-12-02'));
 assert.deepEqual(R.dailySet('2026-12-01').map((p) => p.kind), R.DAILY.kinds);
 assert.ok(R.dailySet('2026-12-01').some((p) => p.kind === 'time'), 'daily includes Timing from day 2');
 assert.ok(!R.dailyKinds('2026-11-17').includes('cut'), 'Cut stays out of a daily already being played (day 8)');
-assert.deepEqual(R.dailyKinds('2026-11-18'), ['count', 'track', 'angle', 'split', 'time', 'cut'], 'Cut joins the daily on day 9');
+assert.ok(!R.dailyKinds('2026-11-17').includes('balance'), 'so does Balance');
+assert.deepEqual(R.dailyKinds('2026-11-18'), ['count', 'track', 'angle', 'split', 'time', 'cut', 'balance'], 'Cut and Balance join the daily on day 9');
 assert.deepEqual(R.dailySet('2026-11-10').map((p) => p.kind), ['count', 'track', 'angle', 'split'], 'day 1 stays as it was played');
 
 console.log('rounds: network, labels and daily checks passed');
@@ -202,3 +203,27 @@ assert.equal(R.describe(cz), '50/50');
 assert.equal(R.describe(cz, near(0.4)), '60/40');
 assert.equal(R.score(cz, null), 0);
 console.log('rounds: cut checks passed');
+
+// 6. Balance: pairs inside each difficulty's range, a rounded answer, scored on how many times off
+const RANGE = { easy: [5, 40], normal: [10, 3000], hard: [300, 1e9] };
+for (const d of R.DIFFICULTIES) {
+  for (let s = 1; s <= 300; s++) {
+    const pz = R.makeRound('balance', R.roundSeed(5, s, 'balance'), d);
+    const ratio = pz.heavy.kg / pz.light.kg;
+    assert.ok(ratio >= RANGE[d][0] && ratio <= RANGE[d][1], `balance/${d}: ${pz.heavy.one} vs ${pz.light.one} out of range`);
+    assert.ok(Math.abs(Math.log(pz.answer / ratio)) < Math.log(1.1), 'the answer is the ratio, roughly (whole numbers below 10)');
+    assert.ok(R.validGuess(pz, pz.answer));
+    assert.ok(pz.heavy.emoji && pz.light.many);
+  }
+}
+assert.deepEqual([3.4, 7.6, 27778, 1234567, 99.6].map(R.roughly), [3, 8, 28000, 1200000, 100]);
+const bz = { kind: 'balance', answer: 400 };
+assert.equal(R.score(bz, 400), 100);
+assert.equal(R.score(bz, 800), R.score(bz, 200), 'twice too many is as wrong as half too few');
+assert.equal(R.score(bz, Math.round(400 * 1.6)), 50);
+assert.ok(R.score(bz, 4000) === 0, 'ten times off scores nothing');
+assert.ok(R.validGuess(bz, 1) && R.validGuess(bz, 1e10));
+for (const bad of [0, -5, 2.5, 1e10 + 1, '400']) assert.equal(R.validGuess(bz, bad), false, `balance accepted ${bad}`);
+assert.equal(R.describe(bz, 28000), '28,000');
+assert.equal(R.describe(bz), '400');
+console.log('rounds: balance checks passed');

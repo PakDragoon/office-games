@@ -1,8 +1,9 @@
 // Guesstimate round engine. Pure functions: no DOM, no network.
+import { THINGS } from './weights.js';
 // Every puzzle is built from a seed, so every browser given the same seed
 // draws exactly the same puzzle. Multiplayer only has to share the seed.
 
-export const KINDS = ['count', 'track', 'angle', 'split', 'time', 'cut'];
+export const KINDS = ['count', 'track', 'angle', 'split', 'time', 'cut', 'balance'];
 export const DIFFICULTIES = ['easy', 'normal', 'hard'];
 // Puzzles live in a fixed 4:3 box and are scaled to the screen, so a phone
 // and a monitor see the same geometry.
@@ -280,9 +281,36 @@ export function perfectCut(pz, deg) {
   return line((lo + hi) / 2);
 }
 
+// ---------- Balance: how many of these weigh as much as one of those? ----------
+
+// How many light things one heavy thing is worth, per difficulty: easy stays in numbers you
+// can picture, hard goes all the way to ants against a whale.
+const BALANCE = { easy: [5, 40], normal: [10, 3000], hard: [300, 1e9] };
+export const BALANCE_MAX = 1e10;
+
+// The answer to two significant figures (28,000 apples, not 27,778): the weights are typical, not exact
+export function roughly(x) {
+  if (x < 10) return Math.max(1, Math.round(x));
+  const p = 10 ** (Math.floor(Math.log10(x)) - 1);
+  return Math.round(x / p) * p;
+}
+
+function makeBalance(r, difficulty) {
+  const [lo, hi] = BALANCE[difficulty];
+  const thing = ([one, many, emoji, kg]) => ({ one, many, emoji, kg });
+  let heavy, light;
+  for (let tries = 0; tries < 10000; tries++) {
+    heavy = THINGS[Math.floor(r() * THINGS.length)];
+    light = THINGS[Math.floor(r() * THINGS.length)];
+    const ratio = heavy[3] / light[3];
+    if (ratio >= lo && ratio <= hi) break;
+  }
+  return { kind: 'balance', difficulty, heavy: thing(heavy), light: thing(light), answer: roughly(heavy[3] / light[3]) };
+}
+
 // ---------- Rounds and scoring ----------
 
-const MAKERS = { count: makeCount, track: makeTrack, angle: makeAngle, split: makeSplit, time: makeTime, cut: makeCut };
+const MAKERS = { count: makeCount, track: makeTrack, angle: makeAngle, split: makeSplit, time: makeTime, cut: makeCut, balance: makeBalance };
 
 export function makeRound(kind, seed, difficulty = 'normal') {
   if (!MAKERS[kind]) throw new Error(`Unknown test: ${kind}`);
@@ -311,12 +339,13 @@ export function error(pz, guess) {
     case 'split': return Math.abs(guess - pz.answer);
     case 'time': return Math.abs(guess - pz.answer) / (pz.answer + TIME_CUSHION);
     case 'cut': return Math.abs(cutShare(pz, guess) - 0.5);
+    case 'balance': return Math.abs(Math.log(guess / pz.answer));
     default: throw new Error(`Unknown test: ${pz.kind}`);
   }
 }
 
 // The error that scores 50, per test.
-export const HALF = { count: Math.log(1.2), track: 0.08, angle: 6, split: 0.03, time: 0.15, cut: 0.035 };
+export const HALF = { count: Math.log(1.2), track: 0.08, angle: 6, split: 0.03, time: 0.15, cut: 0.035, balance: Math.log(1.6) };
 // Curve shape: above 1 the top is flatter (tiny misses, like hand jitter, cost little) and
 // bigger misses fall away faster. Half the 50-point error scores 78, double scores 14.
 export const SHAPE = 1.5;
@@ -350,6 +379,7 @@ export function validGuess(pz, guess) {
     case 'angle': return guess >= -180 && guess <= 180;
     case 'split': return guess >= 0 && guess <= 1;
     case 'time': return guess > 0 && guess <= 60;
+    case 'balance': return Number.isInteger(guess) && guess >= 1 && guess <= BALANCE_MAX;
     default: return false;
   }
 }
@@ -364,6 +394,7 @@ export function describe(pz, guess = pz.answer) {
     case 'split': return `${Math.round(guess * 100)}%`;
     case 'time': return guess === pz.answer ? `${pz.answer.toFixed(1)} s` : `${guess.toFixed(2)} s`;
     case 'cut': return guess === pz.answer ? '50/50' : halves(cutShare(pz, guess));
+    case 'balance': return Math.round(guess).toLocaleString('en-US');
     default: return String(guess);
   }
 }
@@ -381,8 +412,8 @@ export function halves(share) {
 export const LAUNCH_DAY = '2026-11-10';
 export const DAILY = { kinds: KINDS, laps: 1, difficulty: 'normal' };
 // Tests join the daily on the day after they launch, so a day already started never changes:
-// day 1 had no Timing, days up to 8 (2026-11-17) had no Cut.
-const DAILY_FROM = { time: 2, cut: 9 };
+// day 1 had no Timing, days up to 8 (2026-11-17) had no Cut or Balance.
+const DAILY_FROM = { time: 2, cut: 9, balance: 9 };
 export const dailyKinds = (key) => DAILY.kinds.filter((k) => dayNumber(key) >= (DAILY_FROM[k] || 1));
 
 export function dayKey(date = new Date()) {

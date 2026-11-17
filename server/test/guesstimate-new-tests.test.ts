@@ -36,3 +36,23 @@ describe('guesstimate: Cut', () => {
     expect(byName.Ann.guess).toEqual(shortPerfect(pz, 30));
   });
 });
+
+describe('guesstimate: Balance', () => {
+  it('takes a whole number, refuses anything else, and scores how many times off it is', async () => {
+    const { clients } = await room('guesstimate', ['Ann', 'Bob']);
+    const [ann, bob] = clients;
+    ann.send({ t: 'start', settings: { difficulty: 'hard', kinds: ['balance'], laps: 1, timer: 0 } });
+    const s = await ann.state((v) => v.status === 'playing');
+    const pz = R.makeSet(s.gameSeed as number, ['balance'], 1, 'hard')[0] as { kind: string; answer: number };
+    expect(pz.kind).toBe('balance');
+    for (const bad of [0, 2.5, -3, '100', 1e11]) ann.send({ t: 'guess', index: 0, guess: bad });
+    ann.send({ t: 'guess', index: 0, guess: pz.answer });
+    bob.send({ t: 'guess', index: 0, guess: pz.answer * 2 });
+    const r = await ann.state((v) => v.status === 'reveal');
+    const byName = Object.fromEntries((r.players as Array<{ name: string; points: number[]; guess: unknown }>).map((p) => [p.name, p]));
+    expect(byName.Ann.guess).toBe(pz.answer);
+    expect(byName.Ann.points[0]).toBe(100);
+    expect(byName.Bob.points[0]).toBe(R.score(pz, pz.answer * 2));
+    expect(byName.Bob.points[0]).toBeLessThan(50);
+  });
+});

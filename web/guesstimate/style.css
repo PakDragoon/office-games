@@ -146,7 +146,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .kind-pick .ico { width: 1.6rem; height: 1.6rem; }
 .kind-pick[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
 .kind-pick[aria-pressed="true"] .ico { color: var(--kc); }
-.k-count { --kc: var(--p0); } .k-track { --kc: var(--near); } .k-angle { --kc: var(--hit); } .k-split { --kc: var(--p1); } .k-time { --kc: var(--p2); } .k-cut { --kc: var(--p3); }
+.k-count { --kc: var(--p0); } .k-track { --kc: var(--near); } .k-angle { --kc: var(--hit); } .k-split { --kc: var(--p1); } .k-time { --kc: var(--p2); } .k-cut { --kc: var(--p3); } .k-balance { --kc: var(--p4); }
 
 /* ---------- Account chip ---------- */
 .top-right { position: absolute; top: calc(0.9rem + env(safe-area-inset-top, 0px)); right: 1rem; display: flex; gap: 0.5rem; }
@@ -411,6 +411,17 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .knife.done { stroke-width: 1.6; opacity: 0.9; }
 .knife-grip { fill: var(--paper); stroke: var(--pc); stroke-width: 1.6; }
 .lbl.cut-share { font-size: 17px; font-weight: 800; fill: var(--ink); }
+.scale-base { fill: var(--ink); opacity: 0.85; }
+.scale-post { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }
+.scale-beam { stroke: var(--ink); stroke-width: 3.2; stroke-linecap: round; }
+.scale-needle { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+.scale-pin { fill: var(--paper); stroke: var(--ink); stroke-width: 1.6; }
+.scale-string { stroke: var(--draft); stroke-width: 0.9; }
+.scale-pan { fill: color-mix(in srgb, var(--ink) 8%, var(--paper)); stroke: var(--ink); stroke-width: 1.4; }
+.scale-item { dominant-baseline: auto; }
+.lbl.scale-lbl { font-size: 13px; font-weight: 700; fill: var(--ink); }
+.lbl.scale-lbl.who { fill: var(--pc); }
+.count-input.wide { width: 10ch; }
 .thumb-line { stroke: var(--pc); stroke-width: 2; stroke-linecap: round; }
 .thumb-knob { fill: var(--paper); stroke: var(--pc); stroke-width: 2; }
 .band { fill: var(--hit); fill-opacity: 0.07; stroke: var(--hit); stroke-opacity: 0.5; stroke-width: 0.8; }

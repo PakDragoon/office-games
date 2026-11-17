@@ -47,9 +47,9 @@ for (const [prefs, save] of [[PREFS, savePrefs], [ROOM_PREFS, saveRoomPrefs]]) {
     prefs.version = 2;
     save();
   }
-  // Settings saved before Cut existed: switch it on once too
+  // Settings saved before Cut and Balance existed: switch them on once too
   if (prefs.version < 3) {
-    if (!prefs.kinds.includes('cut')) prefs.kinds = R.KINDS.filter((k) => prefs.kinds.includes(k) || k === 'cut');
+    prefs.kinds = R.KINDS.filter((k) => prefs.kinds.includes(k) || k === 'cut' || k === 'balance');
     prefs.version = 3;
     save();
   }
@@ -252,6 +252,7 @@ function answerLine(pz, guess) {
     case 'split': return `Target ${pz.label}${none ? '' : `, you marked ${R.describe(pz, guess)}`}`;
     case 'time': return `Target ${R.describe(pz)}${none ? '' : `, you stopped at ${R.describe(pz, guess)}`}`;
     case 'cut': return none ? 'No cut' : `Your pieces: ${R.describe(pz, guess)}`;
+    case 'balance': return `${R.describe(pz)} ${pz.light.many} balance 1 ${pz.heavy.one}${none ? '' : `, you said ${R.describe(pz, guess)}`}`;
     default: return '';
   }
 }

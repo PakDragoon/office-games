@@ -1,7 +1,7 @@
 // Drawing and input for each test, in a technical-drawing style.
 // mount() shows the puzzle and collects one guess. reveal() redraws it as a measured
 // drawing: grid, rulers and dimension lines, with everyone's guesses on it.
-import { BOX, trackY, trackPath, error, clipLeft, cutShare, perfectCut, halves } from './rounds.js';
+import { BOX, trackY, trackPath, error, clipLeft, cutShare, perfectCut, halves, BALANCE_MAX } from './rounds.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const rad = (deg) => (deg * Math.PI) / 180;
@@ -518,6 +518,69 @@ export const TESTS = {
     },
   },
 
+  balance: {
+    name: 'Balance',
+    how: 'One thing sits on the left of the scale. Type how many of the things on the right it takes to balance it. Being twice too many is as wrong as half too few.',
+    ask: (pz) => `How many ${pz.light.many} weigh as much as 1 ${pz.heavy.one}?`,
+    mount(stage, pz, { ready, submit, controls }) {
+      const b = board(stage);
+      // No ruler under it while guessing, so the scale sits lower on the sheet
+      scale(b.inside, pz, `? ${pz.light.many}`, null, 44).set(-TILT);
+      const form = document.createElement('form');
+      form.className = 'count-form';
+      form.innerHTML = `<label class="sr-only" for="balance-guess">How many ${pz.light.many}</label><input id="balance-guess" class="count-input wide" type="text" inputmode="numeric" maxlength="14" placeholder="0" autocomplete="off"><span class="count-unit"></span>`;
+      form.querySelector('.count-unit').textContent = pz.light.many;
+      (controls || stage).append(form);
+      const input = form.querySelector('input');
+      setTimeout(() => input.focus(), 0);
+      const value = () => {
+        const digits = input.value.replace(/[\s,]/g, '');
+        return /^\d{1,11}$/.test(digits) && Number(digits) >= 1 && Number(digits) <= BALANCE_MAX ? Number(digits) : null;
+      };
+      input.addEventListener('input', () => ready(value() !== null));
+      form.addEventListener('submit', (e) => { e.preventDefault(); if (value() !== null) submit(); });
+      return { guess: value, destroy() {} };
+    },
+    reveal(stage, pz, entries) {
+      const b = board(stage);
+      grid(b);
+      const guessed = guessedOnly(entries);
+      // The scale settles where your guess puts it: balanced when you're right
+      const mine = guessed.find((e) => e.me) || guessed[0];
+      const sc = scale(b.inside, pz, mine ? `${fmtCount(mine.guess)} ${pz.light.many}` : `${fmtCount(pz.answer)} ${pz.light.many}`, mine ? mine.color : null);
+      settle(sc, mine ? tiltFor(mine.guess, pz.answer) : 0);
+      // A log ruler along the bottom: the answer and every guess (twice and half are the same distance)
+      const H = 92, top0 = b.h - H, base = top0 + 40;
+      el('rect', { x: 0, y: top0, width: b.w, height: H, class: 'band-strip' }, b.inside);
+      el('line', { x1: 0, y1: top0, x2: b.w, y2: top0, class: 'band-edge' }, b.inside);
+      const vals = [pz.answer, ...guessed.map((e) => e.guess)];
+      const lo = Math.log(Math.min(...vals) / 2.5), hi = Math.log(Math.max(...vals) * 2.5);
+      const x = (v) => 24 + ((Math.log(v) - lo) / (hi - lo)) * (b.w - 48);
+      const ruler = el('g', { class: 'ruler reveal-late' }, b.inside);
+      el('line', { x1: 24, y1: base, x2: b.w - 24, y2: base, class: 'rule' }, ruler);
+      const decades = (hi - lo) / Math.LN10;
+      const steps = decades < 1.6 ? [1, 2, 5] : [1];
+      for (let p = Math.floor(lo / Math.LN10); p <= Math.ceil(hi / Math.LN10); p++) {
+        for (const m of steps) {
+          const v = m * 10 ** p;
+          if (v < 1 || Math.log(v) < lo || Math.log(v) > hi) continue;
+          el('line', { x1: x(v), y1: base, x2: x(v), y2: base - (m === 1 ? 8 : 4.5), class: 'tick' }, ruler);
+          if (Math.abs(x(v) - x(pz.answer)) > 36) label(ruler, x(v), base - 13, compact(v), { cls: 'tick-lbl' });
+        }
+      }
+      const ax = x(pz.answer);
+      el('path', { d: `M${ax} ${base}l-6 -11h12z`, class: 'answer-tri' }, b.over);
+      label(b.over, ax, base - 15, compact(pz.answer), { cls: 'answer-lbl' });
+      const lx = spread(guessed.map((e) => x(e.guess)), 30, b.w - 30, 62);
+      guessed.forEach((e, i) => {
+        const gx = x(e.guess);
+        el('path', { d: `M${gx} ${base + 4}V${base + 16}L${lx[i]} ${base + 25}`, class: `leader pc${e.color}` }, b.inside);
+        pin(b.inside, gx, base, e.color, 4.5);
+        label(b.inside, lx[i], base + 38, `${tag(e)} ${compact(e.guess)}`, { color: e.color, cls: 'who' });
+      });
+    },
+  },
+
   time: {
     name: 'Timing',
     how: 'Press Start, count in your head, and press Stop when you think the target time has passed. No clock is shown.',
@@ -688,6 +751,70 @@ function slider(parent, pz) {
   return { g, len, caps };
 }
 
+// ---------- Balance helpers ----------
+
+const TILT = 14;   // degrees the beam leans when one side is far heavier
+const PIVOT = { x: 200, y: 58 }, ARM = 122, DROP = 46;
+// Twice too many leans about half way; ten times too many is fully down on the right
+const tiltFor = (guess, answer) => TILT * Math.tanh(Math.log(guess / answer) / Math.log(3));
+const fmtCount = (v) => Math.round(v).toLocaleString('en-US');
+// Short labels for the ruler: 950, 28k, 1.5M, 2B
+function compact(v) {
+  const short = (n, unit) => `${Number(n.toPrecision(2))}${unit}`;
+  if (v >= 1e9) return short(v / 1e9, 'B');
+  if (v >= 1e6) return short(v / 1e6, 'M');
+  if (v >= 1e4) return short(v / 1e3, 'k');
+  return fmtCount(v);
+}
+
+// A balance scale: the heavy thing on the left pan, a pile of the light thing on the right.
+// set(deg) leans the beam (positive = right side down); the pans hang straight below its ends.
+function scale(parent, pz, rightText, color = null, down = 0) {
+  const g = el('g', { class: 'scale', transform: `translate(0 ${down})` }, parent);
+  el('path', { d: `M${PIVOT.x - 34} 196h68l-10 -9h-48z`, class: 'scale-base' }, g);
+  el('line', { x1: PIVOT.x, y1: PIVOT.y, x2: PIVOT.x, y2: 188, class: 'scale-post' }, g);
+  const beam = el('g', {}, g);
+  el('line', { x1: PIVOT.x - ARM, y1: PIVOT.y, x2: PIVOT.x + ARM, y2: PIVOT.y, class: 'scale-beam' }, beam);
+  el('path', { d: `M${PIVOT.x - 7} ${PIVOT.y + 10}L${PIVOT.x} ${PIVOT.y - 2}L${PIVOT.x + 7} ${PIVOT.y + 10}`, class: 'scale-needle' }, g);
+  el('circle', { cx: PIVOT.x, cy: PIVOT.y, r: 4, class: 'scale-pin' }, g);
+  const pan = (items, text, who) => {
+    const p = el('g', {}, g);
+    el('path', { d: `M0 0L-38 ${DROP}M0 0L38 ${DROP}`, class: 'scale-string' }, p);
+    el('path', { d: `M-46 ${DROP}h92a46 14 0 0 1 -92 0z`, class: 'scale-pan' }, p);
+    items.forEach(([dx, dy, size, emoji]) => {
+      const t = el('text', { x: dx, y: DROP + dy, 'font-size': size, 'text-anchor': 'middle', class: 'scale-item' }, p);
+      t.textContent = emoji;
+    });
+    label(p, 0, DROP + 32, text, { cls: `scale-lbl${who !== null ? ' who' : ''}`, color: who });
+    return p;
+  };
+  const left = pan([[0, -4, 38, pz.heavy.emoji]], `1 ${pz.heavy.one}`, null);
+  const e = pz.light.emoji;
+  const right = pan([[-20, -3, 16, e], [0, -3, 16, e], [20, -3, 16, e], [-10, -16, 16, e], [10, -16, 16, e], [0, -29, 16, e]], rightText, color);
+  const set = (deg) => {
+    beam.setAttribute('transform', `rotate(${deg} ${PIVOT.x} ${PIVOT.y})`);
+    const dx = Math.cos(rad(deg)) * ARM, dy = Math.sin(rad(deg)) * ARM;
+    left.setAttribute('transform', `translate(${PIVOT.x - dx} ${PIVOT.y - dy})`);
+    right.setAttribute('transform', `translate(${PIVOT.x + dx} ${PIVOT.y + dy})`);
+  };
+  return { set };
+}
+
+// Swing from heavy-on-the-left to where the guess puts it, wobbling a little before it settles
+function settle(sc, to) {
+  const from = -TILT;
+  if (typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches) return sc.set(to);
+  sc.set(from);
+  const t0 = performance.now();
+  const step = (now) => {
+    const t = (now - t0) / 1000;
+    if (t >= 2.2) return sc.set(to);
+    sc.set(to + (from - to) * Math.exp(-3 * t) * Math.cos(5 * t));
+    requestAnimationFrame(step);
+  };
+  setTimeout(() => requestAnimationFrame(step), 350);
+}
+
 // ---------- Cut helpers ----------
 
 const shapePath = (pts) => `M${pts.map((p) => `${Math.round(p[0] * 10) / 10} ${Math.round(p[1] * 10) / 10}`).join('L')}Z`;
@@ -734,6 +861,7 @@ export function icon(kind) {
     angle: '<path d="M4 19H21M4 19L16 5" fill="none"/><path d="M11 19a7 7 0 0 0 -2.4 -5.3" fill="none"/>',
     split: '<path d="M3 13H21" fill="none"/><circle cx="3.5" cy="13" r="2.2"/><path d="M13 5v4.5M10.5 6.5L13 9.5L15.5 6.5" fill="none"/>',
     time: '<circle cx="12" cy="13.5" r="7.5" fill="none"/><path d="M12 13.5V9.5M9.5 3h5M12 3v3M18.3 7.2l1.4-1.4" fill="none"/>',
+    balance: '<path d="M12 4v15M7 20h10M4 7h16" fill="none"/><path d="M4 7l-2.5 6h5zM20 7l-2.5 6h5z" fill="none"/>',
     cut: '<path d="M5 9c1-4 6-5 9-4s6 4 5 8-3 7-8 6-7-6-6-10z" fill="none"/><path d="M15 2L8 22" fill="none" stroke-dasharray="2.5 2"/>',
   };
   return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${paths[kind]}</svg>`;
