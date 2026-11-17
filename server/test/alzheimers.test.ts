@@ -30,7 +30,9 @@ async function toDrawing() {
   await ann.state((s) => playersOf(s).find((p) => p.name === 'Bob')?.written === 3);
   await fire(code, 'phase');   // time's up for writing: Bob's list is filled in
   const first = await ann.state((s) => s.status === 'draw');
-  return { code, clients, ids, logs, ann, bob, first };
+  // Where each log stood when drawing began: earlier messages (Ann's own draft while writing) don't count
+  const drawFrom = logs.map((l) => l.length);
+  return { code, clients, ids, logs, ann, bob, first, drawFrom };
 }
 
 describe('Alzheimer’s', () => {
@@ -55,7 +57,7 @@ describe('Alzheimer’s', () => {
   });
 
   it('flashes each word only to the player drawing it, only while it is on screen', async () => {
-    const { code, ann, bob, logs, first } = await toDrawing();
+    const { code, ann, bob, logs, first, drawFrom } = await toDrawing();
     const words = await inRoom(code, (r) => Object.fromEntries(r.players.map((p) => [p.name, p.words])));
     // Bob's three typed words, the repeat dropped, then filled up to 12
     expect(words.Bob).toHaveLength(12);
@@ -69,8 +71,10 @@ describe('Alzheimer’s', () => {
     await fire(code, 'word');
     expect((await ann.state((s) => s.word !== null)).word).toBe('kite');
     expect((await bob.state((s) => s.word !== null)).word).toBe('cat');
-    // Ann never received any of Bob's later words
-    for (const w of words.Bob.slice(1)) expect(logs[0].some((l) => l.includes(`"${w}"`))).toBe(false);
+    // Ann never received any of Bob's later words while drawing (skipping any that are also on her own list:
+    // Bob's blanks were filled at random and may repeat one of hers)
+    const sinceDraw = logs[0].slice(drawFrom[0]);
+    for (const w of words.Bob.slice(1).filter((x) => !TWELVE.includes(x))) expect(sinceDraw.some((l) => l.includes(`"${w}"`))).toBe(false);
     // After the flash the word is gone from the view
     await inRoom(code, (r) => { r.drawStart = Date.now() - 1200; });
     ann.send({ t: 'undo' });
