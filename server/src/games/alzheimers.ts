@@ -1,6 +1,7 @@
 // Alzheimer's on the server. 1 vs 1: each player writes 12 things for the other, the server flashes the
-// other player's words one at a time while you draw, then tests where you drew each one. A word goes to the
-// player drawing it only while it is on screen; the test never shows it next to its box; every tap is scored here.
+// other player's words one at a time while you draw, then lights up your boxes one by one and you type what
+// you drew in each. A word goes to the player drawing it only while it is on screen; the test sends the box,
+// never its word, until you've answered; every answer is checked here.
 import * as E from '../../../web/alzheimers/js/engine.js';
 import type { GameModule, Msg, RoomCtx } from '../core/game';
 import { type BaseRoom, reportPlayer, restoreSeats, type Seat, SeatRoom } from '../core/seats';
@@ -9,7 +10,7 @@ const GAME = 'alzheimers';
 
 interface Settings { pace: number; flash: number }
 interface Stroke { b: number; pts: number[] }
-interface Answer { i: number; b: number; ms: number }
+interface Answer { i: number; text: string; right: boolean; ms: number }
 
 interface Player extends Seat {
   /** Rounds won in this room. */
@@ -19,7 +20,7 @@ interface Player extends Seat {
   ready: boolean;
   strokes: Stroke[];
   ink: number;
-  /** Test: the order the words come back in, and the taps so far. */
+  /** Test: the order the boxes light up in, and the answers so far. */
   order: number[];
   answers: Answer[];
   askedAt: number;
@@ -79,7 +80,7 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
       case 'words': return this.setWords(p, msg.list, msg.ready === true);
       case 'stroke': return this.stroke(p, msg.b, msg.pts);
       case 'undo': return this.undo(p);
-      case 'pick': return this.pick(p, msg.q, msg.b);
+      case 'name': return this.name(p, msg.q, msg.text);
       default:
     }
   }
@@ -223,16 +224,18 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
     this.broadcast();
   }
 
-  /** Tap for question q: the box where you think you drew that word. */
-  private pick(p: Player, q: unknown, b: unknown): void {
+  /** Answer for question q: what you drew in the box that's lit ('' = I don't know). */
+  private name(p: Player, q: unknown, raw: unknown): void {
     const room = this.room;
     if (room.status !== 'test' || !p.inGame || q !== p.answers.length || q >= E.BOXES) return;
-    if (!Number.isInteger(b) || (b as number) < 0 || (b as number) >= E.BOXES) return;
     const now = this.ctx.now();
+    const words = this.wordsFor(p);
     const i = p.order[q as number];
-    p.answers.push({ i, b: b as number, ms: now - p.askedAt });
+    const text = E.cleanAnswer(raw);
+    const right = E.nameMatches(text, words[i], words.filter((_, k) => k !== i));
+    p.answers.push({ i, text, right, ms: now - p.askedAt });
     p.askedAt = now;
-    this.tell(p.id, { t: 'picked', q, right: i === b, box: i, word: this.wordsFor(p)[i] });
+    this.tell(p.id, { t: 'named', q, right, box: i, word: words[i], text });
     if (!this.checkTested()) this.broadcast();
   }
 
@@ -302,8 +305,9 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
       shownFor: word ? room.drawStart + E.revealAt(index, room.settings.pace) + room.settings.flash - now : 0,
       // Writing: your own draft (for a refresh). Test: the word you're asked about now, and your taps so far.
       myWords: room.status === 'write' && mine ? mine.words : [],
-      question: room.status === 'test' && mine && q < E.BOXES ? { q, word: this.wordsFor(mine)[mine.order[q]] } : null,
-      myAnswers: mine && (room.status === 'test' || reveal) ? mine.answers.map((a) => ({ b: a.b, right: a.i === a.b, box: a.i })) : [],
+      // The box to name now: never its word until it's been answered
+      question: room.status === 'test' && mine && q < E.BOXES ? { q, box: mine.order[q] } : null,
+      myAnswers: mine && (room.status === 'test' || reveal) ? mine.answers.map((a) => ({ box: a.i, right: a.right, text: a.text, word: this.wordsFor(mine)[a.i] })) : [],
       winner: reveal ? room.winner : null,
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
@@ -313,7 +317,7 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
         answered: room.status === 'test' || reveal ? p.answers.length : 0,
         points: reveal ? p.points : null,
         ms: reveal ? p.ms : null,
-        answers: reveal ? p.answers.map((a) => ({ i: a.i, b: a.b })) : null,
+        answers: reveal ? p.answers.map((a) => ({ i: a.i, text: a.text, right: a.right })) : null,
       })),
       crewName: room.crew ? room.crew.name : '',
       crewStatus: room.crewStatus,
@@ -323,7 +327,7 @@ class AlzheimersRoom extends SeatRoom<Player, Room> {
 
 export const alzheimers: GameModule = {
   id: GAME,
-  // A stroke is at most 800 numbers of up to 3 digits
+  // A stroke is at most 800 numbers of up to 3 digits; an answer at most 40 characters
   maxMsgBytes: 6144,
   rate: { perSec: 12, burst: 40 },
   create(ctx: RoomCtx, opts) {

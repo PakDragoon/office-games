@@ -111,8 +111,8 @@ const S = {
   wordsSent: '',      // the last draft of my 12 words sent to the server
   drawStartAt: 0,     // performance.now() when the first word appears
   flashKey: '',       // the word on screen right now (round:index)
-  picking: false,     // a tap is on its way to the server
-  revealed: {},       // test: box -> the word that turned out to be in it
+  picking: false,     // an answer is on its way to the server
+  askedQ: -1,         // test: the question the answer box was last cleared for
   boards: null,       // result: both drawings with their words
   endAt: 0,
 };
@@ -146,7 +146,7 @@ const toHost = (msg) => link.send(msg);
 function closeRoom() {
   link.close();
   stopTimers();
-  Object.assign(S, { view: null, isHost: false, code: '', reconnecting: false, creating: false, game: 0, mine: [], boards: null, revealed: {} });
+  Object.assign(S, { view: null, isHost: false, code: '', reconnecting: false, creating: false, game: 0, mine: [], boards: null, askedQ: -1 });
 }
 
 function sendSettings() {
@@ -192,8 +192,8 @@ function onMessage(msg) {
       S.mine = Array.isArray(msg.mine) ? msg.mine : [];
       drawMine();
       break;
-    case 'picked':
-      onPicked(msg);
+    case 'named':
+      onNamed(msg);
       break;
     case 'drawings':
       S.boards = msg;
@@ -224,7 +224,7 @@ function applyState(v) {
   }
   if (v.game !== S.game) {
     // A new round: a clean sheet
-    Object.assign(S, { game: v.game, mine: [], wordsSent: '', flashKey: '', picking: false, revealed: {}, boards: null });
+    Object.assign(S, { game: v.game, mine: [], wordsSent: '', flashKey: '', picking: false, askedQ: -1, boards: null });
     $('write-error').textContent = '';
     writeInputs().forEach((i) => { i.value = ''; });
   }
@@ -313,7 +313,7 @@ const toBoard = (svg, e) => new DOMPoint(e.clientX, e.clientY).matrixTransform(s
 /* =========================================================
    The game screen
    ========================================================= */
-const PHASE = { write: 'Write 12 things', draw: 'Draw', test: 'Remember', result: 'Result' };
+const PHASE = { write: 'Write 12 things', draw: 'Draw', test: 'Name your boxes', result: 'Result' };
 
 function renderGame(v, prev) {
   const mine = me(v);
@@ -513,39 +513,46 @@ $('undo-btn').addEventListener('click', () => {
   toHost({ t: 'undo' });
 });
 
-/* ---------- The memory test ---------- */
+/* ---------- The memory test: a box lights up, name what you drew ---------- */
 let testBoard = null;
 
 function renderTest(v, prev) {
-  if (!testBoard || !testBoard.svg.isConnected || (prev && prev.status !== 'test')) {
+  const fresh = !testBoard || !testBoard.svg.isConnected || (prev && prev.status !== 'test');
+  if (fresh) {
     testBoard = makeBoard($('test-wrap'));
-    testBoard.svg.classList.add('picking');
-    for (let i = 0; i < E.BOXES; i++) {
-      const r = boxRect(testBoard.hits, i, 'box-hit');
-      r.dataset.b = String(i);
-    }
-    testBoard.svg.addEventListener('click', (e) => {
-      const r = e.target.closest('.box-hit');
-      if (r) pick(Number(r.dataset.b));
-    });
     $('feedback').textContent = '';
     $('feedback').className = 'feedback';
   }
   inkStrokes(testBoard.ink, S.mine);
-  // Words already placed: their right box gets its label, so you can rule it out
-  for (const a of v.myAnswers) S.revealed[a.box] ??= null;
-  paintRevealed();
+  // Boxes already named: their real word, ticked or crossed; the box to name now is lit
+  testBoard.hl.replaceChildren();
+  testBoard.over.replaceChildren();
+  for (const a of v.myAnswers) {
+    boxRect(testBoard.hl, a.box, 'box-used');
+    boxLabel(testBoard.over, a.box, a.word || '', a.right ? 'right' : 'wrong');
+  }
   const q = v.question;
   const mine = me(v);
+  const asking = Boolean(mine.inGame && q);
+  if (q) boxRect(testBoard.hl, q.box, 'box-hl');
+  $('answer-form').hidden = !asking;
+  $('test-k').textContent = asking ? 'What did you draw in' : '';
   if (!mine.inGame) {
-    $('test-word').textContent = '';
+    $('test-box').textContent = '';
     $('test-n').textContent = '';
     $('feedback').textContent = 'You’re watching this round.';
   } else if (q) {
-    $('test-word').textContent = q.word;
+    $('test-box').textContent = `box ${q.box + 1}?`;
     $('test-n').textContent = `${q.q + 1} of ${E.BOXES}`;
+    if (S.askedQ !== q.q) {
+      S.askedQ = q.q;
+      S.picking = false;
+      $('answer-input').value = '';
+      $('answer-input').disabled = false;
+      $('answer-input').focus();
+    }
   } else {
-    $('test-word').textContent = 'all done';
+    $('test-box').textContent = 'All done';
     $('test-n').textContent = '';
     const right = v.myAnswers.filter((a) => a.right).length;
     $('feedback').textContent = `${right} of ${E.BOXES} right. Waiting for ${opponent(v)?.name || 'the other player'}…`;
@@ -553,27 +560,25 @@ function renderTest(v, prev) {
   }
 }
 
-function paintRevealed() {
-  if (!testBoard) return;
-  testBoard.over.replaceChildren();
-  for (const [b, word] of Object.entries(S.revealed)) {
-    boxRect(testBoard.over, Number(b), 'box-used');
-    if (word) boxLabel(testBoard.over, Number(b), word);
-  }
-}
-
-function pick(b) {
+function sendAnswer(text) {
   const v = S.view;
   if (!v || v.status !== 'test' || !v.question || S.picking || !me(v).inGame) return;
   S.picking = true;
-  toHost({ t: 'pick', q: v.question.q, b });
+  $('answer-input').disabled = true;
+  toHost({ t: 'name', q: v.question.q, text });
 }
+$('answer-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = E.cleanAnswer($('answer-input').value);
+  if (!text) { $('answer-input').focus(); return; }
+  sendAnswer(text);
+});
+$('skip-btn').addEventListener('click', () => sendAnswer(''));
 
-function onPicked(msg) {
-  S.picking = false;
-  S.revealed[msg.box] = msg.word;
-  paintRevealed();
-  $('feedback').textContent = msg.right ? `Right! “${msg.word}” was in box ${msg.box + 1}.` : `No, “${msg.word}” was in box ${msg.box + 1}.`;
+function onNamed(msg) {
+  $('feedback').textContent = msg.right
+    ? `Right! Box ${msg.box + 1} was “${msg.word}”.`
+    : msg.text ? `No, box ${msg.box + 1} was “${msg.word}” (you said “${msg.text}”).` : `Box ${msg.box + 1} was “${msg.word}”.`;
   $('feedback').className = `feedback ${msg.right ? 'right' : 'wrong'}`;
   if (testBoard) {
     const flash = boxRect(testBoard.over, msg.box, msg.right ? 'box-right' : 'box-wrong');
@@ -601,8 +606,8 @@ function renderResult(v) {
     const b = boards.find((x) => x.id === p.id);
     if (b) {
       inkStrokes(board.ink, b.strokes);
-      const tapped = Object.fromEntries((p.answers || []).map((a) => [a.i, a.b]));
-      b.words.forEach((w, i) => boxLabel(board.over, i, w, tapped[i] === i ? 'right' : 'wrong'));
+      const right = new Set((p.answers || []).filter((a) => a.right).map((a) => a.i));
+      b.words.forEach((w, i) => boxLabel(board.over, i, w, right.has(i) ? 'right' : 'wrong'));
     }
   }
   $('again-btn').hidden = !S.isHost;

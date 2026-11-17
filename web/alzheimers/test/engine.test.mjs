@@ -68,12 +68,32 @@ ok('ink stays inside its box, in whole numbers, with a cap', () => {
 });
 
 ok('points and standings: most right boxes, then the faster test; a full tie has no winner', () => {
-  assert.equal(E.points([{ i: 1, b: 1 }, { i: 2, b: 3 }, { i: 4, b: 4 }]), 2);
+  assert.equal(E.points([{ i: 1, right: true }, { i: 2, right: false }, { i: 4, right: true }]), 2);
   assert.equal(E.standings([{ id: 'a', points: 9, ms: 50000 }, { id: 'b', points: 10, ms: 80000 }]).winner, 'b');
   assert.equal(E.standings([{ id: 'a', points: 9, ms: 50000 }, { id: 'b', points: 9, ms: 40000 }]).winner, 'b');
   assert.equal(E.standings([{ id: 'a', points: 9, ms: 40000 }, { id: 'b', points: 9, ms: 40000 }]).winner, null);
   assert.equal(E.standings([{ id: 'a', points: 0, ms: 1 }]).winner, 'a');
   assert.equal(E.standings([]).winner, null);
+});
+
+ok('naming a box: close is good enough, another of your words is not', () => {
+  for (const [said, word] of [['cat', 'cat'], ['Cats', 'cat'], ['the elephant', 'elephant'], ['berries', 'berry'], ['boxes', 'box'],
+    ['ice-cream', 'ice cream'], ['hous', 'house'], ['Shalwar kamez', 'shalwar kameez'], ['guittar', 'guitar']]) {
+    assert.ok(E.nameMatches(said, word), `"${said}" should count for "${word}"`);
+  }
+  for (const [said, word] of [['dgo', 'dog'], ['caat', 'cat'], ['tree', 'house'], ['', 'cat'], ['   ', 'cat'], ['elefant', 'elephant']]) {
+    assert.ok(!E.nameMatches(said, word), `"${said}" should not count for "${word}"`);
+  }
+  // One letter off "mouse", but "house" is one of the player's other words: not accepted
+  assert.ok(E.nameMatches('house', 'mouse'));
+  assert.ok(!E.nameMatches('house', 'mouse', ['house', 'tree']));
+  assert.ok(E.nameMatches('mouse', 'mouse', ['house']));
+});
+
+ok('typed answers are tidied and capped', () => {
+  assert.equal(E.cleanAnswer('  a  <b>cat</b>\n'), 'a b cat /b');
+  assert.equal(E.cleanAnswer(42), '');
+  assert.equal(E.cleanAnswer('x'.repeat(60)).length, E.ANSWER_MAX);
 });
 
 ok('suggestions avoid what is already written', () => {

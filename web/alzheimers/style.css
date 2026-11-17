@@ -365,11 +365,14 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .progress i.done { background: var(--ink); }
 .progress i.now { background: var(--p0); }
 
-/* The memory test: which box? */
-.ask { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+/* The memory test: what did you draw here? (the sheet is a little smaller, to leave room for the answer box) */
+#test-wrap .board { width: min(100%, calc((100dvh - 290px) * 4 / 3)); }
+.ask { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; width: min(100%, calc((100dvh - 290px) * 4 / 3)); margin: 0 auto; }
 .ask .q { font-size: clamp(1.3rem, 4vw, 1.9rem); font-weight: 800; letter-spacing: -0.02em; }
 .ask .n { color: var(--muted); font-weight: 600; margin-left: auto; }
-.feedback { margin: 0; font-weight: 700; min-height: 1.5rem; }
+.answer-form { display: flex; gap: 0.5rem; width: min(100%, calc((100dvh - 290px) * 4 / 3)); margin: 0 auto; }
+.answer-form input { flex: 1; min-width: 0; }
+.feedback { margin: 0; font-weight: 700; min-height: 1.5rem; text-align: center; }
 .feedback.right { color: var(--hit); } .feedback.wrong { color: var(--danger); }
 
 /* The result: both sheets with their words */

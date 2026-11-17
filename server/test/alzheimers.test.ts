@@ -97,37 +97,53 @@ describe('Alzheimer’s', () => {
     expect(await inRoom(code, (r) => r.players.find((p) => p.name === 'Ann')!.strokes.length)).toBe(0);
   });
 
-  it('tests where each word was drawn, scores on the server and shows both drawings at the end', async () => {
-    const { code, ann, bob, clients } = await toDrawing();
+  it('lights up each box for its player to name, never sends the word first, scores leniently and shows both drawings', async () => {
+    const { code, ann, bob, clients, logs } = await toDrawing();
     await inRoom(code, (r) => { r.drawStart = Date.now() - 100; });
     ann.send({ t: 'stroke', b: 0, pts: [20, 20, 80, 80] });
     await new Promise((ok) => setTimeout(ok, 100));
     await fire(code, 'phase');
     const words = await inRoom(code, (r) => Object.fromEntries(r.players.map((p) => [p.name, p.words])));
-    // Ann remembers every box; Bob always taps box 0
+    const fromTest = logs[0].length;
+    // Ann names every box, in capitals with an s on the end: still right. Bob types nonsense or skips.
     for (let q = 0; q < E.BOXES; q++) {
       const s = await ann.state((v) => v.status === 'test' && (v.question as { q: number } | null)?.q === q);
-      const word = (s.question as { word: string }).word;
-      ann.send({ t: 'pick', q, b: words.Bob.indexOf(word) });
-      const r = await ann.next((m) => m.t === 'picked' && m.q === q);
-      expect(r.right).toBe(true);
+      const box = (s.question as { box: number }).box;
+      expect(s.question).toEqual({ q, box });   // the box only, not its word
+      // Nothing Ann has been sent in the test so far names the box she's asked about
+      expect(logs[0].slice(fromTest).some((l) => l.includes(`"${words.Bob[box]}"`))).toBe(false);
+      ann.send({ t: 'name', q, text: `${words.Bob[box].toUpperCase()}s` });
+      const r = await ann.next((m) => m.t === 'named' && m.q === q);
+      expect(r).toMatchObject({ right: true, box, word: words.Bob[box] });
     }
-    // A tap for the wrong question is ignored
-    bob.send({ t: 'pick', q: 3, b: 0 });
+    // An answer for the wrong question is ignored
+    bob.send({ t: 'name', q: 3, text: 'cat' });
     for (let q = 0; q < E.BOXES; q++) {
       await bob.state((v) => (v.question as { q: number } | null)?.q === q);
-      bob.send({ t: 'pick', q, b: 0 });
-      await bob.next((m) => m.t === 'picked' && m.q === q);
+      bob.send({ t: 'name', q, text: q % 2 ? 'qqqq zzzz' : '' });
+      expect((await bob.next((m) => m.t === 'named' && m.q === q)).right).toBe(false);
     }
     const end: Msg = await ann.state((v) => v.status === 'result');
     const pl = playersOf(end);
     expect(pl.find((p) => p.name === 'Ann')!.points).toBe(12);
-    expect(pl.find((p) => p.name === 'Bob')!.points).toBe(1);
+    expect(pl.find((p) => p.name === 'Bob')!.points).toBe(0);
     expect(end.winner).toBe(pl.find((p) => p.name === 'Ann')!.id);
     expect(pl.find((p) => p.name === 'Ann')!.score).toBe(1);
+    expect((end.myAnswers as Array<{ right: boolean }>).every((a) => a.right)).toBe(true);
     const boards = await clients[1].next((m) => m.t === 'drawings');
     const annBoard = (boards.boards as Array<{ id: string; strokes: unknown[]; words: string[] }>).find((b) => b.id === pl.find((p) => p.name === 'Ann')!.id)!;
     expect(annBoard.words).toEqual(words.Bob);
     expect(annBoard.strokes).toHaveLength(1);
+  });
+
+  it('naming one of your other words for a box does not count', async () => {
+    const { code, bob } = await toDrawing();
+    await fire(code, 'phase');
+    // Bob draws Ann's words: cat, tree, house, boat, apple, sun, car, fish, hat, chair, moon, shoe
+    const s = await bob.state((v) => v.status === 'test');
+    const box = (s.question as { box: number }).box;
+    const wrongButClose = TWELVE[(box + 1) % 12];
+    bob.send({ t: 'name', q: 0, text: wrongButClose });
+    expect((await bob.next((m) => m.t === 'named')).right).toBe(false);
   });
 });

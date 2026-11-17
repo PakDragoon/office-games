@@ -2,9 +2,10 @@
 //
 // 1 vs 1. Each player writes 12 things for the other to draw. Then the other player's words flash one at a
 // time, each for a moment, and you doodle each one in its own box of a 4 × 3 grid as it comes. When drawing
-// is over the words are gone: they come back one by one in a random order and you tap the box you drew each
-// one in. One point per right box; equal scores go to whoever was faster.
+// is over the words are gone: your boxes light up one by one in a random order and you type what you drew
+// in each (close is good enough). One point per right box; equal scores go to whoever was faster.
 import { CATEGORIES, CATEGORY_NAMES } from '../../the-liar/js/words.js';
+import { editDistance, squash, tolerance } from '../../forehead/js/engine.js';
 
 export const PLAYERS = 2;
 export const BOXES = 12;
@@ -22,6 +23,7 @@ export const TIMES = {
   testMs: 90000,       // for the whole memory test
 };
 export const WORD = { maxChars: 24, maxWords: 3 };
+export const ANSWER_MAX = 40;   // characters in a typed answer
 export const INK = { perStroke: 800, perPlayer: 16000 };   // numbers (x, y pairs) kept per stroke and per player
 
 export function cleanSettings(raw) {
@@ -129,8 +131,36 @@ export function cleanStroke(box, pts, room = INK.perStroke) {
 
 // ---------- The memory test ----------
 
-/** How many boxes a player got right: answers are { i: word number, b: box tapped }; word i belongs in box i. */
-export const points = (answers) => answers.filter((a) => a.i === a.b).length;
+/** A typed answer, one line, at most ANSWER_MAX characters ('' = I don't know). */
+export const cleanAnswer = (raw) => (typeof raw === 'string' ? raw.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, ANSWER_MAX).trim() : '');
+
+// The same word with or without a plural ending: cat / cats, box / boxes, berry / berries
+function forms(w) {
+  const out = new Set([w, `${w}s`, `${w}es`]);
+  if (w.endsWith('ies')) out.add(`${w.slice(0, -3)}y`);
+  if (w.endsWith('y')) out.add(`${w.slice(0, -1)}ies`);
+  if (w.endsWith('es')) out.add(w.slice(0, -2));
+  if (w.endsWith('s')) out.add(w.slice(0, -1));
+  return out;
+}
+
+/**
+ * Does a typed answer name this word? Capitals, accents, spaces, punctuation and a leading "the/a/an" don't
+ * matter, plurals count, and small typos are forgiven (1 for words of 5+ letters, 2 for 9+, as in Forehead).
+ * An answer that is exactly one of the player's OTHER words never counts (no "house" for "mouse").
+ */
+export function nameMatches(raw, word, others = []) {
+  const g = squash(raw);
+  const w = squash(word);
+  if (!g || !w) return false;
+  if (forms(w).has(g)) return true;
+  if (others.some((o) => { const k = squash(o); return k && k !== w && forms(k).has(g); })) return false;
+  const tol = tolerance(w.length);
+  return tol > 0 && [...forms(w)].some((f) => editDistance(g, f, tol) <= tol);
+}
+
+/** How many boxes a player got right: answers are { i: box, right }. */
+export const points = (answers) => answers.filter((a) => a.right).length;
 
 /**
  * Standings: most right boxes first, then the faster test. Players are { id, points, ms }.
