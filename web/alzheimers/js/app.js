@@ -322,6 +322,7 @@ function renderGame(v, prev) {
   $('bar-code').textContent = v.code;
   $('bar-phase').textContent = playing ? PHASE[v.status] || '' : 'Watching';
   ['write', 'draw', 'test', 'result'].forEach((s) => { $(`st-${s}`).hidden = v.status !== s; });
+  if (v.status !== 'draw') hideFlash();
   setClock(v);
   renderSide(v);
   if (v.status === 'write') renderWrite(v);
@@ -440,8 +441,12 @@ function renderDraw(v, prev) {
       void $('flash').offsetWidth;
       $('flash').classList.add('pop');
       blip();
+      // When the word must be gone. A one-off timer alone isn't enough (phones delay timers while you draw),
+      // so drawTick checks this moment too, and a new box or the end of drawing hides it as well.
+      S.flashIndex = v.index;
+      S.flashUntil = performance.now() + Math.max(200, v.shownFor);
       clearTimeout(S.flashTimer);
-      S.flashTimer = setTimeout(() => { $('flash').hidden = true; }, Math.max(200, v.shownFor));
+      S.flashTimer = setTimeout(hideFlash, Math.max(200, v.shownFor));
     }
   }
   drawTick();
@@ -449,6 +454,11 @@ function renderDraw(v, prev) {
 
 // Redraw my finished strokes. A line still being drawn (the next word often arrives mid-stroke) is put back
 // on top, or it would vanish until the redraw after next.
+function hideFlash() {
+  $('flash').hidden = true;
+  S.flashUntil = 0;
+}
+
 function drawMine() {
   if (!drawBoard) return;
   inkStrokes(drawBoard.ink, S.mine);
@@ -461,6 +471,7 @@ function drawTick() {
   if (!v || !drawBoard) return;
   const since = performance.now() - S.drawStartAt;
   const idx = E.wordIndex(since, v.settings.pace);
+  if (!$('flash').hidden && (performance.now() >= S.flashUntil || idx !== S.flashIndex || v.status !== 'draw')) hideFlash();
   $('countdown').hidden = since >= 0;
   if (since < 0) $('countdown').textContent = String(Math.ceil(-since / 1000));
   drawBoard.hl.replaceChildren();
