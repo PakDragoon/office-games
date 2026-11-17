@@ -36,13 +36,15 @@ const store = {
   },
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
-const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, discussSeconds: 60, categories: [], ...store.get('room', {}) };
+const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, discussSeconds: 60, timeTurns: 'all', categories: [], ...store.get('room', {}) };
 if (!E.FREE_SECONDS.includes(ROOM_PREFS.seconds)) ROOM_PREFS.seconds = 8;
 if (!E.WORD_SECONDS.includes(ROOM_PREFS.wordSeconds)) ROOM_PREFS.wordSeconds = 30;
 if (!E.DISCUSS_SECONDS.includes(ROOM_PREFS.discussSeconds)) ROOM_PREFS.discussSeconds = 60;
 if (!['draw', 'words', 'time'].includes(ROOM_PREFS.play)) ROOM_PREFS.play = 'draw';
+if (!E.TIME_TURNS.includes(ROOM_PREFS.timeTurns)) ROOM_PREFS.timeTurns = 'all';
 const wordsGame = (st) => st && st.play === 'words';
 const timeGame = (st) => st && st.play === 'time';
+const timeTurns = (st) => timeGame(st) && st.timeTurns === 'turns';
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
@@ -369,7 +371,12 @@ function renderGame(v) {
 
   if (v.status === 'role') renderRole(v);
   if (v.status === 'draw') renderDraw(v);
-  else if (v.status === 'time' || v.status === 'discuss') { stopPen(); $('handoff').hidden = true; renderTimePanel(v); }
+  else if (v.status === 'time' || v.status === 'discuss') {
+    stopPen();
+    // Turn by turn keeps its own hand-off banner up for the turn's first moment
+    if (v.status !== 'time' || !timeTurns(v.settings)) $('handoff').hidden = true;
+    renderTimePanel(v);
+  }
   else { stopPen(); $('handoff').hidden = true; $('sheet-host').classList.remove('my-turn'); $('clue-board').classList.remove('my-turn'); }
   if (v.status === 'vote') renderVote(v);
   if (v.status === 'guess') renderGuess(v);
@@ -628,6 +635,7 @@ function renderTime(v) {
   $('time-play').hidden = !playing;
   $('time-results').hidden = playing;
   $('time-board').classList.toggle('results', !playing);
+  if (playing && timeTurns(v.settings)) return renderTimeTurn(v);
   if (playing) {
     const stopped = mine.stopped || S.myStop !== null;
     const players = v.players.filter((p) => p.inGame);
@@ -648,6 +656,54 @@ function renderTime(v) {
   renderTimeResults(v);
 }
 
+// Turn by turn: one player times while everyone watches; each stop goes on the timeline as it's made
+let timeTurnTimer = 0;
+function renderTimeTurn(v) {
+  const mine = me(v);
+  const timer = v.players.find((p) => p.id === v.timer);
+  const myTurn = Boolean(timer) && timer.id === S.myId && mine.inGame;
+  const key = `${v.game}:${v.turn}`;
+  if (S.timeTurnKey !== key) {
+    S.timeTurnKey = key;
+    const startsIn = Math.max(0, v.turnStartsIn);
+    S.timeReadyAt = performance.now() + startsIn;
+    $('handoff').hidden = false;
+    $('handoff').className = `handoff pc${timer ? timer.color : 0}`;
+    $('handoff-name').textContent = myTurn ? 'Your turn' : `${timer ? timer.name : 'Someone'}’s turn`;
+    $('handoff-sub').textContent = 'Stop the clock';
+    clearTimeout(timeTurnTimer);
+    timeTurnTimer = setTimeout(() => {
+      $('handoff').hidden = true;
+      if (S.view && S.view.status === 'time') renderTime(S.view);
+    }, Math.max(600, startsIn));
+    if (myTurn) chime();
+  }
+  const ready = performance.now() >= S.timeReadyAt;
+  const stopped = mine.stopped || S.myStop !== null;
+  const counting = S.timeStart !== null && !stopped;
+  const btn = $('time-btn');
+  btn.className = `time-btn pc${mine.color}${counting ? ' running' : ''}`;
+  btn.hidden = !myTurn || stopped;
+  btn.disabled = !ready;
+  btn.textContent = counting ? 'Stop' : 'Start';
+  $('time-peek').hidden = !mine.inGame;
+  const name = timer ? esc(timer.name) : 'Someone';
+  $('time-k').innerHTML = myTurn ? 'Your turn: stop the clock at the time on your card' : `<b class="pc${timer ? timer.color : 0}">${name}</b> is stopping the clock`;
+  $('time-status').textContent = myTurn
+    ? (counting ? 'Counting… press Stop when you think it’s time' : 'Press Start, then count in your head. No clock is shown.')
+    : timer && timer.started ? 'Counting…' : 'About to start';
+  const order = v.order.map((id) => v.players.find((p) => p.id === id)).filter((p) => p && p.inGame);
+  $('time-roster').innerHTML = order.map((p) => {
+    const st = p.stopped ? ['done', E.fmtSecs(v.stops[p.id])] : !active(p) ? ['off', 'Away'] : p.id === v.timer ? ['going', p.started ? 'Counting…' : 'Up now'] : ['wait', 'Waiting'];
+    return `<li class="pc${p.color} ${st[0]}"><i class="pen-dot"></i><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span><span class="st">${esc(st[1])}</span></li>`;
+  }).join('');
+  $('time-roster-note').textContent = '';
+  // The timeline of the stops so far, under the clock
+  const any = Object.keys(v.stops || {}).length > 0;
+  $('time-results').hidden = !any;
+  if (any) renderTimeResults(v, { soFar: true });
+}
+
 // Who's counting and who's done. Until you've stopped yourself you only see who has started,
 // never who has stopped, so nobody (the liar especially) can stop when the others do.
 function renderTimeRoster(v, seeDone) {
@@ -666,7 +722,7 @@ const verdict = (miss) => VERDICTS.find(([d]) => miss <= d)[1];
 
 // Everyone's stop as a pin on one timeline (a ruler of seconds). At the result the target and
 // the liar's range go on the same ruler, and a list ranks everyone by how close they got.
-function renderTimeResults(v) {
+function renderTimeResults(v, { soFar = false } = {}) {
   const players = v.players.filter((p) => p.inGame);
   const stops = v.stops || {};
   const t = v.time;
@@ -707,7 +763,7 @@ function renderTimeResults(v) {
   const timeline = `<div class="tl${t ? ' with-target' : ''}">
       <div class="tl-lanes" style="height:${n * LANE}px">${marks}${pins}</div>
       <div class="tl-axis">${ticks.join('')}<span class="tl-unit">seconds</span></div></div>`;
-  const noStop = missing.length ? `<p class="tl-missing">No stop: ${missing.map((p) => `<span class="pc${p.color}">${esc(p.name)}</span>`).join(', ')}</p>` : '';
+  const noStop = missing.length && !soFar ? `<p class="tl-missing">No stop: ${missing.map((p) => `<span class="pc${p.color}">${esc(p.name)}</span>`).join(', ')}</p>` : '';
   let list = '';
   if (t) {
     // Closest first; nobody who missed the stop is ranked
@@ -723,7 +779,7 @@ function renderTimeResults(v) {
         <span class="vd v${VERDICTS.findIndex(([m]) => miss <= m)}">${verdict(miss)}</span></li>`;
     }).join('')}</ol>`;
   }
-  $('time-results').innerHTML = `<p class="time-k">${t ? `The time was ${esc(E.fmtSecs(t.target))}` : 'Everyone’s stop. Who doesn’t fit?'}</p>
+  $('time-results').innerHTML = `<p class="time-k">${t ? `The time was ${esc(E.fmtSecs(t.target))}` : soFar ? 'Stops so far' : 'Everyone’s stop. Who doesn’t fit?'}</p>
     ${timeline}${noStop}${list}`;
   highlight(litId);
 }
@@ -733,9 +789,13 @@ function renderTimePanel(v) {
   const talking = v.status === 'discuss';
   const box = $('turn-status');
   box.className = `turn-status pc${mine.color}`;
-  $('turn-title').textContent = talking ? 'Talk it over' : mine.inGame ? 'Stop your clock' : 'Everyone is timing';
+  const turns = timeTurns(v.settings);
+  const timer = v.players.find((p) => p.id === v.timer);
+  $('turn-title').textContent = talking ? 'Talk it over'
+    : turns ? (timer && timer.id === S.myId ? 'Your turn' : `${timer ? timer.name : 'Someone'} is timing`)
+      : mine.inGame ? 'Stop your clock' : 'Everyone is timing';
   $('turn-sub').textContent = talking ? 'Who stopped like they didn’t know the time? Then vote.'
-    : 'The times go up when everyone has stopped';
+    : turns ? 'One at a time. Each stop goes up as soon as it’s made' : 'The times go up when everyone has stopped';
   $('turn-done').hidden = true;
   $('order-list').innerHTML = '';
   const vn = $('vote-now');
@@ -750,6 +810,7 @@ function renderTimePanel(v) {
 function timePress(ts) {
   const v = S.view;
   if (!v || v.status !== 'time' || !me(v).inGame || me(v).stopped || S.myStop !== null) return;
+  if (timeTurns(v.settings) && (v.timer !== S.myId || performance.now() < S.timeReadyAt)) return;
   if (S.timeStart === null) {
     S.timeStart = ts;
   } else {
@@ -924,6 +985,7 @@ function segment(container, get, set) {
 
 const paintPlay = segment($('set-play'), () => ROOM_PREFS.play, (v) => { ROOM_PREFS.play = v; roomSettingsChanged(); });
 const paintMode = segment($('set-mode'), () => ROOM_PREFS.mode, (v) => { ROOM_PREFS.mode = v; roomSettingsChanged(); });
+const paintTurns = segment($('set-turns'), () => ROOM_PREFS.timeTurns, (v) => { ROOM_PREFS.timeTurns = v; roomSettingsChanged(); });
 $('set-word-seconds').addEventListener('change', (e) => { ROOM_PREFS.wordSeconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-seconds').addEventListener('change', (e) => { ROOM_PREFS.seconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-discuss').addEventListener('change', (e) => { ROOM_PREFS.discussSeconds = Number(e.target.value); roomSettingsChanged(); });
@@ -953,6 +1015,7 @@ function roomSettingsChanged() {
 function paintRoomSettings() {
   paintPlay();
   paintMode();
+  paintTurns();
   paintAllCats();
   const words = ROOM_PREFS.play === 'words';
   const timed = ROOM_PREFS.play === 'time';
@@ -960,6 +1023,7 @@ function paintRoomSettings() {
   $('word-seconds-field').hidden = !words;
   $('set-word-seconds').value = String(ROOM_PREFS.wordSeconds);
   $('discuss-field').hidden = !timed;
+  $('turns-setting').hidden = !timed;
   $('set-discuss').value = String(ROOM_PREFS.discussSeconds);
   $('cats-setting').hidden = timed;
   $('seconds-field').hidden = words || timed || ROOM_PREFS.mode !== 'free';
@@ -974,6 +1038,7 @@ function settingsLines(st) {
   if (timeGame(st)) {
     return [
       '<li><b>Time: stop a hidden clock at your secret time</b></li>',
+      `<li>${timeTurns(st) ? 'Turn by turn, in a random order' : 'Everyone at once'}</li>`,
       `<li>${st.discussSeconds} seconds to talk, then the vote</li>`,
     ].join('');
   }

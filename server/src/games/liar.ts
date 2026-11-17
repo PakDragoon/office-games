@@ -13,6 +13,7 @@ interface Settings {
   seconds: number;
   wordSeconds: number;
   discussSeconds: number;
+  timeTurns: 'all' | 'turns';
   categories: string[];
 }
 
@@ -61,12 +62,15 @@ function cleanSettings(raw: unknown): Settings {
     seconds: pick(r.seconds, E.FREE_SECONDS, 8),
     wordSeconds: pick(r.wordSeconds, E.WORD_SECONDS, 30),
     discussSeconds: pick(r.discussSeconds, E.DISCUSS_SECONDS, 60),
+    timeTurns: pick(r.timeTurns, E.TIME_TURNS as readonly ('all' | 'turns')[], 'all'),
     categories: Array.isArray(r.categories) ? r.categories.filter((c): c is string => typeof c === 'string').slice(0, 40) : [],
   };
 }
 
 const wordsGame = (st: Settings) => st.play === 'words';
 const timeGame = (st: Settings) => st.play === 'time';
+// Rooms saved before the setting existed have no timeTurns: they are 'all'
+const timeTurns = (st: Settings) => st.play === 'time' && st.timeTurns === 'turns';
 
 /** A drawing that is too big to keep is thinned (every other point, ends kept) until it fits. */
 function thinStrokes(strokes: Array<{ p: number | null; pts: number[] }>) {
@@ -120,7 +124,10 @@ class LiarRoom extends SeatRoom<Player, Room> {
       if (room.order[room.turn] === p.id && !this.active(p)) this.endTurn();
       else this.checkVoteNow();
     }
-    if (room.status === 'time') this.checkStops();
+    if (room.status === 'time') {
+      if (timeTurns(room.settings)) { if (room.order[room.turn] === p.id && !this.active(p)) this.nextTimeTurn(); }
+      else this.checkStops();
+    }
     if (room.status === 'discuss') this.checkVoteNow();
     if (room.status === 'vote') this.checkVotes();
   }
@@ -162,7 +169,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
 
   protected gameTimer(name: string): void {
     const room = this.room;
-    if (name === 'turn') return this.endTurn();
+    if (name === 'turn') return room.status === 'time' ? this.nextTimeTurn() : this.endTurn();
     if (name !== 'phase') return;
     switch (room.status) {
       case 'role': return this.startDrawing();
@@ -361,15 +368,50 @@ class LiarRoom extends SeatRoom<Player, Room> {
 
   private startTiming(): void {
     const room = this.room;
+    if (timeTurns(room.settings)) {
+      // One at a time in the game's random order (the liar is never first), each stop shown as it's made
+      Object.assign(room, { status: 'time', stops: {}, started: {}, turn: 0 });
+      return this.beginTimeTurn();
+    }
     const limit = E.timeLimitMs(room.time ? room.time.hi : 12);
     Object.assign(room, { status: 'time', stops: {}, started: {}, deadline: this.ctx.now() + limit });
     this.phaseIn(limit);
     this.broadcast();
   }
 
+  private beginTimeTurn(): void {
+    const room = this.room;
+    while (room.turn < room.order.length) {
+      const p = this.byId(room.order[room.turn]);
+      if (p && this.active(p) && !(p.id in room.stops)) break;
+      room.turn++;   // skip anyone who's gone
+    }
+    if (room.turn >= room.order.length) return this.startDiscuss();
+    const now = this.ctx.now();
+    room.turnStart = now + E.TIMES.handoffMs;
+    room.deadline = room.turnStart + E.timeTurnMs(room.time ? room.time.hi : 12);
+    this.ctx.setTimer('turn', room.deadline + 350);
+    this.broadcast();
+  }
+
+  private nextTimeTurn(): void {
+    const room = this.room;
+    if (room.status !== 'time' || !timeTurns(room.settings)) return;
+    this.ctx.clearTimer('turn');
+    room.turn++;
+    this.beginTimeTurn();
+  }
+
+  // Turn by turn: only the player whose turn it is may time, and only once the hand-off is over
+  private mayTime(p: Player): boolean {
+    const room = this.room;
+    if (!timeTurns(room.settings)) return true;
+    return room.order[room.turn] === p.id && this.ctx.now() >= room.turnStart - 300;
+  }
+
   private timeStart(p: Player): void {
     const room = this.room;
-    if (room.status !== 'time' || !p.inGame || room.started[p.id] || p.id in room.stops) return;
+    if (room.status !== 'time' || !p.inGame || room.started[p.id] || p.id in room.stops || !this.mayTime(p)) return;
     room.started[p.id] = true;
     this.broadcast();
   }
@@ -377,14 +419,15 @@ class LiarRoom extends SeatRoom<Player, Room> {
   private stop(p: Player, secs: unknown): void {
     const room = this.room;
     const clean = E.cleanStop(secs);
-    if (room.status !== 'time' || !p.inGame || p.id in room.stops || clean === null) return;
+    if (room.status !== 'time' || !p.inGame || p.id in room.stops || clean === null || !this.mayTime(p)) return;
     room.stops[p.id] = clean;
+    if (timeTurns(room.settings)) return this.nextTimeTurn();
     if (!this.checkStops()) this.broadcast();
   }
 
   private checkStops(): boolean {
     const room = this.room;
-    if (room.status !== 'time') return false;
+    if (room.status !== 'time' || timeTurns(room.settings)) return false;
     const timers = this.inGame().filter(this.active);
     if (timers.length && timers.every((p) => p.id in room.stops)) {
       this.startDiscuss();
@@ -541,14 +584,17 @@ class LiarRoom extends SeatRoom<Player, Room> {
     const now = this.ctx.now();
     const reveal = room.status === 'result';
     const { have, need } = room.status === 'draw' || room.status === 'discuss' ? this.voteNowCounts() : { have: 0, need: 0 };
-    const timesOut = ['discuss', 'vote', 'result'].includes(room.status);
+    // Turn by turn, each stop goes up as soon as it's made
+    const timesOut = ['discuss', 'vote', 'result'].includes(room.status) || (room.status === 'time' && timeTurns(room.settings));
+    const timer = room.status === 'time' && timeTurns(room.settings) ? room.order[room.turn] ?? null : null;
     return {
       t: 'state',
       code: room.code, status: room.status, settings: room.settings, game: room.game, public: room.public,
       category: room.status === 'lobby' ? '' : room.category,
       order: room.order, round: room.round, turn: room.turn,
       drawer: room.status === 'draw' ? room.order[room.turn] : null,
-      turnStartsIn: room.status === 'draw' ? room.turnStart - now : 0,
+      timer,
+      turnStartsIn: room.status === 'draw' || timer ? room.turnStart - now : 0,
       endsIn: room.deadline ? room.deadline - now : 0,
       strokeLive: Boolean(room.strokeSid),
       strokeCount: room.strokes.length,

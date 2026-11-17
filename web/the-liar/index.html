@@ -98,6 +98,13 @@
             <button type="button" data-value="free"><b>Free draw</b><small>As much as you like, timed</small></button>
           </div>
         </div>
+        <div class="setting" id="turns-setting">
+          <span class="setting-label">Who stops</span>
+          <div class="seg two" id="set-turns" role="group" aria-label="Who stops">
+            <button type="button" data-value="all"><b>All at once</b><small>Times go up at the end</small></button>
+            <button type="button" data-value="turns"><b>Turn by turn</b><small>Random order, each time shown</small></button>
+          </div>
+        </div>
         <label class="select-field" id="word-seconds-field">Seconds to type your word
           <select id="set-word-seconds">
             <option value="20">20 seconds</option>
@@ -353,6 +360,7 @@
   <p>Too obvious and the liar works out the word; too vague and you look like the liar.</p>
   <h3>Time</h3>
   <p>Instead of a word, everyone gets a secret time, like <b>6.71 s</b>. The liar only gets a range it’s somewhere in, like <b>3 to 9 s</b>. Everyone presses <b>Start</b>, counts in their head (no clock is shown) and presses <b>Stop</b> at their time.</p>
+  <p>The host picks <b>All at once</b> (everyone counts together) or <b>Turn by turn</b>: one player at a time in a random order while everyone watches, and each stop goes up on the timeline as soon as it’s made. The liar never goes first.</p>
   <p>When everyone has stopped, all the times go up and you get 60, 120 or 180 seconds (host setting) to talk it over. Press <b>Ready to vote</b> to cut it short (everyone but one is enough). The liar’s stop is a guess, so look for the odd one out, but people who know the time miss too. There’s no last chance in Time: a caught liar is caught.</p>
   <h3>Voting</h3>
   <p>After round 3, or earlier if everyone but one presses <b>Ready to vote</b>, everyone votes for who they think the liar is. Point at a name to see only their lines or words. The most votes is accused; a tie means nobody is.</p>

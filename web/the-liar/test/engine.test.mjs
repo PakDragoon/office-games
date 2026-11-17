@@ -150,6 +150,10 @@ assert.equal(E.cleanStop('6.5'), null, 'numbers only');
 assert.equal(E.cleanStop(NaN), null);
 assert.equal(E.cleanStop(null), null);
 assert.equal(E.timeLimitMs(9), 29000);
+// Turn by turn: one player's turn is shorter than everyone at once, still based on the range
+assert.equal(E.timeTurnMs(9), 22000);
+assert.ok(E.timeTurnMs(12) < E.timeLimitMs(12));
+assert.deepEqual(E.TIME_TURNS, ['all', 'turns']);
 assert.equal(E.fmtSecs(6.7), '6.70 s');
 assert.deepEqual(E.DISCUSS_SECONDS, [60, 120, 180]);
 assert.equal(E.outcome({ liar: 'x', accused: 'x', guess: null, word: '' }), 'caught', 'time game: no steal');

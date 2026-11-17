@@ -309,6 +309,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 }
 .time-btn.running { background: var(--pc, var(--ink)); color: var(--surface); }
 .time-btn:disabled { opacity: 0.55; cursor: default; }
+.time-k b[class^="pc"] { color: var(--pc); }
 .time-status { margin: 0; min-height: 1.5rem; color: var(--muted); font-weight: 600; }
 .time-results { display: grid; gap: 0.9rem; align-content: center; width: 100%; }
 .time-board.results { aspect-ratio: auto; min-height: 22rem; }

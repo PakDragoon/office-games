@@ -15,6 +15,8 @@ export const CLUE = { maxChars: 24, maxWords: 2 };
 export const TIMES = { roleMs: 15000, handoffMs: 1400, voteMs: 45000, guessMs: 10000 };
 // Time game: seconds to talk it over once everyone has stopped the clock
 export const DISCUSS_SECONDS = [60, 120, 180];
+// Time game: everyone stops their clock at once, or one at a time in a random order
+export const TIME_TURNS = ['all', 'turns'];
 export const OPTION_COUNT = 12;
 export const MAX_INK = 4000;   // numbers (x, y pairs) allowed in one stroke
 
@@ -194,6 +196,10 @@ export function pickTime(rnd) {
 // How long everyone gets to stop the clock: room to read, press Start and count past the
 // top of the liar's range. Based on the range, not the target, so the clock gives nothing away.
 export const timeLimitMs = (hi) => Math.ceil(hi * 1.5 + 15) * 1000;
+
+// Turn by turn: how long one player gets to press Start and Stop (after the hand-off banner).
+// Also based on the range, for the same reason.
+export const timeTurnMs = (hi) => Math.ceil(hi * 1.5 + 8) * 1000;
 
 // A stop time from another browser: seconds, to the hundredth, or null when it makes no sense
 export function cleanStop(raw) {
