@@ -6,6 +6,10 @@ import ANSWERS_TEXT from '../../../web/lettuce-party/words/answers.txt';
 import LADDERS_TEXT from '../../../web/lettuce-party/words/ladders.txt';
 import VALID_TEXT from '../../../web/lettuce-party/words/valid.txt';
 import * as E from '../../../web/lettuce-party/js/engine.js';
+import * as H from '../../../web/lettuce-party/js/hotcold.js';
+import HOT_WORDS from '../data/hotcold-words.txt';
+import HOT_VECTORS from '../data/hotcold.bin';
+import HOT_TARGETS from '../data/hotcold-targets.bin';
 import type { GameModule, Msg, RoomCtx } from '../core/game';
 import { type BaseRoom, reportPlayer, restoreSeats, type Seat, SeatRoom } from '../core/seats';
 import { cleanName } from '../core/util';
@@ -16,7 +20,8 @@ const MAX_PLAYERS = 5;
 const MAX_LADDER_STEPS = 60;
 const COLS = E.COLS;
 type Settings = ReturnType<typeof E.cleanSettings>;
-interface Guess { word: string; pattern: string }
+/** Hot & Cold guesses carry a rank instead of a pattern; a hint's word is marked and never counts as your best. */
+interface Guess { word: string; pattern: string; rank?: number; hint?: boolean }
 interface Ladder { start: string; target: string; par: number; path: string[] }
 
 let WORDS: { answers: string[]; valid: { has(w: string): boolean }; blocked: Set<string> } | null = null;
@@ -32,6 +37,11 @@ function words() {
 
 /** A word a ladder step may use: any valid word except the blocked ones, which the pairs' par was worked out without. */
 const ladderWord = (w: string) => words().valid.has(w) && !words().blocked.has(w);
+
+// Hot & Cold's vectors are read in place the first time a room needs them (no copying, no big Set)
+let HOT_VEC: ReturnType<typeof H.readVectors> | null = null;
+const hotVec = () => (HOT_VEC ??= H.readVectors(HOT_VECTORS));
+interface HotRound { t: number; target: ReturnType<typeof H.readTarget>; probe: Float64Array }
 
 export const score: (guess: string, answer: string) => string = E.score;
 
@@ -73,6 +83,9 @@ interface Room extends BaseRoom<Player>, Settings {
   used: string[];
   /** Ladder lines already played in this room, so a pair doesn't come round twice. */
   usedPairs: string[];
+  /** Hot & Cold: this round's secret word, as its number in hotcold-targets.bin, and the ones already played. */
+  hotTarget: number | null;
+  usedHot: number[];
   stats: Record<string, Stat>;
   history: Array<{ round: number; word: string | null; winner: string | null }>;
 }
@@ -80,6 +93,8 @@ interface Room extends BaseRoom<Player>, Settings {
 class LettuceRoom extends SeatRoom<Player, Room> {
   protected readonly gameId = GAME;
   protected readonly maxPlayers = MAX_PLAYERS;
+  // This round's secret word's data, kept in memory only (rebuilt from room.hotTarget after a restart)
+  private hot: HotRound | null = null;
 
   protected newSeat(base: Seat): Player {
     return { ...base, guesses: [], solved: false, done: false, finishMs: null, timedOut: false, stopped: false };
@@ -117,6 +132,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
 
   /** What a player is told about one of their own guesses. */
   private ownRow(g: Guess): Msg {
+    if (this.room.mode === 'hotcold') return { word: g.word, rank: g.rank ?? null, hint: g.hint === true };
     if (this.room.mode === 'counts') return { word: g.word, counts: E.countsFor(g.word, this.room.word || '') };
     if (this.room.mode === 'ladder') return { word: g.word };
     return { word: g.word, pattern: g.pattern };
@@ -128,6 +144,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
 
   protected playerMessage(p: Player, msg: Msg): void {
     if (msg.t === 'guess') this.guess(p, msg.word);
+    if (msg.t === 'hint') this.hint(p);
   }
 
   protected hostMessage(_p: Player, msg: Msg): boolean {
@@ -176,7 +193,19 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     this.ctx.clearTimer('round');
     room.players = room.players.filter((p) => p.connected);
-    if (room.mode === 'ladder') {
+    if (room.mode === 'hotcold') {
+      // A secret word nobody has had in this room lately
+      const n = H.targetCount(HOT_TARGETS);
+      const used = new Set(room.usedHot);
+      let t = Math.floor(this.ctx.random() * n);
+      for (let tries = 0; tries < 50 && used.has(t); tries++) t = Math.floor(this.ctx.random() * n);
+      room.usedHot = [...room.usedHot.filter((x) => x !== t), t].slice(-200);
+      room.hotTarget = t;
+      room.ladder = null;
+      room.word = H.wordAt(HOT_WORDS, H.readTarget(HOT_TARGETS, t).index);
+      room.lastWord = room.word;
+      this.hot = null;
+    } else if (room.mode === 'ladder') {
       // A pair precomputed by tools/build-ladders.mjs; nothing is searched here
       const pair = E.pickPair(LADDERS_TEXT, () => this.ctx.random(), (key: string) => room.usedPairs.includes(key))
         ?? E.parsePair('crane glaze 3 craze graze') as Ladder;
@@ -184,6 +213,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       room.usedPairs = [...room.usedPairs.filter((l) => l !== line), line].slice(-300);
       room.ladder = pair as Ladder;
       room.word = null;
+      room.hotTarget = null;
     } else {
       // No repeats within a room until every possible answer has been played.
       const all = words().answers;
@@ -196,6 +226,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       const word = pool[Math.floor(this.ctx.random() * pool.length)];
       room.used.push(word);
       room.ladder = null;
+      room.hotTarget = null;
       room.word = word;
       room.lastWord = word;
     }
@@ -224,6 +255,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     const word = String(rawWord ?? '').toLowerCase();
     const ladder = room.mode === 'ladder';
     if (room.status !== 'playing' || p.done || !(ladder ? room.ladder : room.word)) return reply({ t: 'invalid', reason: 'This round is over' });
+    if (room.mode === 'hotcold') return this.hotGuess(p, rawWord);
     if (!/^[a-z]{5}$/.test(word)) return reply({ t: 'invalid', reason: 'Not enough letters' });
 
     if (ladder && room.ladder) {
@@ -258,6 +290,87 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     this.broadcast();
   }
 
+  /* ---------- Hot & Cold ---------- */
+
+  /** This round's secret word, ready to compare guesses with (built once, or again after a restart). */
+  private hotRound(): HotRound | null {
+    const t = this.room.hotTarget;
+    if (t === null || t === undefined) return null;
+    if (!this.hot || this.hot.t !== t) {
+      const target = H.readTarget(HOT_TARGETS, t);
+      this.hot = { t, target, probe: H.probe(hotVec(), target.index) };
+    }
+    return this.hot;
+  }
+
+  private hotRank(i: number): number {
+    const hr = this.hotRound() as HotRound;
+    return H.rankOf(hotVec(), hr.target, hr.probe, i);
+  }
+
+  private hotGuess(p: Player, raw: unknown): void {
+    const room = this.room;
+    const reply = (m: Msg) => this.tell(p.id, m);
+    const word = E.cleanHotWord(raw);
+    if (!word) return reply({ t: 'invalid', reason: 'Type one word, letters only' });
+    if (!this.hotRound()) return reply({ t: 'invalid', reason: 'This round is over' });
+    const i = H.indexOfWord(HOT_WORDS, word);
+    if (i < 0) return reply({ t: 'invalid', reason: 'I don’t know that word' });
+    if (p.guesses.some((g) => g.word === word)) return reply({ t: 'invalid', reason: 'Already guessed' });
+    if (p.guesses.length >= E.HOT.maxGuesses) return reply({ t: 'invalid', reason: 'Too many guesses' });
+    const rank = this.hotRank(i);
+    p.guesses.push({ word, pattern: '', rank });
+    if (rank === 1) Object.assign(p, { solved: true, done: true, finishMs: this.ctx.now() - room.startedAt });
+    reply({ t: 'result', round: room.round, word, rank });
+    this.checkEnd();
+    this.broadcast();
+  }
+
+  /**
+   * A word about halfway between your best rank and the secret word, added to your list as a hint:
+   * it shows the way but never counts as your best. Up to E.HOT.maxHints a round, when the host allows it.
+   */
+  private hint(p: Player): void {
+    const room = this.room;
+    const reply = (m: Msg) => this.tell(p.id, m);
+    if (room.status !== 'playing' || room.mode !== 'hotcold' || p.done) return reply({ t: 'invalid', reason: 'This round is over' });
+    if (!room.hotHints) return reply({ t: 'invalid', reason: 'Hints are off in this room' });
+    const hr = this.hotRound();
+    if (!hr) return;
+    if (p.guesses.filter((g) => g.hint).length >= E.HOT.maxHints) return reply({ t: 'invalid', reason: 'No hints left' });
+    const aim = E.hintRank(E.bestRank(p.guesses));
+    if (aim === null) return reply({ t: 'invalid', reason: 'You’re nearly there: no hint needed!' });
+    const had = new Set(p.guesses.map((g) => g.word));
+    let pick: { word: string; rank: number } | null = null;
+    // Close in: exact from the precomputed list
+    for (let r = aim; r <= H.TOP + 1 && !pick; r++) {
+      const w = H.wordAt(HOT_WORDS, hr.target.near[r - 2]);
+      if (!had.has(w)) pick = { word: w, rank: r };
+    }
+    // Further out: try words at random until one sits near the aim (each try is one comparison)
+    if (!pick) {
+      const n = hotVec().count;
+      let bestGap = Infinity;
+      for (let tries = 0; tries < 3000 && bestGap > Math.max(3, aim * 0.12); tries++) {
+        const i = Math.floor(this.ctx.random() * n);
+        if (i === hr.target.index) continue;
+        const w = H.wordAt(HOT_WORDS, i);
+        if (had.has(w)) continue;
+        const r = this.hotRank(i);
+        if (Math.abs(r - aim) < bestGap) { bestGap = Math.abs(r - aim); pick = { word: w, rank: r }; }
+      }
+    }
+    if (!pick) return reply({ t: 'invalid', reason: 'No hint found' });
+    p.guesses.push({ word: pick.word, pattern: '', rank: pick.rank, hint: true });
+    reply({ t: 'result', round: room.round, word: pick.word, rank: pick.rank, hint: true });
+    this.broadcast();
+  }
+
+  /** What the standings need from a player in Hot & Cold. */
+  private hotStanding(p: Player) {
+    return { p, best: E.bestRank(p.guesses), solved: p.solved, finishMs: p.finishMs, used: p.guesses.filter((g) => !g.hint).length };
+  }
+
   private checkEnd(): void {
     const room = this.room;
     if (room.status === 'playing' && room.players.every((p) => p.done || !p.connected)) {
@@ -269,6 +382,8 @@ class LettuceRoom extends SeatRoom<Player, Room> {
 
   private ranked(): Player[] {
     const room = this.room;
+    // Hot & Cold: the closest guess wins, whether or not anyone found the word
+    if (room.mode === 'hotcold') return E.hotOrder(room.players.map((p) => this.hotStanding(p))).map((s: { p: Player }) => s.p);
     const solved = room.players.filter((p) => p.solved);
     if (room.winRule === 'fewest') return solved.sort((a, b) => a.guesses.length - b.guesses.length || (a.finishMs ?? 0) - (b.finishMs ?? 0));
     return solved.sort((a, b) => (a.finishMs ?? 0) - (b.finishMs ?? 0));
@@ -322,6 +437,7 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     const max: Record<string, number> = {};
     if (fast != null) max[`${m}FastestNeg`] = fast;
     if (m === 'counts') stats['counts:guessSum'] = p.solved ? n : 0;
+    if (m === 'hotcold') stats['hotcold:guessSum'] = p.solved ? p.guesses.filter((g) => !g.hint).length : 0;
     if (m === 'ladder' && room.ladder && p.solved) {
       const over = Math.max(0, n - room.ladder.par);
       stats['ladder:steps'] = n;
@@ -329,6 +445,11 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       max.ladderBestOverNeg = -over;   // stored negated so that MAX = closest to par
     }
     return reportPlayer(p, place, won, stats, max);
+  }
+
+  private hotNearest(): string[] {
+    const hr = this.hotRound();
+    return hr ? [...hr.target.near.slice(0, 10)].map((i) => H.wordAt(HOT_WORDS, i)) : [];
   }
 
   protected view(): Msg {
@@ -340,6 +461,9 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       code: room.code, status: room.status, round: room.round, strict: room.strict, winRule: room.winRule, public: room.public,
       maxRounds: room.maxRounds, timer: room.timer, hard: room.hard, matchRound: room.matchRound,
       mode: room.mode, attempts: room.attempts, ladderTime: room.ladderTime, ladderReuse: room.ladderReuse,
+      hotTime: room.hotTime, hotHints: room.hotHints,
+      // Hot & Cold, once the round is over: the words closest to the secret word
+      nearest: over && room.mode === 'hotcold' ? this.hotNearest() : null,
       elapsed: room.startedAt ? this.ctx.now() - room.startedAt : 0,
       // Start and target are public (it's a puzzle). The shortest path is the answer key: only once the round is over.
       ladder: ladder && room.status !== 'lobby' ? { start: ladder.start, target: ladder.target, par: ladder.par, path: over ? ladder.path : null } : null,
@@ -347,11 +471,16 @@ class LettuceRoom extends SeatRoom<Player, Room> {
       // the server until the round is over; then counts and ladder boards are revealed in full.
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, connected: p.connected,
-        used: p.guesses.length,
+        used: room.mode === 'hotcold' ? p.guesses.filter((g) => !g.hint).length : p.guesses.length,
         patterns: room.mode === 'classic' ? p.guesses.map((g) => g.pattern) : [],
         counts: room.mode === 'counts' && room.word ? p.guesses.map((g) => E.countsFor(g.word, room.word as string)) : [],
         match: room.mode === 'ladder' && ladder && p.guesses.length ? E.matchCount(p.guesses[p.guesses.length - 1].word, ladder.target) : null,
-        rows: over && room.mode !== 'classic' ? p.guesses.map((g) => ({ word: g.word, ...(room.mode === 'counts' && room.word ? { pattern: score(g.word, room.word) } : {}) })) : null,
+        rows: over && room.mode === 'hotcold'
+          ? [...p.guesses].sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0)).map((g) => ({ word: g.word, rank: g.rank ?? null, hint: g.hint === true }))
+          : over && room.mode !== 'classic' ? p.guesses.map((g) => ({ word: g.word, ...(room.mode === 'counts' && room.word ? { pattern: score(g.word, room.word) } : {}) })) : null,
+        // Hot & Cold during the round: only each player's best rank and how many words they've tried
+        best: room.mode === 'hotcold' ? E.bestRank(p.guesses) : null,
+        hints: room.mode === 'hotcold' ? p.guesses.filter((g) => g.hint).length : 0,
         solved: p.solved, done: p.done, finishMs: p.finishMs,
         photo: p.photo || '', timedOut: p.timedOut, stopped: p.stopped,
       })),
@@ -372,7 +501,7 @@ export const lettuce: GameModule = {
   create(ctx: RoomCtx, opts) {
     return new LettuceRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
-      round: 0, word: null, lastWord: null, startedAt: 0, ladder: null, usedPairs: [],
+      round: 0, word: null, lastWord: null, startedAt: 0, ladder: null, usedPairs: [], hotTarget: null, usedHot: [],
       matchRound: 0, used: [], stats: {}, history: [],
       ...E.cleanSettings(null),
     });
@@ -384,6 +513,8 @@ export const lettuce: GameModule = {
     Object.assign(room, E.cleanSettings(null, room));
     room.ladder ??= null;
     room.usedPairs ??= [];
+    room.hotTarget ??= null;
+    room.usedHot ??= [];
     return new LettuceRoom(ctx, room);
   },
 };

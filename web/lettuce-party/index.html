@@ -91,10 +91,11 @@
           <label><input type="radio" name="mode" value="classic" checked> Classic</label>
           <label><input type="radio" name="mode" value="counts"> Counts</label>
           <label><input type="radio" name="mode" value="ladder"> Word ladder</label>
+          <label><input type="radio" name="mode" value="hotcold"> Hot &amp; Cold</label>
         </fieldset>
         <p id="mode-blurb" class="muted small-note mode-blurb"></p>
         <div class="select-grid">
-          <label class="select-field">
+          <label class="select-field" id="winrule-field">
             <span>Who wins a round?</span>
             <select id="winrule-select">
               <option value="first" id="rule-first-text">First to solve it</option>
@@ -127,6 +128,13 @@
             <select id="reuse-select">
               <option value="true">Allowed</option>
               <option value="false">Not allowed</option>
+            </select>
+          </label>
+          <label class="select-field" id="hints-field" hidden>
+            <span>Hints</span>
+            <select id="hints-select">
+              <option value="true">Up to 3 each</option>
+              <option value="false">No hints</option>
             </select>
           </label>
           <label class="select-field">

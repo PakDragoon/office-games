@@ -9,7 +9,8 @@ import * as E from './engine.js';
    Lettuce Party
    The game runs on the server (server/src/games/lettuce.ts): it picks the
    word, checks every guess and sends everyone the colour patterns (Classic),
-   the three counts (Counts) or step counts (Word ladder).
+   the three counts (Counts) or step counts (Word ladder); in Hot & Cold
+   each player gets the rank of their own words and sees only others' best rank.
    Nobody receives the word or anyone else's letters until the round ends.
    ========================================================= */
 
@@ -18,11 +19,12 @@ const COLS = 5;
 const LADDER_STEPS_SHOWN = 5;   // the ladder board shows the start, your latest steps, and the target
 const LADDER_ROWS = LADDER_STEPS_SHOWN + 2;
 
-const MODE_NAMES = { classic: 'Classic', counts: 'Counts', ladder: 'Word ladder' };
+const MODE_NAMES = { classic: 'Classic', counts: 'Counts', ladder: 'Word ladder', hotcold: 'Hot & Cold' };
 const MODE_BLURBS = {
   classic: 'Everyone gets the same secret word. Tiles turn green, yellow or grey after each guess.',
   counts: 'Same secret word, but no tile colors: after each guess you only get three numbers, how many letters are in the right place, in the wrong place, and not in the word.',
   ladder: 'Everyone gets the same start word and target word. Change one letter at a time, every step a real word, until you reach the target.',
+  hotcold: 'Everyone hunts the same secret word, any length. Type any word and get a number for how close its meaning is: 1 is the word itself, 10 is very close, 10,000 is far away. The closest guess when time runs out wins.',
 };
 
 /* ---------- Preferences (this device only) ---------- */
@@ -63,8 +65,12 @@ const LADDER_WIN_RULES = {
   first: 'First to reach the target wins.',
   fewest: 'Fewest steps wins, and the faster time breaks ties.',
 };
-const winRules = (v) => (v.mode === 'ladder' ? LADDER_WIN_RULES : WIN_RULES);
-const rowsOf = (mode, attempts) => (mode === 'ladder' ? LADDER_ROWS : attempts || E.ATTEMPTS.default);
+const HOT_WIN_RULES = {
+  first: 'The closest guess when time runs out wins; finding the word wins outright.',
+  fewest: 'The closest guess when time runs out wins; finding the word wins outright.',
+};
+const winRules = (v) => (v.mode === 'ladder' ? LADDER_WIN_RULES : v.mode === 'hotcold' ? HOT_WIN_RULES : WIN_RULES);
+const rowsOf = (mode, attempts) => (mode === 'ladder' ? LADDER_ROWS : mode === 'hotcold' ? 6 : attempts || E.ATTEMPTS.default);
 const CLASS = { h: 'hit', n: 'near', m: 'miss' };
 const RANK = { miss: 1, near: 2, hit: 3 };
 const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -82,7 +88,7 @@ const S = {
   roundShown: 0,       // which round my board was built for
   mode: 'classic',     // the mode my board was built for
   attempts: 6,
-  guesses: [],         // my guesses: [{ word, pattern }] (Classic), [{ word, counts }] (Counts), [{ word }] (Ladder)
+  guesses: [],         // my guesses: [{ word, pattern }] (Classic), [{ word, counts }] (Counts), [{ word }] (Ladder), [{ word, rank, hint }] (Hot & Cold)
   current: '',
   pending: false,      // waiting for the server to score my guess
   keyState: {},
@@ -165,6 +171,7 @@ function onMessage(msg) {
       renderMarks();
       updateKeyboard();
       drawLadder();
+      drawHot();
       break;
     case 'state':
       applyState(msg);
@@ -177,6 +184,7 @@ function onMessage(msg) {
       shakeRow(S.guesses.length);
       toast(msg.reason);
       drawLadder();
+      drawHot();
       break;
   }
 }
@@ -209,6 +217,7 @@ function applyState(v) {
 
   showScreen('game');
   drawLadder();
+  drawHot();
   renderMarks();
   $('game-code').textContent = v.code;
   $('game-round').textContent = v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
@@ -250,6 +259,7 @@ function startLocalRound(v) {
   S.attempts = v.attempts;
   forgetMarks(S.marksKey);
   S.guesses = [];
+  S.hotLast = null;
   S.current = '';
   S.pending = false;
   S.seenRows = {};
@@ -276,10 +286,11 @@ function buildBoard() {
   arena.style.setProperty('--tile-min', rows > 6 ? '20px' : '');
   arena.style.setProperty('--note', S.mode === 'classic' ? '0px' : '30px');
   arena.classList.toggle('many', rows > 6);
-  arena.classList.remove('classic', 'counts', 'ladder');
+  arena.classList.remove('classic', 'counts', 'ladder', 'hotcold');
   arena.classList.add(S.mode);
   paintBoardNote();
   if (S.mode === 'ladder') return drawLadder();
+  if (S.mode === 'hotcold') return drawHot();
   loadMarks();
   for (let r = 0; r < rows; r++) {
     const row = document.createElement('div');
@@ -446,6 +457,11 @@ function drawLadder() {
 }
 
 function shakeRow(r) {
+  if (S.mode === 'hotcold') {
+    const f = $('my-board').querySelector('.hot-form');
+    if (f) { f.classList.remove('shake'); void f.offsetWidth; f.classList.add('shake'); }
+    return;
+  }
   if (S.mode === 'ladder') {
     const draft = $('my-board').querySelector('.draft');
     if (draft) { draft.classList.remove('shake'); void draft.offsetWidth; draft.classList.add('shake'); }
@@ -464,9 +480,17 @@ function onResult(msg) {
   const g = { word: msg.word };
   if (msg.pattern) g.pattern = msg.pattern;
   if (msg.counts) g.counts = msg.counts;
+  if (typeof msg.rank === 'number') Object.assign(g, { rank: msg.rank, hint: msg.hint === true });
   S.guesses.push(g);
   S.current = '';
   S.pending = false;
+  if (S.mode === 'hotcold') {
+    S.hotLast = g.word;
+    if (g.rank === 1) { toast('You found it!'); sfx('win'); }
+    else if (g.hint) toast(`Hint: “${g.word}” is #${fmtRank(g.rank)}`);
+    drawHot();
+    return;
+  }
   if (S.mode === 'ladder') {
     drawLadder();
     if (msg.word === S.view?.ladder?.target) {
@@ -493,11 +517,109 @@ function winLine(n) {
   return ['Unreal!', 'Brilliant!', 'Great!', 'Nice!', 'Solid!', 'Phew!'][n - 1] || 'Solved!';
 }
 
+/* ---------- Hot & Cold board: a word box, my words closest first, and hints ---------- */
+const HOT_LABELS = { found: 'Found it!', burning: 'Burning', hot: 'Hot', warm: 'Warm', cool: 'Cool', cold: 'Cold' };
+const fmtRank = (r) => Number(r).toLocaleString('en-US');
+// How full a rank's bar is: 1 fills it, the far end of the 22,000 words leaves it empty (log scale)
+const heat = (r) => Math.max(0.03, 1 - Math.log(r) / Math.log(22000));
+
+function hotRow(g, extra = '') {
+  const row = document.createElement('li');
+  const t = E.temperature(g.rank);
+  row.className = `hot-row t-${t}${g.hint ? ' hint' : ''}${extra}`;
+  const w = document.createElement('span');
+  w.className = 'hw';
+  w.textContent = g.word;
+  if (g.hint) {
+    const tag = document.createElement('small');
+    tag.textContent = 'hint';
+    w.append(' ', tag);
+  }
+  const bar = document.createElement('span');
+  bar.className = 'hbar';
+  const fill = document.createElement('i');
+  fill.style.width = `${Math.round(heat(g.rank) * 100)}%`;
+  bar.appendChild(fill);
+  const r = document.createElement('span');
+  r.className = 'hr';
+  r.textContent = `#${fmtRank(g.rank)}`;
+  const lab = document.createElement('span');
+  lab.className = 'ht';
+  lab.textContent = HOT_LABELS[t];
+  row.append(w, bar, r, lab);
+  row.setAttribute('aria-label', `${g.word}${g.hint ? ' (hint)' : ''}: rank ${fmtRank(g.rank)}, ${HOT_LABELS[t]}`);
+  return row;
+}
+
+function drawHot() {
+  if (S.mode !== 'hotcold') return;
+  const board = $('my-board');
+  const v = S.view;
+  const m = me();
+  const playing = v?.status === 'playing' && m && !m.done;
+  let form = board.querySelector('.hot-form');
+  if (!form) {
+    board.innerHTML = `<form class="hot-form" autocomplete="off">
+        <label class="sr-only" for="hot-input">Your word</label>
+        <input id="hot-input" class="hot-input" type="text" maxlength="14" placeholder="Type any word" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send">
+        <button class="btn primary" type="submit">Guess</button>
+      </form>
+      <div class="hot-tools"><span class="hot-count"></span><button type="button" class="btn ghost small hot-hint">Hint</button></div>
+      <div class="hot-last" aria-live="polite"></div>
+      <ol class="hot-list" aria-label="Your words, closest first"></ol>`;
+    form = board.querySelector('.hot-form');
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const input = $('hot-input');
+      const word = E.cleanHotWord(input.value);
+      if (!word) { shakeRow(0); return toast('Type one word, letters only'); }
+      if (!canType()) return;
+      if (S.guesses.some((g) => g.word === word)) { shakeRow(0); return toast('Already guessed'); }
+      S.pending = true;
+      input.value = '';
+      send({ t: 'guess', word });
+    });
+    // A hint doesn't hold up typing: the server answers with the hint word or a reason
+    board.querySelector('.hot-hint').addEventListener('click', (e) => {
+      if (!canType()) return;
+      e.currentTarget.disabled = true;
+      send({ t: 'hint' });
+    });
+  }
+  const input = $('hot-input');
+  input.disabled = !playing;
+  form.querySelector('button').disabled = !playing;
+  const hints = S.guesses.filter((g) => g.hint).length;
+  const hintBtn = board.querySelector('.hot-hint');
+  hintBtn.hidden = !v?.hotHints;
+  hintBtn.disabled = !playing || hints >= E.HOT.maxHints;
+  hintBtn.textContent = `Hint (${E.HOT.maxHints - hints} left)`;
+  const typed = S.guesses.filter((g) => !g.hint).length;
+  const best = E.bestRank(S.guesses);
+  board.querySelector('.hot-count').textContent = typed
+    ? `${typed} word${typed === 1 ? '' : 's'}, your best #${fmtRank(best)}`
+    : 'Your first guess can be anything';
+  // The word you just tried, big, then all your words closest first
+  const last = board.querySelector('.hot-last');
+  last.innerHTML = '';
+  const latest = S.guesses.find((g) => g.word === S.hotLast) || S.guesses[S.guesses.length - 1];
+  if (latest) {
+    const box = document.createElement('ol');
+    box.className = 'hot-list single';
+    box.appendChild(hotRow(latest, ' latest'));
+    last.appendChild(box);
+  }
+  const list = board.querySelector('.hot-list:not(.single)');
+  list.innerHTML = '';
+  [...S.guesses].sort((a, b) => a.rank - b.rank).forEach((g) => list.appendChild(hotRow(g, g === latest ? ' now' : '')));
+  if (playing && document.activeElement !== input && !matchMedia('(pointer: coarse)').matches) input.focus();
+}
+
 /* ---------- typing ---------- */
 function canType() {
   const v = S.view;
   const m = me();
-  return v && v.status === 'playing' && m && !m.done && !S.pending && (S.mode === 'ladder' || S.guesses.length < S.attempts);
+  return v && v.status === 'playing' && m && !m.done && !S.pending && (S.mode === 'ladder' || S.mode === 'hotcold' || S.guesses.length < S.attempts);
 }
 
 function pressKey(k) {
@@ -685,7 +807,12 @@ function rivalCard(p) {
   const rows = rowsOf(v.mode, v.attempts);
   mini.style.setProperty('--rows', String(rows));
   const seen = S.seenRows[p.id] || 0;
-  if (v.mode === 'ladder') {
+  if (v.mode === 'hotcold') {
+    // Only their best rank goes out, never their words
+    mini.classList.add('hot');
+    const t = p.best ? E.temperature(p.best) : 'none';
+    mini.innerHTML = `<b class="t-${t}">${p.best ? `#${fmtRank(p.best)}` : '–'}</b><span class="hbar t-${t}"><i style="width:${p.best ? Math.round(heat(p.best) * 100) : 0}%"></i></span>`;
+  } else if (v.mode === 'ladder') {
     // Ladder words stay secret: five pips show how many letters of their current word match the target in place
     const row = document.createElement('div');
     row.className = 'mrow';
@@ -746,6 +873,12 @@ function rivalStatus(p) {
   const v = S.view;
   const n = p.used;
   if (!p.connected) return 'Disconnected';
+  if (v.mode === 'hotcold') {
+    const words = `${n} word${n === 1 ? '' : 's'}`;
+    if (p.solved) return `Found it (${fmtTime(p.finishMs)})`;
+    if (n === 0) return v.status === 'playing' ? 'Thinking…' : 'No guesses';
+    return `Best #${fmtRank(p.best)}, ${words}${p.hints ? `, ${p.hints} hint${p.hints === 1 ? '' : 's'}` : ''}`;
+  }
   if (v.mode === 'ladder') {
     if (p.solved) return `Reached it in ${n} (${fmtTime(p.finishMs)})`;
     if (p.timedOut) return `Out of time, ${n} step${n === 1 ? '' : 's'}`;
@@ -767,7 +900,8 @@ function announceRivals(prev, v) {
     if (p.id === S.myId) continue;
     const before = prev.players.find((x) => x.id === p.id || x.name === p.name);
     if (before && !before.solved && p.solved) {
-      toast(v.mode === 'ladder' ? `${label(p.name)} reached the target in ${p.used}!` : `${label(p.name)} solved it in ${p.used}!`);
+      toast(v.mode === 'ladder' ? `${label(p.name)} reached the target in ${p.used}!`
+        : v.mode === 'hotcold' ? `${label(p.name)} found the word!` : `${label(p.name)} solved it in ${p.used}!`);
       sfx('rival');
     }
   }
@@ -831,21 +965,26 @@ function renderLobby(v) {
     for (const r of document.querySelectorAll('input[name="mode"]')) r.checked = r.value === v.mode;
     $('mode-blurb').textContent = MODE_BLURBS[v.mode] || '';
     const ladder = v.mode === 'ladder';
+    const hot = v.mode === 'hotcold';
     $('rule-first-text').textContent = ladder ? 'First to reach the target' : 'First to solve it';
     $('rule-fewest-text').textContent = ladder ? 'Fewest steps' : 'Fewest guesses';
+    // Hot & Cold has one way to win: the closest guess when time runs out
+    $('winrule-field').hidden = hot;
     $('rounds-select').value = String(v.maxRounds);
-    $('attempts-field').hidden = ladder;
+    $('attempts-field').hidden = ladder || hot;
     $('reuse-field').hidden = !ladder;
     $('reuse-select').value = String(v.ladderReuse !== false);
+    $('hints-field').hidden = !hot;
+    $('hints-select').value = String(v.hotHints !== false);
     $('attempts-select').value = String(v.attempts);
-    $('strict-label').hidden = ladder;
+    $('strict-label').hidden = ladder || hot;
     // Hard mode needs revealed hints, which only Classic has
     $('hard-toggle').checked = v.hard;
     $('hard-toggle').disabled = v.mode !== 'classic';
     $('hard-label').classList.toggle('disabled', v.mode !== 'classic');
     $('hard-note').hidden = v.mode === 'classic';
-    paintTimerOptions(ladder);
-    $('timer-select').value = String(ladder ? v.ladderTime : v.timer);
+    paintTimerOptions(v.mode);
+    $('timer-select').value = String(E.effectiveTimer(v));
     const n = v.players.length;
     $('start-btn').textContent = n === 1 ? 'Start solo (for testing)' : `Start game with ${n} players`;
   } else {
@@ -854,13 +993,16 @@ function renderLobby(v) {
   }
 }
 
-// The time limit list: Word ladder always has a limit (1, 2, 3 or 5 minutes); the others can have none
-function paintTimerOptions(ladder) {
+// The time limit list: Word ladder (1, 2, 3 or 5 minutes) and Hot & Cold (2, 3 or 5) always have one;
+// Classic and Counts can have none. dataset.kind says which list is showing.
+const timerKind = (mode) => (mode === 'ladder' || mode === 'hotcold' ? mode : 'plain');
+function paintTimerOptions(mode) {
   const sel = $('timer-select');
-  if (sel.dataset.ladder === String(ladder)) return;
-  sel.dataset.ladder = String(ladder);
+  const kind = timerKind(mode);
+  if (sel.dataset.kind === kind) return;
+  sel.dataset.kind = kind;
   sel.innerHTML = '';
-  for (const secs of ladder ? E.LADDER_TIMES : E.TIMERS) {
+  for (const secs of kind === 'ladder' ? E.LADDER_TIMES : kind === 'hotcold' ? E.HOT_TIMES : E.TIMERS) {
     const o = document.createElement('option');
     o.value = String(secs);
     o.textContent = secs === 0 ? 'No timer' : `${secs / 60} minute${secs === 60 ? '' : 's'}`;
@@ -872,8 +1014,9 @@ function settingsSummary(v) {
   const rounds = v.maxRounds ? `${v.maxRounds} rounds` : 'Unlimited rounds';
   const limit = E.effectiveTimer(v);
   const timer = limit ? `${limit / 60} minute${limit === 60 ? '' : 's'} per round` : 'no timer';
-  const attempts = v.mode === 'ladder' ? '' : `, ${v.attempts} guesses`;
-  const reuse = v.mode === 'ladder' ? (v.ladderReuse !== false ? ' Going back to earlier words is allowed.' : ' Words can’t be reused.') : '';
+  const attempts = v.mode === 'ladder' || v.mode === 'hotcold' ? '' : `, ${v.attempts} guesses`;
+  const reuse = v.mode === 'ladder' ? (v.ladderReuse !== false ? ' Going back to earlier words is allowed.' : ' Words can’t be reused.')
+    : v.mode === 'hotcold' ? (v.hotHints !== false ? ` Up to ${E.HOT.maxHints} hints each.` : ' No hints.') : '';
   return `${MODE_NAMES[v.mode] || 'Classic'}. ${winRules(v)[v.winRule] || ''} ${rounds}${attempts}, ${timer}.${v.hard ? ' Hard mode.' : ''}${reuse}`;
 }
 
@@ -971,6 +1114,10 @@ function roomScoresHTML(v, withHistory = true) {
    Results
    ========================================================= */
 function ranked(players, rule = 'first') {
+  if (S.view?.mode === 'hotcold') {
+    const order = E.hotOrder(players.map((p) => ({ ...p, best: p.best ?? null })));
+    return [...order, ...players.filter((p) => !order.some((o) => o.id === p.id))];
+  }
   // How close an unsolved player got: green tiles (Classic), the green count (Counts), letters matching the target (Ladder)
   const greens = (p) => {
     if (p.match != null) return p.match;
@@ -988,9 +1135,11 @@ function ranked(players, rule = 'first') {
 
 function showResults(v) {
   const ladder = v.mode === 'ladder';
+  const hot = v.mode === 'hotcold';
   $('results-sheet').classList.toggle('wide', v.mode !== 'classic');
   const word = $('results-word');
   word.innerHTML = '';
+  word.classList.toggle('long', ((ladder ? v.ladder?.target : v.word) || '').length > 7);
   for (const ch of (ladder ? v.ladder?.target : v.word) || '') {
     const i = document.createElement('i');
     i.textContent = ch;
@@ -1003,7 +1152,7 @@ function showResults(v) {
   $('results-rule').textContent = `${MODE_NAMES[v.mode]}. ${winRules(v)[v.winRule] || ''}${ladder && v.ladder ? ` Par was ${v.ladder.par}.` : ''}`;
   order.forEach((p, idx) => {
     const li = document.createElement('li');
-    if (idx === 0 && p.solved) li.className = 'first';
+    if (idx === 0 && (p.solved || (hot && p.best))) li.className = 'first';
     const dot = document.createElement('span');
     dot.className = 'dot';
     dot.style.background = `var(--p${p.color})`;
@@ -1012,7 +1161,9 @@ function showResults(v) {
     who.textContent = label(p.name) + (p.id === S.myId ? ' (you)' : '');
     const how = document.createElement('span');
     how.className = 'how';
-    if (p.solved) how.textContent = ladder ? `${p.used} steps in ${fmtTime(p.finishMs)}` : `${p.used}/${v.attempts} in ${fmtTime(p.finishMs)}`;
+    if (hot) how.textContent = p.solved ? `Found it in ${fmtTime(p.finishMs)} (${p.used} words)`
+      : p.best ? `Closest #${fmtRank(p.best)} (${p.used} words)` : !p.connected ? 'Left' : 'No guesses';
+    else if (p.solved) how.textContent = ladder ? `${p.used} steps in ${fmtTime(p.finishMs)}` : `${p.used}/${v.attempts} in ${fmtTime(p.finishMs)}`;
     else if (!p.connected) how.textContent = 'Left';
     else if (p.timedOut) how.textContent = ladder ? `Out of time (${p.used} steps)` : 'Out of time';
     else if (p.stopped) how.textContent = 'Round ended';
@@ -1024,7 +1175,9 @@ function showResults(v) {
 
   const winner = order[0];
   const over = v.status === 'over';
-  const roundTitle = !winner?.solved
+  // Hot & Cold has a winner whenever somebody guessed at all: the closest one
+  const won = hot ? Boolean(winner?.best) : Boolean(winner?.solved);
+  const roundTitle = !won
     ? (ladder ? 'Nobody reached the target' : 'Nobody got it')
     : winner.id === S.myId
       ? 'You win the round!'
@@ -1038,7 +1191,7 @@ function showResults(v) {
     $('results-title').textContent = !champ
       ? 'Game over: it’s a tie!'
       : champ.me ? 'You win the game!' : `${label(champ.name)} wins the game!`;
-    const lastRound = !winner?.solved ? (ladder ? 'nobody reached it' : 'nobody got it') : winner.id === S.myId ? 'you won it' : `${label(winner.name)} won it`;
+    const lastRound = !won ? (ladder ? 'nobody reached it' : 'nobody got it') : winner.id === S.myId ? 'you won it' : `${label(winner.name)} won it`;
     $('results-round-label').textContent = `Last round: ${lastRound}. ${ladder ? 'The target was' : 'The word was'}`;
   } else {
     $('results-title').textContent = roundTitle;
@@ -1071,13 +1224,22 @@ function renderResultBoards(v, order) {
     h.textContent = text;
     return h;
   };
+  if (v.mode === 'hotcold' && v.nearest?.length) {
+    const near = document.createElement('div');
+    near.className = 'ladder-path';
+    const p = document.createElement('p');
+    p.className = 'chain';
+    p.textContent = v.nearest.join(', ');
+    near.append(title(`Closest words to “${v.word}”`), p);
+    box.appendChild(near);
+  }
   if (v.mode === 'ladder' && v.ladder?.path) {
     const path = document.createElement('div');
     path.className = 'ladder-path';
     path.append(title(`One shortest way (${v.ladder.par} steps)`), chain(v.ladder.path, v.ladder.target));
     box.appendChild(path);
   }
-  box.appendChild(title(v.mode === 'ladder' ? 'Everyone’s ladder' : 'Everyone’s guesses'));
+  box.appendChild(title(v.mode === 'ladder' ? 'Everyone’s ladder' : v.mode === 'hotcold' ? 'Everyone’s closest words' : 'Everyone’s guesses'));
   for (const p of order) {
     if (!p.rows || !p.rows.length) continue;
     const item = document.createElement('div');
@@ -1089,7 +1251,12 @@ function renderResultBoards(v, order) {
     who.textContent = label(p.name) + (p.id === S.myId ? ' (you)' : '');
     name.appendChild(who);
     item.appendChild(name);
-    if (v.mode === 'ladder') {
+    if (v.mode === 'hotcold') {
+      const ol = document.createElement('ol');
+      ol.className = 'hot-list small';
+      p.rows.slice(0, 8).forEach((r) => ol.appendChild(hotRow(r)));
+      item.appendChild(ol);
+    } else if (v.mode === 'ladder') {
       item.appendChild(chain([v.ladder.start, ...p.rows.map((r) => r.word)], v.ladder.target));
     } else {
       for (const r of p.rows) item.appendChild(resultRow(r));
@@ -1171,7 +1338,14 @@ async function shareResult() {
   const roundLabel = v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
   const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
   let text;
-  if (v.mode === 'ladder') {
+  if (v.mode === 'hotcold') {
+    const typed = (m.rows || []).filter((r) => !r.hint);
+    const head = m.solved ? `found it in ${m.used} word${m.used === 1 ? '' : 's'}${time}` : m.best ? `closest #${fmtRank(m.best)} in ${m.used} word${m.used === 1 ? '' : 's'}` : 'no guesses';
+    // My closest words as squares, hottest first (the words stay secret)
+    const sq = { found: '🟩', burning: '🟥', hot: '🟧', warm: '🟨', cool: '🟦', cold: '⬜' };
+    const line = typed.slice(0, 10).map((r) => sq[E.temperature(r.rank)]).join('');
+    text = `Lettuce Party, hot & cold, ${roundLabel}: ${head}\n\n${line}`;
+  } else if (v.mode === 'ladder') {
     const par = v.ladder?.par;
     const head = m.solved
       ? `reached the target in ${m.used} step${m.used === 1 ? '' : 's'} (par ${par})${time}`
@@ -1549,7 +1723,9 @@ for (const id of ['rounds-select', 'timer-select', 'attempts-select']) {
   $(id).addEventListener('change', () => {
     if (!S.isHost || !S.view) return;
     const patch = { maxRounds: Number($('rounds-select').value) };
-    if ($('timer-select').dataset.ladder === 'true') patch.ladderTime = Number($('timer-select').value);
+    const kind = $('timer-select').dataset.kind;
+    if (kind === 'ladder') patch.ladderTime = Number($('timer-select').value);
+    else if (kind === 'hotcold') patch.hotTime = Number($('timer-select').value);
     else Object.assign(patch, { timer: Number($('timer-select').value), attempts: Number($('attempts-select').value) });
     hostSettings(patch);
   });
@@ -1565,6 +1741,9 @@ $('leave-btn').addEventListener('click', () => leaveRoom());
 $('quit-btn').addEventListener('click', () => leaveRoom());
 $('reuse-select').addEventListener('change', (e) => {
   if (S.isHost) hostSettings({ ladderReuse: e.target.value === 'true' });
+});
+$('hints-select').addEventListener('change', (e) => {
+  if (S.isHost) hostSettings({ hotHints: e.target.value === 'true' });
 });
 
 $('see-boards-btn').addEventListener('click', () => {
@@ -1591,6 +1770,10 @@ document.addEventListener('keydown', (e) => {
   if ($('screen-game').hidden || !$('results').hidden || !$('notice').hidden || !$('scores-sheet').hidden || !$('settings-sheet').hidden) return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (e.target instanceof HTMLInputElement) return;
+  if (S.mode === 'hotcold') {
+    if (/^[a-zA-Z]$/.test(e.key) && $('hot-input') && !$('hot-input').disabled) $('hot-input').focus();
+    return;
+  }
   const onNote = e.target instanceof HTMLElement && e.target.matches('button.tile');
   // Enter or Space on a focused note cycles that note; typing a letter or Backspace hands the keys back to the word
   if (onNote && (e.key === 'Enter' || e.key === ' ')) return;

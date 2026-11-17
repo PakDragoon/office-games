@@ -200,6 +200,7 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'lettuce-party:countsFastestNeg': 'max', // Counts: fastest solve in ms, negated like fastestNeg
   'lettuce-party:ladderFastestNeg': 'max', // Word ladder: fastest finish in ms, negated
   'lettuce-party:ladderBestOverNeg': 'max', // Word ladder: fewest steps over par, negated (0 = a shortest path)
+  'lettuce-party:hotcoldFastestNeg': 'max', // Hot & Cold: fastest find in ms, negated
   'rotten:bestDaily': 'min', // the daily's score is a time (order 'asc')
   'guesstimate:bestDaily': 'max', // the daily's score is points (order 'desc')
   'melonburst:bestDaily': 'min', // the daily's score is solved/wrong/time packed into one number (order 'asc')

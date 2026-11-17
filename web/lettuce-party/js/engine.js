@@ -1,16 +1,20 @@
 // Lettuce Party: game rules. Pure functions, no network or page code, so the server and the tests share them.
 //
-// Three modes:
+// Four modes:
 //   classic  every guess is coloured tile by tile (green right place, yellow wrong place, grey not in the word)
 //   counts   no tile colours: each guess only reports HOW MANY letters are green, yellow and red
 //   ladder   everyone gets the same start and target word; change one letter at a time, every step a real word
+//   hotcold  any word of any length: each guess gets a rank for how close its MEANING is (1 = the word);
+//            timed, the closest guess when time runs out wins (ranks come from js/hotcold.js on the server)
 
 export const COLS = 5;
-export const MODES = ['classic', 'counts', 'ladder'];
+export const MODES = ['classic', 'counts', 'ladder', 'hotcold'];
 export const ATTEMPTS = { min: 4, max: 10, default: 6 };
 export const ROUND_LIMITS = [0, 3, 5, 10];            // rounds per game (0 = unlimited)
 export const TIMERS = [0, 60, 120, 180, 300];         // seconds per round in classic and counts (0 = no timer)
 export const LADDER_TIMES = [60, 120, 180, 300];      // seconds per ladder round (always a time limit)
+export const HOT_TIMES = [120, 180, 300];             // seconds per Hot & Cold round (always a time limit)
+export const HOT = { maxGuesses: 300, maxHints: 3 };
 
 export const DEFAULT_SETTINGS = {
   strict: true,         // guesses must be in the word list
@@ -22,6 +26,8 @@ export const DEFAULT_SETTINGS = {
   attempts: ATTEMPTS.default,   // classic and counts only
   ladderTime: 180,              // ladder only
   ladderReuse: true,            // ladder only: a word already in your ladder may be typed again (go back a step)
+  hotTime: 180,                 // hotcold only
+  hotHints: true,               // hotcold only: players may ask for up to HOT.maxHints hints a round
 };
 
 function apply(into, raw) {
@@ -35,6 +41,8 @@ function apply(into, raw) {
   if (Number.isInteger(raw.attempts) && raw.attempts >= ATTEMPTS.min && raw.attempts <= ATTEMPTS.max) into.attempts = raw.attempts;
   if (LADDER_TIMES.includes(raw.ladderTime)) into.ladderTime = raw.ladderTime;
   if (typeof raw.ladderReuse === 'boolean') into.ladderReuse = raw.ladderReuse;
+  if (HOT_TIMES.includes(raw.hotTime)) into.hotTime = raw.hotTime;
+  if (typeof raw.hotHints === 'boolean') into.hotHints = raw.hotHints;
   return into;
 }
 
@@ -50,7 +58,7 @@ export function cleanSettings(patch, current) {
 }
 
 /** The time limit in seconds that applies to a round in this mode (0 = none). */
-export const effectiveTimer = (s) => (s.mode === 'ladder' ? s.ladderTime : s.timer);
+export const effectiveTimer = (s) => (s.mode === 'ladder' ? s.ladderTime : s.mode === 'hotcold' ? s.hotTime : s.timer);
 
 /* ---------- Classic and counts: scoring a guess ---------- */
 
@@ -139,4 +147,49 @@ export function pickPair(text, random, skip = (_key) => false) {
     if (pair && (!skip(`${pair.start} ${pair.target}`) || tries === 11)) found = pair;
   }
   return found;
+}
+
+/* ---------- Hot & Cold ---------- */
+
+/** A typed guess tidied up: lower case letters only, or '' when it can't be a word. */
+export function cleanHotWord(raw) {
+  const w = String(raw ?? '').trim().toLowerCase();
+  return /^[a-z]{2,14}$/.test(w) ? w : '';
+}
+
+/** Your best rank from the words you typed yourself (hints never count), or null before any guess. */
+export function bestRank(guesses) {
+  let best = null;
+  for (const g of guesses) if (!g.hint && typeof g.rank === 'number' && (best === null || g.rank < best)) best = g.rank;
+  return best;
+}
+
+/**
+ * The rank a hint aims for: halfway from your best to the word. Before any guess it starts at 1000;
+ * at rank 3 or better there is nothing left to give away (null).
+ */
+export function hintRank(best) {
+  if (best === null) return 1000;
+  if (best <= 3) return null;
+  return Math.max(2, Math.floor(best / 2));
+}
+
+/** How warm a rank is, for colours and words on screen. */
+export function temperature(rank) {
+  if (rank === 1) return 'found';
+  if (rank <= 10) return 'burning';
+  if (rank <= 100) return 'hot';
+  if (rank <= 500) return 'warm';
+  if (rank <= 2000) return 'cool';
+  return 'cold';
+}
+
+/**
+ * Hot & Cold standings: whoever found the word first, then the best rank, then fewer guesses.
+ * Players are { best, solved, finishMs, used }; nobody without a guess is ranked.
+ */
+export function hotOrder(players) {
+  return players.filter((p) => p.best !== null).sort((a, b) => (a.solved !== b.solved ? (a.solved ? -1 : 1) : 0)
+    || (a.solved && b.solved ? (a.finishMs ?? 0) - (b.finishMs ?? 0) : 0)
+    || a.best - b.best || a.used - b.used);
 }
