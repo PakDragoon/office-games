@@ -136,7 +136,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 
-.kind-picks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0.35rem; }
+.kind-picks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.35rem; }
 .kind-pick {
   display: grid; justify-items: center; gap: 0.25rem;
   font: 600 0.85rem var(--font); color: var(--muted);
@@ -146,7 +146,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .kind-pick .ico { width: 1.6rem; height: 1.6rem; }
 .kind-pick[aria-pressed="true"] { color: var(--ink); border-color: var(--ink); }
 .kind-pick[aria-pressed="true"] .ico { color: var(--kc); }
-.k-count { --kc: var(--p0); } .k-track { --kc: var(--near); } .k-angle { --kc: var(--hit); } .k-split { --kc: var(--p1); } .k-time { --kc: var(--p2); }
+.k-count { --kc: var(--p0); } .k-track { --kc: var(--near); } .k-angle { --kc: var(--hit); } .k-split { --kc: var(--p1); } .k-time { --kc: var(--p2); } .k-cut { --kc: var(--p3); }
 
 /* ---------- Account chip ---------- */
 .top-right { position: absolute; top: calc(0.9rem + env(safe-area-inset-top, 0px)); right: 1rem; display: flex; gap: 0.5rem; }
@@ -403,6 +403,14 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .slide-start { fill: var(--ink); }
 .slide-fill { stroke: var(--pc); stroke-width: 4; stroke-linecap: round; }
 .slide-fill.soft { opacity: 0.35; }
+.cut-shape { fill: color-mix(in srgb, var(--ink) 7%, transparent); stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; }
+.cut-shape.outline { fill: none; }
+.cut-piece { fill: color-mix(in srgb, var(--pc) 26%, transparent); }
+.cut-piece.other { fill: color-mix(in srgb, var(--pc) 10%, transparent); }
+.knife { stroke: var(--pc); stroke-width: 2.4; stroke-linecap: round; }
+.knife.done { stroke-width: 1.6; opacity: 0.9; }
+.knife-grip { fill: var(--paper); stroke: var(--pc); stroke-width: 1.6; }
+.lbl.cut-share { font-size: 17px; font-weight: 800; fill: var(--ink); }
 .thumb-line { stroke: var(--pc); stroke-width: 2; stroke-linecap: round; }
 .thumb-knob { fill: var(--paper); stroke: var(--pc); stroke-width: 2; }
 .band { fill: var(--hit); fill-opacity: 0.07; stroke: var(--hit); stroke-opacity: 0.5; stroke-width: 0.8; }

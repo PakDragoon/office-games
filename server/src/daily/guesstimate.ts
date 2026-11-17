@@ -15,8 +15,8 @@ export const guesstimateDaily: DailyGame<GuessDaily> = {
   order: 'desc',
   streak: true,
   number: (day) => R.dayNumber(day),
-  start(_day, key) {
-    return { seed: R.daySeed(key), kinds: [...R.DAILY.kinds], idx: 0, results: [] };
+  start(day, key) {
+    return { seed: R.daySeed(key), kinds: R.dailyKinds(day), idx: 0, results: [] };
   },
   view(s) {
     return { seed: s.seed, kinds: s.kinds, idx: s.idx, count: s.kinds.length, results: s.results };

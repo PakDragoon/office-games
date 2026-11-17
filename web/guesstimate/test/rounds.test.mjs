@@ -77,7 +77,9 @@ for (let i = 0; i < 3000; i++) {
 
 // 3. Scoring: exact is 100, the "half" error is 50, further off scores less, always 0..100
 const sample = Object.fromEntries(R.KINDS.map((k) => [k, R.makeRound(k, 42, 'normal')]));
-for (const kind of R.KINDS) assert.equal(R.score(sample[kind], sample[kind].answer), 100, kind);
+// The tests whose guess is a number (Cut's guess is a line, checked on its own below)
+const NUMERIC = R.KINDS.filter((k) => k !== 'cut');
+for (const kind of NUMERIC) assert.equal(R.score(sample[kind], sample[kind].answer), 100, kind);
 assert.equal(R.score(sample.angle, sample.angle.answer + R.HALF.angle), 50);
 assert.equal(R.score(sample.angle, sample.angle.answer + 360), 100, 'angles wrap');
 // The curve: flat near the answer, steep further out (Angle: 6° scores 50)
@@ -96,7 +98,7 @@ for (const kind of R.KINDS) {
 }
 rnd = R.mulberry32(3);
 for (let i = 0; i < 20000; i++) {
-  const kind = R.KINDS[i % R.KINDS.length];
+  const kind = NUMERIC[i % NUMERIC.length];
   const pz = sample[kind];
   const spread = { count: 200, track: R.BOX.h, angle: 360, split: 1, time: 12 }[kind];
   const g1 = rnd() * spread, g2 = rnd() * spread;
@@ -125,7 +127,7 @@ assert.ok(R.validGuess(g.time, 3.12) && !R.validGuess(g.time, 0) && !R.validGues
 for (const bad of ['40', null, undefined, NaN, Infinity, {}, [1]]) {
   for (const kind of R.KINDS) assert.equal(R.validGuess(g[kind], bad), false, `${kind} accepted ${String(bad)}`);
 }
-for (const kind of R.KINDS) assert.equal(R.validGuess(g[kind], g[kind].answer), true, `${kind} rejects its own answer`);
+for (const kind of NUMERIC) assert.equal(R.validGuess(g[kind], g[kind].answer), true, `${kind} rejects its own answer`);
 assert.equal(R.describe(g.angle, -40), '40°');
 assert.equal(R.describe(g.split, 0.371), '37%');
 assert.equal(R.describe(g.count, null), '–');
@@ -152,6 +154,51 @@ assert.deepEqual(R.dailySet('2026-12-01'), R.dailySet('2026-12-01'));
 assert.notDeepEqual(R.dailySet('2026-12-01'), R.dailySet('2026-12-02'));
 assert.deepEqual(R.dailySet('2026-12-01').map((p) => p.kind), R.DAILY.kinds);
 assert.ok(R.dailySet('2026-12-01').some((p) => p.kind === 'time'), 'daily includes Timing from day 2');
+assert.ok(!R.dailyKinds('2026-11-17').includes('cut'), 'Cut stays out of a daily already being played (day 8)');
+assert.deepEqual(R.dailyKinds('2026-11-18'), ['count', 'track', 'angle', 'split', 'time', 'cut'], 'Cut joins the daily on day 9');
 assert.deepEqual(R.dailySet('2026-11-10').map((p) => p.kind), ['count', 'track', 'angle', 'split'], 'day 1 stays as it was played');
 
 console.log('rounds: network, labels and daily checks passed');
+
+// 5. Cut: the shape, the share on each side of a line, the perfect cut and the score
+for (const d of R.DIFFICULTIES) {
+  for (let s = 1; s <= 200; s++) {
+    const pz = R.makeRound('cut', R.roundSeed(77, s, 'cut'), d);
+    for (const [x, y] of pz.shape) assert.ok(x >= 10 && x <= R.BOX.w - 10 && y >= 10 && y <= R.BOX.h - 10, `cut/${d} shape leaves the paper`);
+    // Both sides of any line add up to the whole shape
+    const line = [50 + s, 0, 300 - s, R.BOX.h];
+    const back = [line[2], line[3], line[0], line[1]];
+    assert.ok(Math.abs(R.cutShare(pz, line) + R.cutShare(pz, back) - 1) < 1e-9, 'the two pieces make the whole');
+    // The perfect cut at any angle halves it and scores 100
+    const best = R.perfectCut(pz, (s * 37) % 180);
+    assert.ok(Math.abs(R.cutShare(pz, best) - 0.5) < 1e-6, `cut/${d} perfect cut isn't half`);
+    assert.equal(R.score(pz, best), 100);
+  }
+}
+const cz = R.makeRound('cut', 42, 'normal');
+// Missing the shape entirely leaves it all on one side: 0 points
+assert.equal(R.cutShare(cz, [5, 0, 5, R.BOX.h]) === 0 || R.cutShare(cz, [5, 0, 5, R.BOX.h]) === 1, true);
+assert.equal(R.score(cz, [5, 0, 5, R.BOX.h]), 0);
+// A 53.5/46.5 cut scores 50 (3.5% off half)
+const near = (share) => {
+  // Slide a downward line until this share is on its side (x below the line's x)
+  let lo = 0, hi = R.BOX.w;
+  for (let i = 0; i < 60; i++) { const m = (lo + hi) / 2; if (R.cutShare(cz, [m, 0, m, R.BOX.h]) < share) lo = m; else hi = m; }
+  return [lo, 0, lo, R.BOX.h];
+};
+assert.equal(R.score(cz, near(0.5 + R.HALF.cut)), 50);
+assert.equal(R.score(cz, near(0.5 - R.HALF.cut)), 50, 'too big and too small count the same');
+assert.deepEqual([0.51, 0.52, 0.53, 0.55].map((s) => R.score(cz, near(s))), [90, 74, 58, 31], "51/49 is Sharp, 55/45 is way off");
+// Guesses from the network: a line of 4 numbers on (or just off) the board, long enough to point somewhere
+assert.ok(R.validGuess(cz, [10, 10, 300, 200]));
+assert.ok(R.validGuess(cz, [-50, 0, 450, 300]));
+for (const bad of [0.5, [1, 2, 3], [1, 2, 3, 'x'], [0, 0, 5, 5], [0, 0, 600, 0], [NaN, 0, 10, 10], 'line']) assert.equal(R.validGuess(cz, bad), false, `cut accepted ${JSON.stringify(bad)}`);
+// Labels: bigger piece first, a decimal when it would round to 50/50
+assert.equal(R.halves(0.4), '60/40');
+assert.equal(R.halves(0.6), '60/40');
+assert.equal(R.halves(0.503), '50.3/49.7');
+assert.equal(R.halves(0.5), '50.0/50.0');
+assert.equal(R.describe(cz), '50/50');
+assert.equal(R.describe(cz, near(0.4)), '60/40');
+assert.equal(R.score(cz, null), 0);
+console.log('rounds: cut checks passed');

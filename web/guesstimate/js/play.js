@@ -1,7 +1,7 @@
 // Drawing and input for each test, in a technical-drawing style.
 // mount() shows the puzzle and collects one guess. reveal() redraws it as a measured
 // drawing: grid, rulers and dimension lines, with everyone's guesses on it.
-import { BOX, trackY, trackPath, error } from './rounds.js';
+import { BOX, trackY, trackPath, error, clipLeft, cutShare, perfectCut, halves } from './rounds.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const rad = (deg) => (deg * Math.PI) / 180;
@@ -418,6 +418,106 @@ export const TESTS = {
     },
   },
 
+  cut: {
+    name: 'Cut',
+    how: 'Drag one straight line across the shape to cut it into two pieces of the same size. Drag again to move it. Keys: arrows left and right slide it, up and down turn it.',
+    ask: () => 'Cut the shape exactly in half',
+    mount(stage, pz, { ready, color }) {
+      const b = board(stage);
+      el('path', { d: shapePath(pz.shape), class: 'cut-shape' }, b.inside);
+      const knife = el('line', { class: `knife pc${color}`, visibility: 'hidden' }, b.inside);
+      const grips = el('g', { class: `pc${color}`, visibility: 'hidden' }, b.inside);
+      const g1 = el('circle', { r: 4, class: 'knife-grip' }, grips);
+      const g2 = el('circle', { r: 4, class: 'knife-grip' }, grips);
+      let line = null, start = null;
+      const clamp = (v) => Math.min(BOX.w + 40, Math.max(-40, v));
+      const show = () => {
+        const [x1, y1, x2, y2] = longLine(line);
+        Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => knife.setAttribute(k, v));
+        g1.setAttribute('cx', line[0]); g1.setAttribute('cy', line[1]);
+        g2.setAttribute('cx', line[2]); g2.setAttribute('cy', line[3]);
+        knife.setAttribute('visibility', 'visible');
+        grips.setAttribute('visibility', 'visible');
+        ready(true);
+      };
+      b.svg.classList.add('aim');
+      b.svg.addEventListener('pointerdown', (e) => {
+        try { b.svg.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
+        const p = toBoard(b.svg, e);
+        start = [clamp(p.x), clamp(p.y)];
+      });
+      b.svg.addEventListener('pointermove', (e) => {
+        if (!start) return;
+        const p = toBoard(b.svg, e);
+        const end = [clamp(p.x), clamp(p.y)];
+        if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 12) return;
+        line = [...start, ...end];
+        show();
+      });
+      const up = () => { start = null; };
+      b.svg.addEventListener('pointerup', up);
+      b.svg.addEventListener('pointercancel', up);
+      b.svg.tabIndex = 0;
+      b.svg.addEventListener('keydown', (e) => {
+        const slide = { ArrowLeft: -1, ArrowRight: 1 }[e.key], spin = { ArrowUp: 1, ArrowDown: -1 }[e.key];
+        if (!slide && !spin) return;
+        e.preventDefault();
+        if (!line) line = [BOX.w / 2, BOX.h / 2 - 100, BOX.w / 2, BOX.h / 2 + 100];
+        const n = e.shiftKey ? 10 : 1;
+        const mx = (line[0] + line[2]) / 2, my = (line[1] + line[3]) / 2;
+        let a = Math.atan2(line[3] - line[1], line[2] - line[0]);
+        if (spin) a += rad(spin * n);
+        const dx = Math.cos(a), dy = Math.sin(a);
+        const off = (slide || 0) * n;   // sideways, square to the line
+        const cx = mx - dy * off, cy = my + dx * off;
+        line = [cx - dx * 100, cy - dy * 100, cx + dx * 100, cy + dy * 100].map(clamp);
+        show();
+      });
+      return { guess: () => (line ? line.map((v) => Math.round(v * 10) / 10) : null), destroy() {} };
+    },
+    reveal(stage, pz, entries) {
+      const b = board(stage);
+      grid(b);
+      const guessed = guessedOnly(entries);
+      const solo = entries.length === 1 && guessed.length ? guessed[0] : null;
+      if (solo) {
+        // Your two pieces, each with its share
+        const sides = [solo.guess, [solo.guess[2], solo.guess[3], solo.guess[0], solo.guess[1]]];
+        sides.forEach((ln, i) => {
+          const piece = clipLeft(pz.shape, ln);
+          if (piece.length < 3) return;
+          el('path', { d: shapePath(piece), class: `cut-piece${i ? ' other' : ''} pc${solo.color}` }, b.inside);
+        });
+      }
+      el('path', { d: shapePath(pz.shape), class: `cut-shape${solo ? ' outline' : ''}` }, b.inside);
+      // The perfect cut at the angle you chose (or straight down), for comparison
+      const ref = guessed.find((e) => e.me) || guessed[0];
+      const deg = ref ? (Math.atan2(ref.guess[3] - ref.guess[1], ref.guess[2] - ref.guess[0]) * 180) / Math.PI : 90;
+      const best = longLine(perfectCut(pz, deg));
+      el('line', { x1: best[0], y1: best[1], x2: best[2], y2: best[3], class: 'answer-arm reveal-late' }, b.inside);
+      guessed.forEach((e) => {
+        const [x1, y1, x2, y2] = longLine(e.guess);
+        el('line', { x1, y1, x2, y2, class: `knife done pc${e.color}` }, b.inside);
+      });
+      if (solo) {
+        const share = cutShare(pz, solo.guess);
+        [solo.guess, [solo.guess[2], solo.guess[3], solo.guess[0], solo.guess[1]]].forEach((ln, i) => {
+          const piece = clipLeft(pz.shape, ln);
+          if (piece.length < 3) return;
+          const [cx, cy] = middle(piece);
+          label(b.over, cx, cy + 5, pct(i ? 1 - share : share), { cls: 'cut-share' });
+        });
+      } else {
+        // Each line labelled where it leaves the paper, alternating ends so labels spread out
+        guessed.forEach((e, i) => {
+          const end = edgePoint(e.guess, i % 2 === 1);
+          if (!end) return;
+          label(b.over, end[0], end[1] + 4, `${tag(e)} ${halves(cutShare(pz, e.guess))}`, { color: e.color, cls: 'who', anchor: end[0] < 60 ? 'start' : end[0] > BOX.w - 60 ? 'end' : 'middle' });
+        });
+      }
+    },
+  },
+
   time: {
     name: 'Timing',
     how: 'Press Start, count in your head, and press Stop when you think the target time has passed. No clock is shown.',
@@ -588,6 +688,38 @@ function slider(parent, pz) {
   return { g, len, caps };
 }
 
+// ---------- Cut helpers ----------
+
+const shapePath = (pts) => `M${pts.map((p) => `${Math.round(p[0] * 10) / 10} ${Math.round(p[1] * 10) / 10}`).join('L')}Z`;
+
+// The cut runs right across the paper, whatever length was dragged
+function longLine([x1, y1, x2, y2]) {
+  const len = Math.hypot(x2 - x1, y2 - y1) || 1;
+  const dx = ((x2 - x1) / len) * 700, dy = ((y2 - y1) / len) * 700;
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  return [mx - dx, my - dy, mx + dx, my + dy];
+}
+
+// Where the line crosses a frame just inside the paper (the far end when `last`), for its label
+function edgePoint(line, last) {
+  const [x1, y1, x2, y2] = longLine(line);
+  const m = 14, ts = [];
+  const dx = x2 - x1, dy = y2 - y1;
+  for (const [t, ok] of [
+    [(m - x1) / dx, true], [(BOX.w - m - x1) / dx, true], [(m + 6 - y1) / dy, false], [(BOX.h - m - y1) / dy, false],
+  ]) {
+    if (!Number.isFinite(t)) continue;
+    const x = x1 + dx * t, y = y1 + dy * t;
+    if (ok ? y >= m && y <= BOX.h - m : x >= m && x <= BOX.w - m) ts.push(t);
+  }
+  if (!ts.length) return null;
+  const t = last ? Math.max(...ts) : Math.min(...ts);
+  return [x1 + dx * t, y1 + dy * t];
+}
+
+// A point to hang a piece's label on: the average of its corners
+const middle = (pts) => [pts.reduce((n, p) => n + p[0], 0) / pts.length, pts.reduce((n, p) => n + p[1], 0) / pts.length];
+
 // An empty sheet, shown before a round starts so the board keeps its size (and the
 // countdown has somewhere to sit).
 export function blank(stage) {
@@ -602,6 +734,7 @@ export function icon(kind) {
     angle: '<path d="M4 19H21M4 19L16 5" fill="none"/><path d="M11 19a7 7 0 0 0 -2.4 -5.3" fill="none"/>',
     split: '<path d="M3 13H21" fill="none"/><circle cx="3.5" cy="13" r="2.2"/><path d="M13 5v4.5M10.5 6.5L13 9.5L15.5 6.5" fill="none"/>',
     time: '<circle cx="12" cy="13.5" r="7.5" fill="none"/><path d="M12 13.5V9.5M9.5 3h5M12 3v3M18.3 7.2l1.4-1.4" fill="none"/>',
+    cut: '<path d="M5 9c1-4 6-5 9-4s6 4 5 8-3 7-8 6-7-6-6-10z" fill="none"/><path d="M15 2L8 22" fill="none" stroke-dasharray="2.5 2"/>',
   };
   return `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${paths[kind]}</svg>`;
 }

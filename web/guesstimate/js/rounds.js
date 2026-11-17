@@ -2,7 +2,7 @@
 // Every puzzle is built from a seed, so every browser given the same seed
 // draws exactly the same puzzle. Multiplayer only has to share the seed.
 
-export const KINDS = ['count', 'track', 'angle', 'split', 'time'];
+export const KINDS = ['count', 'track', 'angle', 'split', 'time', 'cut'];
 export const DIFFICULTIES = ['easy', 'normal', 'hard'];
 // Puzzles live in a fixed 4:3 box and are scaled to the screen, so a phone
 // and a monitor see the same geometry.
@@ -196,9 +196,93 @@ function makeTime(r, difficulty) {
   return { kind: 'time', difficulty, target: tenths / 10, answer: tenths / 10 };
 }
 
+// ---------- Cut: slice the shape into two equal halves ----------
+
+// A smooth blob: a radius that wobbles with a few waves round the centre, drawn as a
+// many-sided polygon so its area (and each piece's) is exact. Harder shapes wobble more,
+// so they go concave and a cut through the middle is no longer a safe bet.
+const CUT = {
+  easy: { waves: [2, 3], amp: 0.12, r: [95, 115] },
+  normal: { waves: [2, 3, 4], amp: 0.2, r: [90, 118] },
+  hard: { waves: [2, 3, 4, 5, 6], amp: 0.26, r: [85, 120] },
+};
+const CUT_SIDES = 64;
+
+function makeCut(r, difficulty) {
+  const c = CUT[difficulty];
+  const R0 = between(r, c.r[0], c.r[1]);
+  const waves = c.waves.map((k) => ({ k, a: between(r, 0.3, 1) * c.amp, ph: between(r, 0, Math.PI * 2) }));
+  const stretch = between(r, 0.8, 1.15);   // a little wider or taller than round
+  const turn = between(r, 0, Math.PI);
+  const cx = BOX.w / 2 + int(r, -15, 15), cy = BOX.h / 2 + int(r, -10, 10);
+  const pts = [];
+  for (let i = 0; i < CUT_SIDES; i++) {
+    const t = (i / CUT_SIDES) * Math.PI * 2;
+    const rad = R0 * Math.max(0.4, 1 + waves.reduce((n, w) => n + w.a * Math.sin(w.k * t + w.ph), 0));
+    const x = Math.cos(t) * rad * stretch, y = Math.sin(t) * rad * 0.8;
+    pts.push([fix(cx + x * Math.cos(turn) - y * Math.sin(turn)), fix(cy + x * Math.sin(turn) + y * Math.cos(turn))]);
+  }
+  // Keep it on the paper whatever the wobble did
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  const sx = Math.min(1, (BOX.w - 30) / (Math.max(...xs) - Math.min(...xs)), (BOX.h - 30) / (Math.max(...ys) - Math.min(...ys)));
+  const mx = (Math.max(...xs) + Math.min(...xs)) / 2, my = (Math.max(...ys) + Math.min(...ys)) / 2;
+  const shape = pts.map(([x, y]) => [fix(BOX.w / 2 + (x - mx) * sx), fix(BOX.h / 2 + (y - my) * sx)]);
+  return { kind: 'cut', difficulty, shape, answer: 0.5 };
+}
+
+const area = (poly) => {
+  let a = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const [x1, y1] = poly[i], [x2, y2] = poly[(i + 1) % poly.length];
+    a += x1 * y2 - x2 * y1;
+  }
+  return Math.abs(a) / 2;
+};
+
+// The part of a polygon on one side of the line a→b (Sutherland–Hodgman against one edge);
+// swapping a and b gives the other side.
+// A concave shape can come out as several pieces; their total area is still right.
+export function clipLeft(poly, [ax, ay, bx, by]) {
+  const side = ([x, y]) => (bx - ax) * (y - ay) - (by - ay) * (x - ax);
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const p = poly[i], q = poly[(i + 1) % poly.length];
+    const sp = side(p), sq = side(q);
+    if (sp >= 0) out.push(p);
+    if ((sp >= 0) !== (sq >= 0)) {
+      const t = sp / (sp - sq);
+      out.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t]);
+    }
+  }
+  return out;
+}
+
+// What share of the shape falls on one side of the cut, 0..1 (0.5 is a perfect half).
+export function cutShare(pz, line) {
+  const total = area(pz.shape);
+  const left = clipLeft(pz.shape, line);
+  return left.length < 3 ? 0 : area(left) / total;
+}
+
+// The perfect cut at a given angle (degrees), as a line through the board: found by
+// sliding the line across the shape until both sides weigh the same.
+export function perfectCut(pz, deg) {
+  const a = (deg * Math.PI) / 180, dx = Math.cos(a), dy = Math.sin(a);
+  const nx = -dy, ny = dx;
+  const line = (off) => [BOX.w / 2 + nx * off - dx * 400, BOX.h / 2 + ny * off - dy * 400, BOX.w / 2 + nx * off + dx * 400, BOX.h / 2 + ny * off + dy * 400];
+  let lo = -260, hi = 260;
+  const f = (off) => cutShare(pz, line(off));
+  const up = f(hi) > f(lo);
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if ((f(mid) < 0.5) === up) lo = mid; else hi = mid;
+  }
+  return line((lo + hi) / 2);
+}
+
 // ---------- Rounds and scoring ----------
 
-const MAKERS = { count: makeCount, track: makeTrack, angle: makeAngle, split: makeSplit, time: makeTime };
+const MAKERS = { count: makeCount, track: makeTrack, angle: makeAngle, split: makeSplit, time: makeTime, cut: makeCut };
 
 export function makeRound(kind, seed, difficulty = 'normal') {
   if (!MAKERS[kind]) throw new Error(`Unknown test: ${kind}`);
@@ -226,12 +310,13 @@ export function error(pz, guess) {
     case 'angle': return Math.abs(Math.abs(angleDiff(guess, 0)) - pz.answer);
     case 'split': return Math.abs(guess - pz.answer);
     case 'time': return Math.abs(guess - pz.answer) / (pz.answer + TIME_CUSHION);
+    case 'cut': return Math.abs(cutShare(pz, guess) - 0.5);
     default: throw new Error(`Unknown test: ${pz.kind}`);
   }
 }
 
 // The error that scores 50, per test.
-export const HALF = { count: Math.log(1.2), track: 0.08, angle: 6, split: 0.03, time: 0.15 };
+export const HALF = { count: Math.log(1.2), track: 0.08, angle: 6, split: 0.03, time: 0.15, cut: 0.035 };
 // Curve shape: above 1 the top is flatter (tiny misses, like hand jitter, cost little) and
 // bigger misses fall away faster. Half the 50-point error scores 78, double scores 14.
 export const SHAPE = 1.5;
@@ -253,6 +338,11 @@ export function verdict(points) {
 
 // Guesses arrive from other players' browsers, so the host checks them before scoring.
 export function validGuess(pz, guess) {
+  // Cut: the line as [x1, y1, x2, y2], two points on the board far enough apart to give a direction
+  if (pz.kind === 'cut') {
+    return Array.isArray(guess) && guess.length === 4 && guess.every((n) => typeof n === 'number' && Number.isFinite(n) && n >= -50 && n <= BOX.w + 50)
+      && Math.hypot(guess[2] - guess[0], guess[3] - guess[1]) >= 10;
+  }
   if (typeof guess !== 'number' || !Number.isFinite(guess)) return false;
   switch (pz.kind) {
     case 'count': return Number.isInteger(guess) && guess >= 0 && guess <= 999;
@@ -273,8 +363,16 @@ export function describe(pz, guess = pz.answer) {
     case 'angle': return `${Math.round(Math.abs(guess))}°`;
     case 'split': return `${Math.round(guess * 100)}%`;
     case 'time': return guess === pz.answer ? `${pz.answer.toFixed(1)} s` : `${guess.toFixed(2)} s`;
+    case 'cut': return guess === pz.answer ? '50/50' : halves(cutShare(pz, guess));
     default: return String(guess);
   }
+}
+
+// A cut written as its two pieces, bigger first: "53/47". Close to half it keeps a decimal
+// ("50.4/49.6"), so a near miss never reads as a perfect "50/50".
+export function halves(share) {
+  const big = Math.max(share, 1 - share) * 100;
+  return Math.round(big) === 50 ? `${big.toFixed(1)}/${(100 - big).toFixed(1)}` : `${Math.round(big)}/${100 - Math.round(big)}`;
 }
 
 // ---------- Daily puzzle ----------
@@ -282,8 +380,10 @@ export function describe(pz, guess = pz.answer) {
 // Everyone gets the same daily set, built from the date. Day 1 is launch day.
 export const LAUNCH_DAY = '2026-11-10';
 export const DAILY = { kinds: KINDS, laps: 1, difficulty: 'normal' };
-// Day 1 was played with four tests before Timing existed; keep it the same for everyone.
-const dailyKinds = (key) => (dayNumber(key) <= 1 ? KINDS.filter((k) => k !== 'time') : DAILY.kinds);
+// Tests join the daily on the day after they launch, so a day already started never changes:
+// day 1 had no Timing, days up to 8 (2026-11-17) had no Cut.
+const DAILY_FROM = { time: 2, cut: 9 };
+export const dailyKinds = (key) => DAILY.kinds.filter((k) => dayNumber(key) >= (DAILY_FROM[k] || 1));
 
 export function dayKey(date = new Date()) {
   const p = (n) => String(n).padStart(2, '0');

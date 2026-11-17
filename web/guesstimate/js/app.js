@@ -40,11 +40,17 @@ const ROOM_PREFS = { difficulty: 'normal', kinds: [...R.KINDS], laps: 1, timer: 
 const savePrefs = () => store.set('prefs', PREFS);
 
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
-// Settings saved before Timing existed: switch the new test on once
+// Settings saved before a test existed: switch the new test on once
 for (const [prefs, save] of [[PREFS, savePrefs], [ROOM_PREFS, saveRoomPrefs]]) {
   if ((prefs.version || 1) < 2) {
     if (!prefs.kinds.includes('time')) prefs.kinds = R.KINDS.filter((k) => prefs.kinds.includes(k) || k === 'time');
     prefs.version = 2;
+    save();
+  }
+  // Settings saved before Cut existed: switch it on once too
+  if (prefs.version < 3) {
+    if (!prefs.kinds.includes('cut')) prefs.kinds = R.KINDS.filter((k) => prefs.kinds.includes(k) || k === 'cut');
+    prefs.version = 3;
     save();
   }
 }
@@ -245,6 +251,7 @@ function answerLine(pz, guess) {
     case 'angle': return `Target ${pz.target}°${none ? '' : `, you made ${R.describe(pz, guess)}`}`;
     case 'split': return `Target ${pz.label}${none ? '' : `, you marked ${R.describe(pz, guess)}`}`;
     case 'time': return `Target ${R.describe(pz)}${none ? '' : `, you stopped at ${R.describe(pz, guess)}`}`;
+    case 'cut': return none ? 'No cut' : `Your pieces: ${R.describe(pz, guess)}`;
     default: return '';
   }
 }
@@ -833,7 +840,8 @@ function renderDailyCard() {
     $('daily-status').innerHTML = `You scored <span class="daily-score">${done.avg}</span> today. A new puzzle arrives at 00:00 UTC.`;
     $('daily-btn').textContent = 'See today’s result';
   } else {
-    const n = ['', 'one', 'two', 'three', 'four', 'five', 'six'][R.DAILY.kinds.length] || String(R.DAILY.kinds.length);
+    const count = R.dailyKinds(day).length;
+    const n = ['', 'one', 'two', 'three', 'four', 'five', 'six', 'seven'][count] || String(count);
     $('daily-status').textContent = `The same ${n} puzzles for everyone today. One go each.`;
     $('daily-btn').textContent = 'Play today’s puzzle';
   }
