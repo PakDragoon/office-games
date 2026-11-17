@@ -15,9 +15,9 @@ export const COLS = 4;
 export const ROWS = 3;
 // The drawing is a fixed 800 × 600 sheet of twelve 200 × 200 boxes, scaled to each screen
 export const BOARD = { w: 800, h: 600, box: 200 };
-export const PACES = [5, 8, 12];                 // seconds between words while drawing
+export const PACES = [3, 5, 8];                  // seconds between words while drawing
 export const FLASHES = [1000, 1500, 2000];       // how long each word stays on screen, ms
-export const DEFAULT_SETTINGS = { pace: 8, flash: 1500 };
+export const DEFAULT_SETTINGS = { pace: 5, flash: 1500 };
 export const TIMES = {
   writeMs: 120000,     // to write your 12 words
   countdownMs: 3000,   // 3, 2, 1 before the first word

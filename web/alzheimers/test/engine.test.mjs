@@ -7,9 +7,13 @@ const ok = (name, fn) => { fn(); n++; };
 const rnd = (() => { let a = 7; return () => ((a = (a * 16807) % 2147483647) / 2147483647); })();
 
 ok('settings: only the offered paces and flashes', () => {
-  assert.deepEqual(E.cleanSettings(null), { pace: 8, flash: 1500 });
-  assert.deepEqual(E.cleanSettings({ pace: 12, flash: 1000 }), { pace: 12, flash: 1000 });
-  assert.deepEqual(E.cleanSettings({ pace: 3, flash: 99 }), { pace: 8, flash: 1500 });
+  assert.deepEqual(E.cleanSettings(null), { pace: 5, flash: 1500 });
+  assert.deepEqual(E.cleanSettings({ pace: 3, flash: 1000 }), { pace: 3, flash: 1000 });
+  assert.deepEqual(E.cleanSettings({ pace: 8, flash: 2000 }), { pace: 8, flash: 2000 });
+  // The old 12-second choice (saved settings, old rooms) falls back to the default
+  assert.deepEqual(E.cleanSettings({ pace: 12, flash: 99 }), { pace: 5, flash: 1500 });
+  // Every word is gone before the next one comes, at every pace
+  assert.ok(Math.max(...E.FLASHES) < Math.min(...E.PACES) * 1000);
 });
 
 ok('words are tidied, refused when too long, compared without case or punctuation', () => {
