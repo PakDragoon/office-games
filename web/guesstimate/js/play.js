@@ -429,6 +429,9 @@ export const TESTS = {
       const pieceB = el('path', { class: `cut-piece other live pc${color}`, visibility: 'hidden' }, b.inside);
       el('path', { d: shapePath(pz.shape), class: 'cut-shape' }, b.inside);
       const knife = el('line', { class: `knife pc${color}`, visibility: 'hidden' }, b.inside);
+      // While you drag, the cut is traced from where you pressed to the blade under your pointer
+      const trail = el('line', { class: `knife trail pc${color}`, visibility: 'hidden' }, b.inside);
+      const blade = el('circle', { r: 3.5, class: `knife-tip pc${color}`, visibility: 'hidden' }, b.inside);
       // Wide invisible strokes and circles, so the line and handles are easy to grab with a finger
       const knifeHit = el('line', { class: 'knife-hit', visibility: 'hidden' }, b.over);
       const grips = [0, 1].map(() => {
@@ -438,15 +441,19 @@ export const TESTS = {
         return g;
       });
       const hint = label(b.over, BOX.w / 2, BOX.h - 12, 'Drag across the shape to cut it', { cls: 'cut-hint' });
-      let line = null, mode = null, from = null, base = null;
+      let line = null, mode = null, from = null, base = null, tip = null, anim = 0;
+      const vis = (nodes, on) => nodes.forEach((n) => n.setAttribute('visibility', on ? 'visible' : 'hidden'));
+      const setLine = (n, [x1, y1, x2, y2]) => Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => n.setAttribute(k, v));
+      const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
       const show = () => {
-        Object.entries({ x1: line[0], y1: line[1], x2: line[2], y2: line[3] }).forEach(([k, v]) => { knife.setAttribute(k, v); knifeHit.setAttribute(k, v); });
+        setLine(knife, line); setLine(knifeHit, line);
         grips.forEach((g, i) => g.setAttribute('transform', `translate(${line[i * 2]} ${line[i * 2 + 1]})`));
         const pa = clipLeft(pz.shape, line), pb = clipLeft(pz.shape, [line[2], line[3], line[0], line[1]]);
         pieceA.setAttribute('d', pa.length > 2 ? shapePath(pa) : '');
         pieceB.setAttribute('d', pb.length > 2 ? shapePath(pb) : '');
-        for (const n of [knife, knifeHit, pieceA, pieceB, ...grips]) n.setAttribute('visibility', 'visible');
+        vis([knife, knifeHit, pieceA, pieceB, ...grips], true);
+        vis([trail, blade], false);
         hint.textContent = 'Drag the line to slide it, or a handle to turn it';
         // The hint moves to whichever edge the line doesn't cross (and hides if it crosses both)
         const crosses = (y) => { const t = (y - line[1]) / (line[3] - line[1]); const x = line[0] + (line[2] - line[0]) * t; return Number.isFinite(t) ? Math.abs(x - BOX.w / 2) < 150 : Math.abs(line[1] - y) < 14; };
@@ -468,8 +475,10 @@ export const TESTS = {
       b.svg.addEventListener('pointerdown', (e) => {
         try { b.svg.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
         const p = toBoard(b.svg, e);
+        if (anim) { cancelAnimationFrame(anim); anim = 0; if (line) show(); }
         from = [p.x, p.y];
         base = line;
+        tip = null;
         const grip = grips.findIndex((g) => g.contains(e.target));
         mode = grip >= 0 ? `end${grip}` : e.target === knifeHit ? 'move' : 'draw';
         b.svg.classList.toggle('grabbing', mode !== 'draw');
@@ -478,7 +487,13 @@ export const TESTS = {
         if (!mode) return;
         const p = toBoard(b.svg, e);
         if (mode === 'draw') {
-          if (Math.hypot(p.x - from[0], p.y - from[1]) >= 12) put([...from, p.x, p.y]);
+          if (!tip && Math.hypot(p.x - from[0], p.y - from[1]) < 12) return;
+          // A new cut: the old one goes and the blade draws from the press point
+          if (!tip) { vis([knife, knifeHit, pieceA, pieceB, ...grips], false); hint.setAttribute('visibility', 'hidden'); }
+          tip = [p.x, p.y];
+          setLine(trail, [...from, ...tip]);
+          blade.setAttribute('cx', tip[0]); blade.setAttribute('cy', tip[1]);
+          vis([trail, blade], true);
         } else if (mode === 'move') {
           const dx = p.x - from[0], dy = p.y - from[1];
           put([base[0] + dx, base[1] + dy, base[2] + dx, base[3] + dy]);
@@ -489,7 +504,34 @@ export const TESTS = {
           put(mode === 'end0' ? [p.x, p.y, ...keep] : [...keep, p.x, p.y]);
         }
       });
-      const up = () => { mode = null; b.svg.classList.remove('grabbing'); };
+      // Letting go finishes the cut: the line runs on to both edges of the paper, then the pieces show
+      const finish = () => {
+        const ends = tip && frameEnds([...from, ...tip], 16);
+        if (!ends || Math.hypot(ends[2] - ends[0], ends[3] - ends[1]) < 40) {
+          vis([trail, blade], false);
+          if (line) show(); else hint.setAttribute('visibility', 'visible');
+          return;
+        }
+        const a = [...from, ...tip];
+        if (still) { line = ends; show(); return; }
+        vis([blade], false);
+        const t0 = performance.now();
+        const step = (now) => {
+          const k = Math.min(1, (now - t0) / 200), e = 1 - (1 - k) ** 3;
+          setLine(trail, a.map((v, i) => v + (ends[i] - v) * e));
+          if (k < 1) { anim = requestAnimationFrame(step); return; }
+          anim = 0;
+          line = ends;
+          show();
+          for (const n of [pieceA, pieceB]) { n.classList.remove('fresh'); void n.getBBox(); n.classList.add('fresh'); }
+        };
+        anim = requestAnimationFrame(step);
+      };
+      const up = () => {
+        if (mode === 'draw') finish();
+        mode = null; tip = null;
+        b.svg.classList.remove('grabbing');
+      };
       b.svg.addEventListener('pointerup', up);
       b.svg.addEventListener('pointercancel', up);
       b.svg.tabIndex = 0;
@@ -507,7 +549,7 @@ export const TESTS = {
         const cx = mx - dy * off, cy = my + dx * off;
         put([cx - dx * 100, cy - dy * 100, cx + dx * 100, cy + dy * 100]);
       });
-      return { guess: () => (line ? line.map((v) => Math.round(v * 10) / 10) : null), destroy() {} };
+      return { guess: () => (line ? line.map((v) => Math.round(v * 10) / 10) : null), destroy() { if (anim) cancelAnimationFrame(anim); } };
     },
     reveal(stage, pz, entries) {
       const b = board(stage);

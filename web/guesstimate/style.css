@@ -410,6 +410,10 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .knife { stroke: var(--pc); stroke-width: 2.4; stroke-linecap: round; }
 .knife.done { stroke-width: 1.6; opacity: 0.9; }
 .knife-grip { fill: var(--paper); stroke: var(--pc); stroke-width: 2.2; }
+.knife.trail { stroke-dasharray: none; opacity: 0.95; }
+.knife-tip { fill: var(--pc); stroke: var(--paper); stroke-width: 1.5; }
+.cut-piece.fresh { animation: piece-in 0.28s ease-out; }
+@keyframes piece-in { from { opacity: 0; } to { opacity: 1; } }
 .knife-hit { stroke: transparent; stroke-width: 22; stroke-linecap: round; cursor: move; pointer-events: stroke; }
 .knife-handle { cursor: grab; }
 .knife-hit-dot { fill: transparent; pointer-events: all; }
