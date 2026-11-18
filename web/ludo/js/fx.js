@@ -1,58 +1,55 @@
-// Ludo's dice, sounds and confetti. The die is a CSS 3D cube that tumbles and lands on the number the
-// server rolled; sounds are made on the fly (nothing to download); confetti is one canvas over the page.
+// Ludo's die and sounds. The die is a flat square of pips; sounds are made on the fly (nothing to download).
 
 const reduced = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /* =========================================================
-   The die
+   The die: a flat square with pips. Rolling flicks through a few faces and settles on the number.
    ========================================================= */
 const PIPS = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
-// Which way the cube turns to show each number at the front (opposite faces add up to 7)
-const FACE = { 1: [0, 0], 6: [0, 180], 3: [0, -90], 4: [0, 90], 2: [-90, 0], 5: [90, 0] };
-const SIDES = [['front', 1], ['back', 6], ['right', 3], ['left', 4], ['top', 2], ['bottom', 5]];
 
-export function createDie() {
-  const wrap = document.createElement('div');
-  wrap.className = 'die-wrap';
-  wrap.innerHTML = `<div class="die-shadow"></div><div class="die">${SIDES.map(([side, n]) =>
-    `<div class="face ${side}">${Array.from({ length: 9 }, (_, k) => `<i${PIPS[n].includes(k + 1) ? ' class="pip"' : ''}></i>`).join('')}</div>`).join('')}</div>`;
-  const cube = wrap.querySelector('.die');
-  let ax = -18, ay = 24;   // keep turning the same way: the angles only ever grow
-  let value = 1;
-  const show = (v, animate) => {
-    const [fx, fy] = FACE[v];
-    if (animate) {
-      ax = Math.ceil(ax / 360) * 360 + 720 + fx;
-      ay = Math.ceil(ay / 360) * 360 + 360 * (1 + Math.round(Math.random())) + fy;
-    } else {
-      ax = Math.round(ax / 360) * 360 + fx;
-      ay = Math.round(ay / 360) * 360 + fy;
-    }
-    cube.style.transform = `rotateX(${ax}deg) rotateY(${ay}deg)`;
-  };
-  show(1, false);
+export function createDie(node) {
+  node.classList.add('die');
+  node.innerHTML = Array.from({ length: 9 }, () => '<i></i>').join('');
+  const cells = [...node.children];
+  let value = 0;
+  let timer = 0;
+  const face = (v) => cells.forEach((c, k) => c.classList.toggle('pip', v > 0 && PIPS[v].includes(k + 1)));
+  face(0);
   return {
-    el: wrap,
     get value() { return value; },
-    /** Tumble and land on v; resolves when it has landed. */
-    roll(v, ms = 720) {
+    /** Flick through faces, then land on v; resolves when it has landed. */
+    roll(v, ms = 480) {
+      clearInterval(timer);
       value = v;
-      if (reduced()) { show(v, false); return Promise.resolve(); }
-      wrap.classList.remove('landed');
-      wrap.classList.add('rolling');
-      cube.style.transitionDuration = `${ms}ms`;
-      show(v, true);
+      if (reduced() || ms < 60) { face(v); return Promise.resolve(); }
+      node.classList.add('rolling');
+      let last = 0;
+      timer = setInterval(() => {
+        let f;
+        do f = 1 + Math.floor(Math.random() * 6); while (f === last);
+        last = f;
+        face(f);
+      }, 70);
       return new Promise((resolve) => setTimeout(() => {
-        wrap.classList.remove('rolling');
-        void wrap.offsetWidth;
-        wrap.classList.add('landed');
+        clearInterval(timer);
+        node.classList.remove('rolling');
+        face(v);
         resolve();
       }, ms));
     },
+    /** Show v without rolling (0: blank). */
     set(v) {
+      clearInterval(timer);
+      node.classList.remove('rolling');
       value = v;
-      cube.style.transitionDuration = '0ms';
-      show(v, false);
+      face(v);
+    },
+    /** Waiting for the server's number after pressing Roll. */
+    shake(on) {
+      if (!on) { clearInterval(timer); node.classList.remove('rolling'); face(value); return; }
+      node.classList.add('rolling');
+      clearInterval(timer);
+      timer = setInterval(() => face(1 + Math.floor(Math.random() * 6)), 70);
     },
   };
 }
@@ -142,69 +139,4 @@ export function sound(name, n = 0) {
       break;
     default:
   }
-}
-
-/* =========================================================
-   Confetti
-   ========================================================= */
-let canvas = null;
-let pieces = [];
-let raf = 0;
-
-/** Confetti from (x, y) in page pixels (default: across the top), in these colours. */
-export function confetti(colours, { x = null, y = null, count = 140 } = {}) {
-  if (reduced()) return;
-  if (!canvas) {
-    canvas = document.createElement('canvas');
-    canvas.className = 'confetti';
-    document.body.append(canvas);
-  }
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = innerWidth * dpr;
-  canvas.height = innerHeight * dpr;
-  for (let k = 0; k < count; k++) {
-    const fromTop = x === null;
-    pieces.push({
-      x: fromTop ? Math.random() * innerWidth : x,
-      y: fromTop ? -20 - Math.random() * innerHeight * 0.3 : y,
-      vx: fromTop ? (Math.random() - 0.5) * 2 : (Math.random() - 0.5) * 12,
-      vy: fromTop ? 2 + Math.random() * 3 : -6 - Math.random() * 8,
-      r: Math.random() * Math.PI,
-      vr: (Math.random() - 0.5) * 0.3,
-      w: 6 + Math.random() * 6,
-      h: 3 + Math.random() * 4,
-      c: colours[k % colours.length],
-      life: 0,
-    });
-  }
-  if (!raf) raf = requestAnimationFrame(frame);
-}
-function frame() {
-  const g = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  // The window was resized (a phone turned round): keep the canvas the size of the window
-  if (canvas.width !== Math.round(innerWidth * dpr) || canvas.height !== Math.round(innerHeight * dpr)) {
-    canvas.width = Math.round(innerWidth * dpr);
-    canvas.height = Math.round(innerHeight * dpr);
-  }
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.clearRect(0, 0, innerWidth, innerHeight);
-  pieces = pieces.filter((p) => p.y < innerHeight + 30 && p.life < 360);
-  for (const p of pieces) {
-    p.life++;
-    p.vy += 0.18;
-    p.vx *= 0.99;
-    p.x += p.vx;
-    p.y += p.vy;
-    p.r += p.vr;
-    g.save();
-    g.translate(p.x, p.y);
-    g.rotate(p.r);
-    g.scale(1, Math.cos(p.life / 6));
-    g.fillStyle = p.c;
-    g.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-    g.restore();
-  }
-  raf = pieces.length ? requestAnimationFrame(frame) : 0;
-  if (!raf) g.clearRect(0, 0, innerWidth, innerHeight);
 }

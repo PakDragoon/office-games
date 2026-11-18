@@ -1,7 +1,7 @@
 import * as E from './engine.js';
 import * as cloud from './cloud.js';
 import { createBoard } from './board.js';
-import { createDie, sound, setSound, confetti } from './fx.js';
+import { createDie, sound, setSound } from './fx.js';
 import { createRoomLink, quickPlay } from '../../shared/net.js';
 import { markInvite } from '../../shared/invite.js';
 import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
@@ -17,7 +17,6 @@ import { botTag, botControls, wireBots } from '../../shared/bots.js';
 const $ = (id) => document.getElementById(id);
 const esc = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-const REACTIONS = ['👏', '😮', '😂', '😬', '🔥', '🤝'];
 const NAMES = E.COLOUR_NAMES;
 
 /* ---------- This browser only ---------- */
@@ -78,7 +77,6 @@ function showNotice(title, text) {
 }
 $('notice-ok').addEventListener('click', () => { $('notice').hidden = true; });
 const homeError = (text) => { $('home-error').textContent = text; };
-const cssColour = (c) => getComputedStyle(document.documentElement).getPropertyValue(`--c${c}`).trim() || '#888';
 
 /* =========================================================
    State and the room on the server
@@ -97,6 +95,7 @@ const S = {
   moving: null,       // host: the seated player being moved to another colour
   botWant: null,      // host: a bot was just asked for this colour ({ want, before })
   endArmed: 0,
+  note: '',           // what the last move did ("Sara sent you home"), shown with the next status
 };
 
 const link = createRoomLink('ludo', {
@@ -160,9 +159,6 @@ function onMessage(msg) {
     case 'toast':
       toast(String(msg.text || ''));
       break;
-    case 'react':
-      showReaction(msg.pid, msg.e);
-      break;
     case 'state':
       applyState(msg);
       break;
@@ -200,7 +196,7 @@ function applyState(v) {
 }
 
 /* =========================================================
-   The game screen
+   The game screen: players strip, board, one action row (die, status, Roll)
    ========================================================= */
 const board = createBoard($('board-wrap'), {
   onPick: (c, i) => {
@@ -209,9 +205,8 @@ const board = createBoard($('board-wrap'), {
     board.setLegal([]);
     toHost({ t: 'move', c, i, seq: v.g.seq });
   },
-  sound,
 });
-const die = createDie();
+const die = createDie($('die'));
 
 function renderGame(v) {
   const g = v.g;
@@ -225,10 +220,11 @@ function renderGame(v) {
     S.seen = g.seq;
     S.queue = [];
     S.rolling = false;
-    $('log').innerHTML = '';
+    S.note = '';
     $('result').hidden = true;
     const lastRoll = [...g.events].reverse().find((e) => e.k === 'roll');
-    die.set(g.roll || lastRoll?.v || 1);
+    die.set(g.roll || lastRoll?.v || 0);
+    setDieColour(lastRoll ? lastRoll.c : g.turn);
     renderRulesNow(g.settings);
   } else {
     const fresh = g.events.filter((e) => e.s > S.seen);
@@ -239,8 +235,8 @@ function renderGame(v) {
     } else S.queue.push(...fresh);
     S.seen = g.seq;
   }
-  renderCorners(v);
-  renderSide(v);
+  $('end-btn').hidden = !(S.isHost && v.status === 'play');
+  renderPlayers(v);
   pump();
 }
 
@@ -270,32 +266,30 @@ async function pump() {
 async function playEvent(v, e, speed) {
   if (e.k === 'roll') {
     S.rolling = false;
-    parkDie(e.c);
-    renderStatus(v, `${whoName(v, e.c)} rolled…`);
+    setDieColour(e.c);
+    status(`${whoName(v, e.c)} rolled`);
     sound('rattle');
-    await die.roll(e.v, Math.round(720 * speed));
+    await die.roll(e.v, Math.round(480 * speed));
     sound('land');
-    log(v, e.c, `rolled a <b>${e.v}</b>`);
-    if (e.v === 6) pop(e.c, 'Six!');
+    status(`${whoName(v, e.c)} rolled ${e.v}`);
+    await wait(150 * speed);
   } else if (e.k === 'move') {
     await board.playMove(e);
     if (e.cap.length) {
-      log(v, e.c, `captured ${e.cap.map((x) => colourName(v, x.c)).join(' and ')}`);
-      for (const x of e.cap) board.label(x.c, 'Back home!', 'hit');
+      sound('capture');
+      S.note = `${whoName(v, e.by)} sent ${e.cap.map((x) => colourName(v, x.c)).join(' and ')} home`;
+    } else if (e.home) {
+      sound('home');
+      S.note = `${whoName(v, e.by)} got a token home`;
     }
-    if (e.home) log(v, e.c, 'got a token home');
   } else if (e.k === 'pass') {
     sound('nope');
-    board.label(e.c, e.why === 'sixes' ? 'Three 6s!' : 'No move', 'nope');
-    log(v, e.c, e.why === 'sixes' ? 'rolled three 6s: turn over' : 'had no move');
-    await wait(500 * speed);
+    status(e.why === 'sixes' ? 'Three 6s in a row: turn over' : `${whoName(v, e.c)}: no move`);
+    await wait(650 * speed);
   } else if (e.k === 'done') {
-    const place = e.place === 1 ? '1st' : e.place === 2 ? '2nd' : e.place === 3 ? '3rd' : `${e.place}th`;
-    confetti([cssColour(e.c), '#ffffff', cssColour(e.c)], { count: 90 });
     sound('home');
-    toast(`${colourName(v, e.c)} has every token home: ${place}!`);
-    log(v, e.c, `is home, <b>${place}</b>`);
-    await wait(400 * speed);
+    const place = ['1st', '2nd', '3rd', '4th'][e.place - 1] || `${e.place}th`;
+    S.note = `${whoName(v, e.c)} finished ${place}`;
   }
 }
 
@@ -304,68 +298,69 @@ const colourName = (v, c) => {
   return p ? (p.id === S.myId ? 'you' : p.name) : NAMES[c];
 };
 const whoName = (v, c) => (v.seats[c] === S.myId ? 'You' : nameAt(v, c));
+const status = (text) => { $('status').textContent = text; };
+function setDieColour(c) {
+  $('die').style.setProperty('--pc', c >= 0 ? `var(--c${c})` : 'var(--line)');
+}
 
-/** Caught up: the real positions, whose turn it is, and what this player may do. */
+/** Caught up: the real positions, whose turn it is, and what this player may do now. */
 function settle(v) {
   const g = v.g;
   board.snap(g.tokens);
-  board.setTurn(g.phase === 'over' ? -1 : g.turn);
-  renderCorners(v);
-  const mine = v.seats[g.turn] === S.myId && v.status === 'play';
+  renderPlayers(v);
   const myself = me(v);
+  const mine = v.seats[g.turn] === S.myId && v.status === 'play';
   $('back-btn').hidden = !(myself && myself.autoplay && v.status === 'play');
   $('roll-btn').hidden = true;
   board.setLegal([]);
+  $('bar-phase').textContent = v.status === 'over' ? 'Game over' : myself?.seat >= 0 && g.colours.includes(myself.seat) ? `You are ${NAMES[myself.seat]}` : 'Watching';
   if (v.status === 'over') {
-    renderStatus(v, '');
+    status('');
     renderResult(v);
     return;
   }
   $('result').hidden = true;
+  const note = S.note ? `${S.note}. ` : '';
   if (g.phase === 'roll') {
-    parkDie(g.turn);
+    setDieColour(g.turn);
     if (mine) {
       $('roll-btn').hidden = false;
       $('roll-btn').disabled = S.rolling;
-      $('roll-btn').style.setProperty('--pc', `var(--c${g.turn})`);
-      renderStatus(v, g.sixes ? `Another roll! (${g.sixes} six${g.sixes > 1 ? 'es' : ''} in a row)` : 'Your turn: roll the die!');
+      status(`${note}${g.sixes ? 'Roll again' : 'Your turn'}`);
       const key = `${v.game}:${g.seq}`;
       if (S.turnSoundFor !== key) {
         S.turnSoundFor = key;
         sound('turn');
-        if (document.activeElement === document.body || !document.activeElement) $('roll-btn').focus({ preventScroll: true });
+        if (!document.activeElement || document.activeElement === document.body) $('roll-btn').focus({ preventScroll: true });
       }
-    } else renderStatus(v, `${nameAt(v, g.turn)}${forPartner(g)} is rolling…`);
+    } else status(`${note}${nameAt(v, g.turn)}${forPartner(g)} to roll`);
   } else if (g.phase === 'move') {
     if (mine) {
       board.setLegal(g.legal);
-      const n = E.distinctMoves(g.legal).length;
-      renderStatus(v, n === 1 ? `You rolled ${g.roll}. Moving your only choice…` : `You rolled ${g.roll}. Pick a token to move.`);
-    } else renderStatus(v, `${nameAt(v, g.turn)}${forPartner(g)} rolled ${g.roll} and is choosing…`);
-  } else if (g.phase === 'pass') renderStatus(v, g.passWhy === 'sixes' ? 'Three 6s in a row: the turn moves on' : `${whoName(v, g.turn)} can’t move this time`);
+      status(E.distinctMoves(g.legal).length === 1 ? `You rolled ${g.roll}` : `You rolled ${g.roll}: pick a token`);
+    } else status(`${nameAt(v, g.turn)}${forPartner(g)} rolled ${g.roll}`);
+  }
+  S.note = '';
 }
 const forPartner = (g) => {
   const ctl = E.controls(g, g.turn);
   return ctl.length && ctl[0] !== g.turn ? ` (for ${NAMES[ctl[0]]})` : '';
 };
 
-function renderStatus(v, text) {
-  $('status').textContent = text;
-  $('bar-phase').textContent = v.status === 'over' ? 'Game over' : me(v)?.seat >= 0 ? `You are ${NAMES[me(v).seat]}` : 'Watching';
-}
-
 $('roll-btn').addEventListener('click', roll);
+$('die').addEventListener('click', roll);
 function roll() {
   const v = S.view;
   if (!v?.g || v.status !== 'play' || v.g.phase !== 'roll' || v.seats[v.g.turn] !== S.myId || S.busy || S.rolling) return;
   S.rolling = true;
   $('roll-btn').disabled = true;
-  die.el.classList.add('shaking');
-  sound('rattle');
+  die.shake(true);
   toHost({ t: 'roll', seq: v.g.seq });
   setTimeout(() => {
-    die.el.classList.remove('shaking');
-    if (S.rolling) { S.rolling = false; if (S.view) settle(S.view); }
+    if (!S.rolling) return;
+    S.rolling = false;
+    die.shake(false);
+    if (S.view) settle(S.view);
   }, 2500);
 }
 document.addEventListener('keydown', (e) => {
@@ -380,145 +375,64 @@ document.addEventListener('keydown', (e) => {
   }
   // 1 … 4 moves that token (yours, or your partner's in teams)
   if (/^[1-4]$/.test(e.key) && v.g.phase === 'move' && v.seats[v.g.turn] === S.myId && !S.busy) {
-    const i = Number(e.key) - 1;
-    const m = v.g.legal.find((x) => x.i === i);
+    const m = v.g.legal.find((x) => x.i === Number(e.key) - 1);
     if (m) { board.setLegal([]); toHost({ t: 'move', c: m.c, i: m.i, seq: v.g.seq }); }
   }
 });
 $('back-btn').addEventListener('click', () => { toHost({ t: 'back' }); $('back-btn').hidden = true; });
 
-/* ---------- The four corner cards ---------- */
-function parkDie(c) {
-  if (!S.view) return;
-  const k = board.corner(c);
-  const slot = $(`corner-${k}`).querySelector('.die-slot');
-  if (slot && die.el.parentElement !== slot) {
-    slot.append(die.el);
-    die.el.classList.remove('arrive');
-    void die.el.offsetWidth;
-    die.el.classList.add('arrive');
-  }
-}
-
-function renderCorners(v) {
+/* ---------- Players strip ---------- */
+function renderPlayers(v) {
   const g = v.g;
-  for (let k = 0; k < 4; k++) {
-    const host = $(`corner-${k}`);
-    const c = [0, 1, 2, 3].find((x) => board.corner(x) === k);
+  $('players').innerHTML = g.colours.map((c) => {
     const p = playerAt(v, c);
-    const playing = g.colours.includes(c);
-    if (!playing) {
-      host.innerHTML = '';
-      host.className = `corner k${k} empty`;
-      continue;
-    }
     const home = g.tokens[c].filter((x) => x === E.HOME).length;
     const turn = g.turn === c && v.status === 'play';
-    const team = g.settings.teams ? `<span class="team-tag">Team ${c % 2 ? `${NAMES[1]} & ${NAMES[3]}` : `${NAMES[0]} & ${NAMES[2]}`}</span>` : '';
-    const sub = !p ? 'Left' : p.autoplay ? 'Computer playing' : !active(p) ? 'Away' : g.done.includes(c) ? `Home: ${['1st', '2nd', '3rd', '4th'][g.done.indexOf(c)]}` : team || (p.bot ? 'Computer' : '');
-    const keepDie = die.el.parentElement && host.contains(die.el);
-    if (keepDie) die.el.remove();
-    host.className = `corner k${k} c${c}${turn ? ' turn' : ''}${p?.id === S.myId ? ' me' : ''}${g.done.includes(c) ? ' done' : ''}`;
-    host.style.setProperty('--pc', `var(--c${c})`);
-    host.innerHTML = `
-      <div class="card">
-        <div class="pawn" aria-hidden="true"><i></i></div>
-        <div class="who"><b>${esc(p ? p.name : NAMES[c])}${p?.id === S.myId ? ' <span class="you">you</span>' : ''}${botTag(p)}</b>
-          <span class="line"><span class="homes" title="${home} of ${g.tokens[c].length} home">${g.tokens[c].map((x) => `<i class="${x === E.HOME ? 'in' : x === E.BASE ? 'yard' : 'out'}"></i>`).join('')}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ''}</span></div>
-        <div class="die-slot"></div>
-        <svg class="ring" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><rect x="1.5" y="1.5" width="97" height="97" rx="14" pathLength="100"/></svg>
-      </div>`;
-    if (keepDie) host.querySelector('.die-slot').append(die.el);
-  }
-  // The timer for whoever's turn it is
+    const done = g.done.indexOf(c);
+    const sub = done >= 0 ? ['1st', '2nd', '3rd', '4th'][done]
+      : !p ? 'left' : p.autoplay ? 'auto' : !active(p) ? 'away' : `${home}/${g.tokens[c].length}`;
+    const team = g.settings.teams ? ` <span class="muted">· ${c % 2 ? 'Team 2' : 'Team 1'}</span>` : '';
+    return `<li class="${turn ? 'turn' : ''}${p?.id === S.myId ? ' me' : ''}" style="--pc: var(--c${c})">
+      <span class="dot"></span><span class="nm">${esc(p ? p.name : NAMES[c])}${team}</span><span class="sub">${esc(sub)}</span><i class="bar"></i></li>`;
+  }).join('');
   const left = v.turnLeft ?? v.idleLeft;
   S.endMs = v.turnLeft != null ? v.turnMs : v.idleLeft != null ? 60000 : 0;
   S.endAt = left != null && v.status === 'play' ? performance.now() + left : 0;
 }
 
 setInterval(() => {
-  const v = S.view;
-  if (!v?.g || $('game').hidden) return;
-  const card = document.querySelector('.corner.turn .ring rect');
-  if (!card) return;
-  if (!S.endAt || !S.endMs) { card.style.strokeDashoffset = '100'; return; }
+  const bar = document.querySelector('.players li.turn .bar');
+  if (!bar || $('game').hidden) return;
+  if (!S.endAt || !S.endMs) { bar.style.transform = 'scaleX(0)'; return; }
   const left = Math.max(0, S.endAt - performance.now());
-  const frac = left / S.endMs;
-  card.style.strokeDasharray = '100';
-  card.style.strokeDashoffset = String(100 - Math.min(1, frac) * 100);
-  document.querySelector('.corner.turn')?.classList.toggle('urgent', left < 5000 && v.turnLeft != null);
-}, 120);
-
-/* ---------- Floating labels, reactions, log ---------- */
-function pop(c, text) {
-  const k = board.corner(c);
-  const host = $(`corner-${k}`);
-  const n = document.createElement('span');
-  n.className = 'pop';
-  n.textContent = text;
-  host.append(n);
-  setTimeout(() => n.remove(), 1200);
-}
-
-function showReaction(pid, emoji) {
-  const v = S.view;
-  if (!v || !REACTIONS.includes(emoji)) return;
-  const p = v.players.find((x) => x.id === pid);
-  let host = $('reacts');
-  if (v.g && p && p.seat >= 0 && v.g.colours.includes(p.seat)) host = $(`corner-${board.corner(p.seat)}`);
-  const n = document.createElement('span');
-  n.className = 'float-react';
-  n.textContent = emoji;
-  n.style.left = `${30 + Math.random() * 40}%`;
-  host.append(n);
-  setTimeout(() => n.remove(), 1800);
-}
-$('reacts').innerHTML = REACTIONS.map((e) => `<button type="button" data-react="${e}" aria-label="React ${e}">${e}</button>`).join('');
-$('reacts').addEventListener('click', (e) => {
-  const b = e.target.closest('[data-react]');
-  if (b) toHost({ t: 'react', e: b.dataset.react });
-});
-
-function log(v, c, html) {
-  const li = document.createElement('li');
-  li.style.setProperty('--pc', `var(--c${c})`);
-  li.innerHTML = `<span class="dot"></span><span><b>${esc(colourName(v, c) === 'you' ? 'You' : colourName(v, c))}</b> ${html}</span>`;
-  $('log').prepend(li);
-  while ($('log').children.length > 30) $('log').lastChild.remove();
-}
-
-function renderSide(v) {
-  $('who-list').innerHTML = [...v.players].sort((a, b) => b.wins - a.wins).map((p) => {
-    const colour = p.seat >= 0 ? `style="--pc: var(--c${p.seat})"` : '';
-    const st = !active(p) ? 'Away' : p.seat < 0 || !p.inGame ? 'Watching' : `${p.wins} win${p.wins === 1 ? '' : 's'}`;
-    return `<li class="${active(p) ? '' : 'off'}" ${colour}><span class="dot"></span>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${botTag(p)}<span class="st">${esc(st)}</span></li>`;
-  }).join('');
-  $('end-btn').hidden = !(S.isHost && v.status === 'play');
-}
+  bar.style.transform = `scaleX(${Math.min(1, left / S.endMs)})`;
+  bar.classList.toggle('low', left < 5000 && S.view?.turnLeft != null);
+}, 100);
 
 function renderRulesNow(s) {
   const items = [
     `${s.tokens} tokens each`,
-    s.leave === 'six' ? 'Out on a 6' : 'Out on a 1 or 6',
+    s.leave === 'six' ? 'Out of the yard on a 6' : 'Out of the yard on a 1 or 6',
     s.timer ? `${s.timer} s a turn` : 'No turn timer',
-    s.teams ? '2 vs 2' : s.end === 'all' ? 'Play for every place' : 'First home wins',
-    s.safe === 'stars' ? 'Stars and starts safe' : s.safe === 'starts' ? 'Start squares safe' : 'Nowhere safe',
+    s.teams ? '2 vs 2' : s.end === 'all' ? 'Play on for every place' : 'First one home wins',
+    s.safe === 'stars' ? 'Start squares and grey squares are safe' : s.safe === 'starts' ? 'Only start squares are safe' : 'Nowhere is safe',
   ];
-  const extra = [s.bonusSix && '6', s.bonusCapture && 'capture', s.bonusHome && 'home'].filter(Boolean);
-  items.push(extra.length ? `Roll again: ${extra.join(', ')}` : 'No extra rolls');
-  if (s.blocks) items.push('Blocks');
-  if (s.mustCapture) items.push('Capture before home');
-  if (!s.exact) items.push('No exact roll needed');
-  if (s.threeSixes === 'allow') items.push('Three 6s allowed');
+  const extra = [s.bonusSix && 'a 6', s.bonusCapture && 'a capture', s.bonusHome && 'getting home'].filter(Boolean);
+  items.push(extra.length ? `Roll again after ${extra.join(', ')}` : 'No extra rolls');
+  if (s.threeSixes === 'lose') items.push('Three 6s in a row end the turn');
+  if (s.blocks) items.push('Blocks: two of a colour can’t be passed');
+  if (s.mustCapture) items.push('Capture someone before going home');
+  items.push(s.exact ? 'Exact roll to get home' : 'No exact roll needed');
   $('rules-now').innerHTML = items.map((t) => `<li>${esc(t)}</li>`).join('');
+  $('rules-room').hidden = false;
 }
 
 $('end-btn').addEventListener('click', () => {
   if (!S.isHost) return;
   if (Date.now() - S.endArmed < 4000) { toHost({ t: 'lobby' }); return; }
   S.endArmed = Date.now();
-  $('end-btn').textContent = 'Tap again to end the game';
-  setTimeout(() => { $('end-btn').textContent = 'End game for everyone'; }, 4000);
+  $('end-btn').textContent = 'Tap again to end';
+  setTimeout(() => { $('end-btn').textContent = 'End game'; }, 4000);
 });
 
 /* ---------- The result ---------- */
@@ -529,13 +443,12 @@ function renderResult(v) {
   const winners = r.winners;
   const iWon = winners.some((c) => v.seats[c] === S.myId);
   $('result-title').textContent = !winners.length ? 'Game over'
-    : iWon ? (g.settings.teams ? 'Your team wins!' : 'You win!')
-      : g.settings.teams ? `${winners.map((c) => r.names[c]).join(' & ')} win!` : `${r.names[winners[0]]} wins!`;
+    : iWon ? (g.settings.teams ? 'Your team wins' : 'You win')
+      : `${winners.map((c) => r.names[c]).join(' & ')} win${winners.length > 1 ? '' : 's'}`;
   $('podium').innerHTML = r.order.map((c) => {
     const st = g.stats[c];
-    const place = r.places[c];
-    return `<li style="--pc: var(--c${c})"><span class="place">${place}</span><span class="pawn sm"><i></i></span><b>${esc(r.names[c])}</b>
-      <span class="facts">${g.tokens[c].filter((x) => x === E.HOME).length}/${g.tokens[c].length} home · ${st.captures} captured · ${st.sixes} sixes</span></li>`;
+    return `<li style="--pc: var(--c${c})"><span class="place">${r.places[c]}</span><span class="dot"></span><b>${esc(r.names[c])}</b>
+      <span class="facts">${g.tokens[c].filter((x) => x === E.HOME).length}/${g.tokens[c].length} home · ${st.captures} sent back</span></li>`;
   }).join('');
   $('again-btn').hidden = !S.isHost;
   $('to-lobby').hidden = !S.isHost;
@@ -544,10 +457,7 @@ function renderResult(v) {
   $('result').hidden = false;
   if (S.celebrated !== v.game) {
     S.celebrated = v.game;
-    if (winners.length) {
-      sound(iWon ? 'win' : 'home');
-      confetti(winners.flatMap((c) => [cssColour(c), cssColour(c), '#ffffff']), { count: iWon ? 220 : 120 });
-    }
+    if (winners.length) sound(iWon ? 'win' : 'home');
   }
 }
 $('again-btn').addEventListener('click', () => { if (S.isHost) toHost({ t: 'start' }); });
@@ -615,36 +525,32 @@ function paintRoomSettings() {
   $('house-sum').textContent = houseSummary(ROOM_PREFS);
 }
 
-const SEAT_GRID = [0, 1, 3, 2];   // the seat board in the same places as the yards: top-left, top-right, bottom-left, bottom-right
-
 function renderLobby(v) {
   afterBotAdded(v);
   $('lobby-code').textContent = v.code;
   const mine = me(v);
   if (S.moving && !v.players.some((p) => p.id === S.moving)) S.moving = null;
-  $('seat-board').innerHTML = SEAT_GRID.map((c) => {
+  $('seat-board').innerHTML = [0, 1, 2, 3].map((c) => {
     const p = playerAt(v, c);
-    let body;
+    const ctl = [];
+    let who;
     if (p) {
-      const tags = `${p.isHost ? '<span class="tag">Host</span>' : ''}${!p.bot && !active(p) ? '<span class="tag">Reconnecting</span>' : ''}`;
-      const ctl = [];
+      who = `<b>${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</b>${botTag(p)}${p.isHost ? ' <span class="muted">host</span>' : ''}${!p.bot && !active(p) ? ' <span class="muted">reconnecting</span>' : ''}`;
       if (S.isHost && p.bot) ctl.push(botControls(p));
       if (p.id === S.myId) ctl.push('<button type="button" class="seat-link" data-stand>Stand up</button>');
       if (S.isHost && !S.moving) ctl.push(`<button type="button" class="seat-link" data-move="${p.id}">Move</button>`);
       if (S.isHost && S.moving && S.moving !== p.id) ctl.push(`<button type="button" class="seat-link strong" data-move-to="${c}">Swap here</button>`);
       if (S.isHost && S.moving === p.id) ctl.push('<button type="button" class="seat-link" data-move-cancel>Cancel</button>');
-      body = `<b class="seat-name">${esc(p.name)}${p.id === S.myId ? ' <span class="you">you</span>' : ''}${botTag(p)}</b>${tags}<div class="seat-ctl">${ctl.join('')}</div>`;
     } else {
-      const ctl = [];
-      if (S.isHost && S.moving) ctl.push(`<button type="button" class="btn small primary" data-move-to="${c}">Move here</button>`);
+      who = '<span class="muted">Free</span>';
+      if (S.isHost && S.moving) ctl.push(`<button type="button" class="btn small" data-move-to="${c}">Move here</button>`);
       else {
-        ctl.push(`<button type="button" class="btn small" data-sit="${c}">${mine && mine.seat >= 0 ? 'Move here' : 'Sit here'}</button>`);
-        if (S.isHost) ctl.push(`<button type="button" class="btn small ghost" data-bot-seat="${c}">🤖 Bot</button>`);
+        ctl.push(`<button type="button" class="btn small" data-sit="${c}">${mine && mine.seat >= 0 ? 'Move here' : 'Sit'}</button>`);
+        if (S.isHost) ctl.push(`<button type="button" class="btn small ghost" data-bot-seat="${c}">Add bot</button>`);
       }
-      body = `<span class="seat-empty">${NAMES[c]} is free</span><div class="seat-ctl">${ctl.join('')}</div>`;
     }
-    return `<div class="seat c${c}${p ? '' : ' free'}${p?.id === S.myId ? ' me' : ''}${S.moving && p?.id === S.moving ? ' moving' : ''}" style="--pc: var(--c${c})">
-      <div class="seat-head"><span class="pawn"><i></i></span><span class="seat-colour">${NAMES[c]}</span></div>${body}</div>`;
+    return `<div class="seat${p ? '' : ' free'}${p?.id === S.myId ? ' me' : ''}${S.moving && p?.id === S.moving ? ' moving' : ''}" style="--pc: var(--c${c})">
+      <span class="dot"></span><span class="seat-colour">${NAMES[c]}</span><span class="seat-who">${who}</span><span class="seat-ctl">${ctl.join('')}</span></div>`;
   }).join('');
   const watchers = v.players.filter((p) => p.seat < 0);
   $('watchers').innerHTML = watchers.length ? `<li class="muted">Watching: ${watchers.map((p) => esc(p.name) + (p.id === S.myId ? ' (you)' : '')).join(', ')}</li>` : '';

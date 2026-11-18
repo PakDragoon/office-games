@@ -246,28 +246,12 @@
       <a class="game" href="/ludo/">
         <div class="art ld" aria-hidden="true">
           <style>
-            .ld svg { width: 132px; height: auto; overflow: visible; }
-            .ld .fr { fill: #1d2140; }
+            .ld svg { width: 104px; height: auto; }
             .ld .y0 { fill: #e5484d; } .ld .y1 { fill: #1f9d63; } .ld .y2 { fill: #eeac17; } .ld .y3 { fill: #3a78ee; }
-            .ld .tr { fill: #fff; opacity: 0.9; }
-            .ld .sq { fill: #fff; opacity: 0.18; }
-            .ld .pawn { fill: #fff; stroke: #e5484d; stroke-width: 4; }
-            .ld .sh { fill: rgba(0, 0, 0, 0.3); }
-            .ld .hop { animation: ld-hop 2.8s cubic-bezier(.45, .05, .55, .95) infinite; }
-            .ld .die { animation: ld-die 2.8s cubic-bezier(.3, .7, .3, 1) infinite; transform-box: fill-box; transform-origin: center; }
-            .ld .die rect { fill: #fff; stroke: #1b1e3a; stroke-width: 1.6; } .ld .die circle { fill: #1b1e3a; }
-            @keyframes ld-hop { 0%, 100% { transform: translate(0, 0); } 12% { transform: translate(9px, -12px); } 24% { transform: translate(18px, 0); } 36% { transform: translate(27px, -12px); } 48% { transform: translate(36px, 0); } 70% { transform: translate(36px, 0); } 85% { transform: translate(0, -6px); } }
-            @keyframes ld-die { 0%, 60%, 100% { transform: rotate(0); } 70% { transform: rotate(180deg) scale(1.1); } 80% { transform: rotate(360deg); } }
-            @media (prefers-reduced-motion: reduce) { .ld .hop, .ld .die { animation: none; } }
           </style>
-          <svg viewBox="0 0 120 120">
-            <rect class="fr" x="2" y="2" width="116" height="116" rx="20"/>
-            <rect class="y0" x="10" y="10" width="42" height="42" rx="11"/><rect class="y1" x="68" y="10" width="42" height="42" rx="11"/>
-            <rect class="y2" x="68" y="68" width="42" height="42" rx="11"/><rect class="y3" x="10" y="68" width="42" height="42" rx="11"/>
-            <rect class="sq" x="10" y="54" width="8" height="12" rx="2"/><rect class="sq" x="20" y="54" width="8" height="12" rx="2"/><rect class="sq" x="30" y="54" width="8" height="12" rx="2"/><rect class="sq" x="40" y="54" width="8" height="12" rx="2"/>
-            <path class="y0" d="M52 52 L60 60 L52 68Z"/><path class="y1" d="M52 52 L68 52 L60 60Z"/><path class="y2" d="M68 52 L68 68 L60 60Z"/><path class="y3" d="M52 68 L60 60 L68 68Z"/>
-            <g class="hop"><ellipse class="sh" cx="14" cy="64" rx="5" ry="2"/><circle class="pawn" cx="14" cy="57" r="5.5"/></g>
-            <g class="die"><rect x="76" y="76" width="26" height="26" rx="6"/><circle cx="82.5" cy="82.5" r="2.400"/><circle cx="95.5" cy="82.5" r="2.400"/><circle cx="89" cy="89" r="2.400"/><circle cx="82.5" cy="95.5" r="2.400"/><circle cx="95.5" cy="95.5" r="2.400"/></g>
+          <svg viewBox="0 0 100 100">
+            <rect class="y0" x="0" y="0" width="46" height="46" rx="8"/><rect class="y1" x="54" y="0" width="46" height="46" rx="8"/>
+            <rect class="y3" x="0" y="54" width="46" height="46" rx="8"/><rect class="y2" x="54" y="54" width="46" height="46" rx="8"/>
           </svg>
         </div>
         <div class="body">
