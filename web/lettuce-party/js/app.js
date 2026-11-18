@@ -582,13 +582,15 @@ function drawHot() {
       if (S.guesses.some((g) => g.word === word)) { shakeRow(0); return toast('Already guessed'); }
       S.pending = true;
       input.value = '';
-      send({ t: 'guess', word });
+      if (S.daily) dailyGuess(word);
+      else send({ t: 'guess', word });
     });
     // A hint doesn't hold up typing: the server answers with the hint word or a reason
     board.querySelector('.hot-hint').addEventListener('click', (e) => {
       if (!canType()) return;
       e.currentTarget.disabled = true;
-      send({ t: 'hint' });
+      if (S.daily) dailyGuess(null);
+      else send({ t: 'hint' });
     });
   }
   const input = $('hot-input');
@@ -1208,7 +1210,12 @@ function showResults(v) {
   if (daily) {
     const m = me();
     const n = m.used;
-    if (ladder) {
+    if (hot) {
+      const h = m.hints;
+      $('results-title').textContent = m.solved ? `Found it in ${n} word${n === 1 ? '' : 's'}${h ? ` and ${h} hint${h === 1 ? '' : 's'}` : ''}!` : 'Not found this time';
+      $('results-round-label').textContent = `Hot & Cold daily #${E.dayNumber(DAILY.day)}. The word was`;
+      $('results-rule').textContent = `Ranked by fewest words (a hint counts as ${E.DAILY_HINT_COST}), then time. Gave up: by your closest word. A new word at midnight UTC.`;
+    } else if (ladder) {
       $('results-title').textContent = m.solved ? `Reached it in ${n} step${n === 1 ? '' : 's'}!` : 'You didn’t reach it this time';
       $('results-round-label').textContent = `Word ladder daily #${E.dayNumber(DAILY.day)}. The target was`;
       $('results-rule').textContent = `Par ${v.ladder?.par}. Ranked by fewest steps, then time. A new ladder at midnight UTC.`;
@@ -1374,7 +1381,8 @@ async function shareResult() {
   let text;
   if (v.mode === 'hotcold') {
     const typed = (m.rows || []).filter((r) => !r.hint);
-    const head = m.solved ? `found it in ${m.used} word${m.used === 1 ? '' : 's'}${time}` : m.best ? `closest #${fmtRank(m.best)} in ${m.used} word${m.used === 1 ? '' : 's'}` : 'no guesses';
+    const hinted = m.hints ? ` and ${m.hints} hint${m.hints === 1 ? '' : 's'}` : '';
+    const head = m.solved ? `found it in ${m.used} word${m.used === 1 ? '' : 's'}${hinted}${time}` : m.best ? `closest #${fmtRank(m.best)} in ${m.used} word${m.used === 1 ? '' : 's'}${hinted}` : 'no guesses';
     // My closest words as squares, hottest first (the words stay secret)
     const sq = { found: '🟩', burning: '🟥', hot: '🟧', warm: '🟨', cool: '🟦', cold: '⬜' };
     const line = typed.slice(0, 10).map((r) => sq[E.temperature(r.rank)]).join('');
@@ -1441,9 +1449,13 @@ function readDailySaves() {
 function saveDaily(d) {
   const all = readDailySaves();
   const today = Object.fromEntries(Object.entries(all).filter(([, v]) => v.day === d.day));
-  today[d.mode] = { day: d.day, started: Boolean(d.started), done: Boolean(d.done), solved: Boolean(d.solved), used: d.guesses.length, attempts: d.attempts, ms: d.ms };
+  today[d.mode] = { day: d.day, started: Boolean(d.started), done: Boolean(d.done), solved: Boolean(d.solved), used: dailyUsed(d), attempts: d.attempts, ms: d.ms, best: d.best ?? null };
   try { localStorage.setItem('lettuce-daily', JSON.stringify(today)); } catch {}
 }
+
+// Words typed (Hot & Cold: hints don't count), guesses or steps
+const dailyUsed = (d) => (d.mode === 'hotcold' ? (d.hot || []).filter((g) => !g.hint).length : d.guesses.length);
+const dailyRows = (d) => (d.mode === 'hotcold' ? d.hot || [] : d.guesses);
 
 function renderDailyCard() {
   const day = E.utcDay();
@@ -1451,9 +1463,12 @@ function renderDailyCard() {
   const saves = readDailySaves();
   $('daily-modes').innerHTML = E.DAILY_MODES.map((mode) => {
     const s = saves[mode] && saves[mode].day === day ? saves[mode] : null;
-    const ladder = mode === 'ladder';
-    const result = !s || !s.done ? '' : ladder ? (s.solved ? `${s.used} steps` : 'didn’t reach it') : s.solved ? `${s.used}/${s.attempts}` : `X/${s.attempts}`;
-    const note = s && s.done ? `${result} · ${fmtTime(s.ms)} ✓` : s && s.started ? 'Keep going' : ladder ? 'Fewest steps' : `${E.DAILY_ATTEMPTS[mode]} guesses`;
+    const ladder = mode === 'ladder', hot = mode === 'hotcold';
+    const result = !s || !s.done ? ''
+      : ladder ? (s.solved ? `${s.used} steps` : 'didn’t reach it')
+        : hot ? (s.solved ? `${s.used} words` : s.best ? `closest #${fmtRank(s.best)}` : 'gave up')
+          : s.solved ? `${s.used}/${s.attempts}` : `X/${s.attempts}`;
+    const note = s && s.done ? `${result} · ${fmtTime(s.ms)} ✓` : s && s.started ? 'Keep going' : ladder ? 'Fewest steps' : hot ? 'Fewest words' : `${E.DAILY_ATTEMPTS[mode]} guesses`;
     return `<button class="btn${s && s.done ? ' done' : ''}" type="button" data-daily="${mode}"><span>${MODE_NAMES[mode]}</span><small>${note}</small></button>`;
   }).join('');
 }
@@ -1492,16 +1507,18 @@ function dailyView(d) {
   return {
     t: 'state', code: `Daily #${E.dayNumber(d.day)}`, status: done ? 'ended' : 'playing', round: 1, matchRound: 1, maxRounds: 0,
     mode: d.mode, attempts: d.attempts, timer: 0, ladderTime: 0, hotTime: 0, winRule: 'fewest', hard: false, strict: true,
-    ladderReuse: true, elapsed: d.ms, word: d.word, ladder: d.ladder || null, nearest: null, stats: [], history: [], crew: null, crewStatus: '', public: false,
+    ladderReuse: true, hotHints: true, elapsed: d.ms, word: d.word, ladder: d.ladder || null, nearest: d.nearest || null, stats: [], history: [], crew: null, crewStatus: '', public: false,
     players: [{
       id: 'me', name: S.myName, color: 0, isHost: false, connected: true, photo: '',
-      used: d.guesses.length,
+      used: dailyUsed(d),
       patterns: d.mode === 'classic' ? d.guesses.map((g) => g.pattern) : [],
       counts: d.mode === 'counts' ? d.guesses.map((g) => g.counts) : [],
       rows: done && d.mode === 'counts' ? d.guesses.map((g, i) => ({ word: g.word, pattern: d.patterns[i] }))
-        : done && d.mode === 'ladder' ? d.guesses.map((g) => ({ word: g.word })) : null,
+        : done && d.mode === 'ladder' ? d.guesses.map((g) => ({ word: g.word }))
+          : done && d.mode === 'hotcold' ? [...(d.hot || [])].sort((a, b) => a.rank - b.rank) : null,
       match: d.mode === 'ladder' && d.ladder && d.guesses.length ? E.matchCount(d.guesses[d.guesses.length - 1].word, d.ladder.target) : null,
-      best: null, hints: 0,
+      best: d.mode === 'hotcold' ? d.best ?? null : null,
+      hints: d.mode === 'hotcold' ? (d.hot || []).filter((g) => g.hint).length : 0,
       solved: Boolean(d.solved), done, finishMs: done ? d.ms : null, timedOut: false, stopped: Boolean(d.gaveUp),
     }],
   };
@@ -1511,14 +1528,15 @@ function dailyShow(d, redraw) {
   DAILY.data = d;
   saveDaily(d);
   applyState(dailyView(d));
-  if (redraw) onMessage({ t: 'board', round: 1, mode: d.mode, attempts: d.attempts, guesses: d.guesses });
+  if (redraw) onMessage({ t: 'board', round: 1, mode: d.mode, attempts: d.attempts, guesses: dailyRows(d) });
 }
 
+// A word, or (word null) a Hot & Cold hint
 async function dailyGuess(word) {
   const token = DAILY.token;
   const mode = S.daily;
   try {
-    const d = await dailyApi(mode, 'guess', { word });
+    const d = word === null ? await dailyApi(mode, 'hint') : await dailyApi(mode, 'guess', { word });
     if (token !== DAILY.token) return;
     if (d.error) {
       onMessage({ t: 'invalid', reason: d.error === 'busy' ? 'One at a time' : d.error });
@@ -1526,7 +1544,7 @@ async function dailyGuess(word) {
     }
     if (d.last) onMessage({ t: 'result', round: 1, ...d.last });
     else S.pending = false;
-    if (d.done) cloud.track('daily_finished', { mode, solved: d.solved, guesses: d.guesses.length });
+    if (d.done) cloud.track('daily_finished', { mode, solved: d.solved, guesses: dailyUsed(d) });
     // Let the last row's tiles flip before the results open
     setTimeout(() => { if (token === DAILY.token) dailyShow(d, false); }, d.done && !reduceMotion ? (mode === 'counts' ? 700 : COLS * 250 + 450) : 0);
   } catch (err) {

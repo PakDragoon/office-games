@@ -43,6 +43,7 @@ export const DAILIES: Record<string, DailyGame> = {
   'lettuce-party:classic': lettuceDaily('classic') as DailyGame,
   'lettuce-party:counts': lettuceDaily('counts') as DailyGame,
   'lettuce-party:ladder': lettuceDaily('ladder') as DailyGame,
+  'lettuce-party:hotcold': lettuceDaily('hotcold') as DailyGame,
 };
 
 /** The player_stats rows a daily writes: [game, played counter, best score] (BEST_STATS must list `<game>:<best>`). */

@@ -198,7 +198,9 @@ export function hotOrder(players) {
 
 export const DAILY_ONE = '2026-11-18';
 /** Guesses allowed in the daily: Counts tells you less, so it gets more. The ladder has no limit but a cap on steps. */
-export const DAILY_ATTEMPTS = { classic: 6, counts: 8, ladder: 60 };
+export const DAILY_ATTEMPTS = { classic: 6, counts: 8, ladder: 60, hotcold: HOT.maxGuesses };
+/** Hot & Cold daily: each hint counts as this many words in the ranking. */
+export const DAILY_HINT_COST = 5;
 export const DAILY_MODES = Object.keys(DAILY_ATTEMPTS);
 
 export function dayNumber(day) {
@@ -241,6 +243,14 @@ const SLOT = 1e7;
 export function dailyScore(solved, used, attempts, ms) {
   const time = Math.min(SLOT - 1, Math.max(0, Math.round(ms)));
   return (solved ? used : attempts + 1) * SLOT + time;
+}
+/**
+ * Hot & Cold's daily score, lower is better: found it first, by words used (each hint counts as
+ * DAILY_HINT_COST), then time; not found (given up) ranks below every find, by the closest word.
+ */
+export function hotDailyScore(solved, used, hints, ms, best) {
+  if (solved) return dailyScore(true, used + hints * DAILY_HINT_COST, HOT.maxGuesses, ms);
+  return (HOT.maxGuesses + HOT.maxHints * DAILY_HINT_COST + 1) * SLOT + Math.min(SLOT - 1, best ?? SLOT - 1);
 }
 export function dailyParts(score) {
   const n = Math.floor(score / SLOT);

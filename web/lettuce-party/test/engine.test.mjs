@@ -269,5 +269,14 @@ test('daily ladder: a real pair from the file, picked by the seed', () => {
   ok(seen.size > 30, 'ladders vary by day');
 });
 
+test('Hot & Cold daily score: words then time, a hint costs 5 words, giving up ranks by closest below every find', () => {
+  eq(E.dailyParts(E.hotDailyScore(true, 12, 0, 5000)).n, 12);
+  eq(E.dailyParts(E.hotDailyScore(true, 12, 2, 5000)).n, 12 + 2 * E.DAILY_HINT_COST);
+  ok(E.hotDailyScore(true, 9, 0, 900000) < E.hotDailyScore(true, 10, 0, 1000), 'fewer words beats faster');
+  ok(E.hotDailyScore(true, E.HOT.maxGuesses, E.HOT.maxHints, 9e6) < E.hotDailyScore(false, 1, 0, 1, 2), 'any find beats giving up');
+  ok(E.hotDailyScore(false, 50, 0, 1, 7) < E.hotDailyScore(false, 3, 0, 1, 40), 'given up: closer ranks higher');
+  ok(E.hotDailyScore(false, 3, 0, 1, 40) < E.hotDailyScore(false, 0, 0, 1, null), 'no guess at all ranks last');
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

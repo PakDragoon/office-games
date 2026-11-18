@@ -21,7 +21,7 @@ const MAX_LADDER_STEPS = 60;
 const COLS = E.COLS;
 type Settings = ReturnType<typeof E.cleanSettings>;
 /** Hot & Cold guesses carry a rank instead of a pattern; a hint's word is marked and never counts as your best. */
-interface Guess { word: string; pattern: string; rank?: number; hint?: boolean }
+export interface Guess { word: string; pattern: string; rank?: number; hint?: boolean }
 interface Ladder { start: string; target: string; par: number; path: string[] }
 
 let WORDS: { answers: string[]; valid: { has(w: string): boolean }; blocked: Set<string> } | null = null;
@@ -44,6 +44,49 @@ export { LADDERS_TEXT };
 let HOT_VEC: ReturnType<typeof H.readVectors> | null = null;
 const hotVec = () => (HOT_VEC ??= H.readVectors(HOT_VECTORS));
 interface HotRound { t: number; target: ReturnType<typeof H.readTarget>; probe: Float64Array }
+
+/** Hot & Cold's data, shared with the daily (server/src/daily/lettuce.ts). */
+export const HOT = {
+  count: (): number => H.targetCount(HOT_TARGETS),
+  round(t: number): HotRound {
+    const target = H.readTarget(HOT_TARGETS, t);
+    return { t, target, probe: H.probe(hotVec(), target.index) };
+  },
+  rank: (hr: HotRound, i: number): number => H.rankOf(hotVec(), hr.target, hr.probe, i),
+  index: (word: string): number => H.indexOfWord(HOT_WORDS, word),
+  wordAt: (i: number): string => H.wordAt(HOT_WORDS, i),
+  nearest: (hr: HotRound): string[] => [...hr.target.near.slice(0, 10)].map((i) => H.wordAt(HOT_WORDS, i)),
+};
+
+/**
+ * A hint: a word about halfway between the best rank so far and the secret word, not already guessed.
+ * 'close' when the player is nearly there (no hint needed), null when none was found.
+ */
+export function findHint(hr: HotRound, guesses: Guess[], random: () => number): { word: string; rank: number } | 'close' | null {
+  const aim = E.hintRank(E.bestRank(guesses));
+  if (aim === null) return 'close';
+  const had = new Set(guesses.map((g) => g.word));
+  let pick: { word: string; rank: number } | null = null;
+  // Close in: exact from the precomputed list
+  for (let r = aim; r <= H.TOP + 1 && !pick; r++) {
+    const w = H.wordAt(HOT_WORDS, hr.target.near[r - 2]);
+    if (!had.has(w)) pick = { word: w, rank: r };
+  }
+  // Further out: try words at random until one sits near the aim (each try is one comparison)
+  if (!pick) {
+    const n = hotVec().count;
+    let bestGap = Infinity;
+    for (let tries = 0; tries < 3000 && bestGap > Math.max(3, aim * 0.12); tries++) {
+      const i = Math.floor(random() * n);
+      if (i === hr.target.index) continue;
+      const w = H.wordAt(HOT_WORDS, i);
+      if (had.has(w)) continue;
+      const r = HOT.rank(hr, i);
+      if (Math.abs(r - aim) < bestGap) { bestGap = Math.abs(r - aim); pick = { word: w, rank: r }; }
+    }
+  }
+  return pick;
+}
 
 export const score: (guess: string, answer: string) => string = E.score;
 
@@ -340,28 +383,8 @@ class LettuceRoom extends SeatRoom<Player, Room> {
     const hr = this.hotRound();
     if (!hr) return;
     if (p.guesses.filter((g) => g.hint).length >= E.HOT.maxHints) return reply({ t: 'invalid', reason: 'No hints left' });
-    const aim = E.hintRank(E.bestRank(p.guesses));
-    if (aim === null) return reply({ t: 'invalid', reason: 'You’re nearly there: no hint needed!' });
-    const had = new Set(p.guesses.map((g) => g.word));
-    let pick: { word: string; rank: number } | null = null;
-    // Close in: exact from the precomputed list
-    for (let r = aim; r <= H.TOP + 1 && !pick; r++) {
-      const w = H.wordAt(HOT_WORDS, hr.target.near[r - 2]);
-      if (!had.has(w)) pick = { word: w, rank: r };
-    }
-    // Further out: try words at random until one sits near the aim (each try is one comparison)
-    if (!pick) {
-      const n = hotVec().count;
-      let bestGap = Infinity;
-      for (let tries = 0; tries < 3000 && bestGap > Math.max(3, aim * 0.12); tries++) {
-        const i = Math.floor(this.ctx.random() * n);
-        if (i === hr.target.index) continue;
-        const w = H.wordAt(HOT_WORDS, i);
-        if (had.has(w)) continue;
-        const r = this.hotRank(i);
-        if (Math.abs(r - aim) < bestGap) { bestGap = Math.abs(r - aim); pick = { word: w, rank: r }; }
-      }
-    }
+    const pick = findHint(hr, p.guesses, () => this.ctx.random());
+    if (pick === 'close') return reply({ t: 'invalid', reason: 'You’re nearly there: no hint needed!' });
     if (!pick) return reply({ t: 'invalid', reason: 'No hint found' });
     p.guesses.push({ word: pick.word, pattern: '', rank: pick.rank, hint: true });
     reply({ t: 'result', round: room.round, word: pick.word, rank: pick.rank, hint: true });

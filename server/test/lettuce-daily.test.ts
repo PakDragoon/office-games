@@ -152,4 +152,50 @@ describe('lettuce party dailies on the server', () => {
     await call(b.token, 'classic', 'next');
     expect((await call(b.token, 'classic', 'giveup')).error).toBe('unknown action');
   });
+
+  it('Hot & Cold: ranks every word, keeps the word and its neighbours secret until found', async () => {
+    const { token, id } = await guest();
+    await call(token, 'hotcold', 'next');
+    const word = await secret(id, 'hotcold');
+    expect((await call(token, 'hotcold', 'guess', { word: 'qzxv' })).error).toBe('I don’t know that word');
+    const probe = word === 'water' ? 'house' : 'water';
+    const d = await call(token, 'hotcold', 'guess', { word: probe });
+    expect(d.last.word).toBe(probe);
+    expect(d.last.rank).toBeGreaterThan(1);
+    expect(d.best).toBe(d.last.rank);
+    expect(d.word).toBeNull();
+    expect(d.nearest).toBeNull();
+    expect(JSON.stringify(d)).not.toContain(`"${word}"`);
+    expect((await call(token, 'hotcold', 'guess', { word: probe })).error).toBe('Already guessed');
+    const won = await call(token, 'hotcold', 'guess', { word });
+    expect(won.solved).toBe(true);
+    expect(won.word).toBe(word);
+    expect(won.nearest).toHaveLength(10);
+    const mine = (await board(token, 'hotcold')).top.find((x: Json) => x.me);
+    expect(E.dailyParts(mine.score).n).toBe(2);
+    expect(mine.detail).toMatch(/^2 words · /);
+  });
+
+  it('Hot & Cold: a hint counts as 5 words; giving up ranks by the closest word, below every find', async () => {
+    const a = await guest();
+    await call(a.token, 'hotcold', 'next');
+    const word = await secret(a.id, 'hotcold');
+    const h = await call(a.token, 'hotcold', 'hint');
+    expect(h.last.hint).toBe(true);
+    expect(h.last.rank).toBeGreaterThan(1);
+    await call(a.token, 'hotcold', 'guess', { word });
+    const found = (await board(a.token, 'hotcold')).top.find((x: Json) => x.me);
+    expect(E.dailyParts(found.score).n).toBe(1 + E.DAILY_HINT_COST);
+    expect(found.detail).toContain('1 hint');
+    const b = await guest();
+    await call(b.token, 'hotcold', 'next');
+    const g = await call(b.token, 'hotcold', 'guess', { word: word === 'water' ? 'house' : 'water' });
+    const gave = await call(b.token, 'hotcold', 'giveup');
+    expect(gave.done).toBe(true);
+    expect(gave.word).toBe(word);
+    const top = (await board(b.token, 'hotcold')).top;
+    const ib = top.findIndex((x: Json) => x.me), ia = top.findIndex((x: Json) => x.score === found.score);
+    expect(ib).toBeGreaterThan(ia);
+    expect(top[ib].detail).toBe(`closest #${g.best.toLocaleString('en-US')}`);
+  });
 });

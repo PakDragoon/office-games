@@ -210,6 +210,7 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'lettuce-party:dailyClassicBest': 'min',
   'lettuce-party:dailyCountsBest': 'min',
   'lettuce-party:dailyLadderBest': 'min',
+  'lettuce-party:dailyHotcoldBest': 'min',
   'forehead:fewestQ': 'min', // fewest questions asked before a right guess (written with `min` in the GameReport)
   'rotten:practiceBest': 'max', // longest practice streak
   'lettuce-party:bestStreak': 'max',
