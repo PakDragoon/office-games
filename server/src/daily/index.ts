@@ -1,6 +1,7 @@
 import type { Env } from '../env';
 import { hmac } from '../auth';
 import { dailyStreakWrites } from '../db/stats';
+import { fastfingersDaily } from './fastfingers';
 import { guesstimateDaily } from './guesstimate';
 import { melonburstDaily } from './melonburst';
 import { rottenDaily } from './rotten';
@@ -31,6 +32,7 @@ export const DAILIES: Record<string, DailyGame> = {
   rotten: rottenDaily as DailyGame,
   guesstimate: guesstimateDaily as DailyGame,
   melonburst: melonburstDaily as DailyGame,
+  'fast-fingers': fastfingersDaily as DailyGame,
 };
 
 export const utcDay = (d = new Date()) => d.toISOString().slice(0, 10);

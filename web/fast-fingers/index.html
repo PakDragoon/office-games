@@ -57,8 +57,11 @@
         <button class="btn" id="join-btn" type="button">Join room</button>
       </section>
       <section class="choice solo-card">
-        <h2>On your own</h2>
-        <p>Paragraph after paragraph, as long as you like. Your best speed is kept in this browser.</p>
+        <div class="solo-head">
+          <h2>On your own</h2>
+          <span class="daily-tag" id="daily-tag"></span>
+        </div>
+        <p id="daily-note">One paragraph for everyone today, one try, global leaderboard. Or practise paragraph after paragraph, as long as you like.</p>
         <div class="seg" id="pr-length" role="group" aria-label="Paragraph length">
           <button type="button" data-value="short"><b>Short</b><small>about 30 words</small></button>
           <button type="button" data-value="medium"><b>Medium</b><small>about 55 words</small></button>
@@ -69,7 +72,10 @@
           <label class="toggle"><input type="checkbox" id="pr-punct"> Punctuation</label>
         </div>
         <p class="best-line" id="best-line"></p>
-        <button class="btn primary" id="practice-btn" type="button">Practice</button>
+        <div class="solo-buttons">
+          <button class="btn primary" id="daily-btn" type="button">Daily paragraph</button>
+          <button class="btn ghost" id="practice-btn" type="button">Practice</button>
+        </div>
       </section>
       <section class="choice steps">
         <h2>How a race goes</h2>

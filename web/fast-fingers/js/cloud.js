@@ -3,6 +3,8 @@
 // A finished practice paragraph is reported to the server too (my own stats only, never a leaderboard).
 import { api } from '../../shared/cloud.js';
 
+export { api };
+
 export {
   getUser, restore, onUser, signIn, signOutUser, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData,
 } from '../../shared/cloud.js';
@@ -13,7 +15,10 @@ export async function getMyStats() {
   const n = (k) => stats[k] || 0;
   let practiceBest = 0;
   try { practiceBest = Math.max(0, ...Object.values(JSON.parse(localStorage.getItem('fastfingers.best')) || {})); } catch { /* nothing saved */ }
-  return { bestWpm: Math.max(n('bestWpm'), practiceBest), games: n('games'), wins: n('wins'), solos: n('solos'), chars: n('chars') };
+  return {
+    bestWpm: Math.max(n('bestWpm'), practiceBest), games: n('games'), wins: n('wins'), solos: n('solos'), chars: n('chars'),
+    dailies: n('dailies'), bestDaily: n('bestDaily'), streak: n('streak'), bestStreak: n('bestStreak'),
+  };
 }
 
 /** Report one finished practice paragraph (characters typed and the time it took). */

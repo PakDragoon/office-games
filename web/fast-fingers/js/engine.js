@@ -109,6 +109,54 @@ export function rank(rows) {
   return rows.slice().sort((a, b) => (b.done - a.done) || (a.done ? a.ms - b.ms : b.pos - a.pos) || (a.err - b.err));
 }
 
+/* ---------- The daily paragraph (run by the server: server/src/daily/fastfingers.ts) ---------- */
+
+// One paragraph for everyone each UTC day, always medium length with capitals and punctuation
+export const DAILY_SETTINGS = { length: 'medium', caps: 'on', punct: 'on' };
+export const DAILY_ONE = '2026-11-18';
+
+export function dayNumber(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  const [y0, m0, d0] = DAILY_ONE.split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y0, m0 - 1, d0)) / 86400000) + 1;
+}
+export const utcDay = (now = new Date()) => now.toISOString().slice(0, 10);
+
+export function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/**
+ * Today's paragraph, from the server's secret seed: whole sentences of one passage, starting at a
+ * sentence the seed picks and going round to the start if needed, until it has about 45 words.
+ * Starting mid-passage means it isn't just the opening of a paragraph you practised.
+ */
+export function dailyText(seed) {
+  const rnd = mulberry32(hashString(`fast-fingers:${seed}`));
+  rnd();
+  const ss = sentences(PASSAGES[Math.floor(rnd() * PASSAGES.length)]);
+  const start = Math.floor(rnd() * ss.length);
+  const out = [];
+  let words = 0;
+  for (let i = 0; i < ss.length && words < TARGET_WORDS.medium; i++) {
+    const s = ss[(start + i) % ss.length];
+    out.push(s);
+    words += wordCount(s);
+  }
+  return out.join(' ');
+}
+
+/**
+ * The daily's leaderboard score, higher is better: a finished run scores its speed to a tenth of a
+ * wpm; a run that ran out of time scores under 1 (the share typed), so it ranks below every finish.
+ */
+export function dailyScore(chars, len, ms, done) {
+  if (!done) return Math.floor((chars / Math.max(1, len)) * 99) / 100;
+  return Math.min(MAX_WPM, Math.round(((chars / 5) / (ms / 60000)) * 10) / 10);
+}
+
 /* ---------- Random numbers, formatting ---------- */
 
 export function mulberry32(seed) {

@@ -10,7 +10,8 @@ import { wirePublic, paintPublic, publicLine } from '../../shared/public.js';
    A typing race: everyone gets the same paragraph at the same moment; first to the end wins.
    One player hosts: their browser is the "server". It picks the paragraph, starts the countdown,
    checks everyone's progress and broadcasts the lanes. Connections use PeerJS (WebRTC).
-   Practice runs the same host code locally, alone.
+   Practice runs the same host code locally, alone. The daily paragraph runs that code too, but the
+   server picks the paragraph and times the run (server/src/daily/fastfingers.ts).
    ========================================================= */
 
 const SOLO_ID = 'me';
@@ -27,6 +28,9 @@ const store = {
   },
   set(key, value) {
     try { localStorage.setItem(`fastfingers.${key}`, JSON.stringify(value)); } catch { /* not saved */ }
+  },
+  remove(key) {
+    try { localStorage.removeItem(`fastfingers.${key}`); } catch { /* nothing to remove */ }
   },
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
@@ -167,15 +171,31 @@ function hostStartGame(samePassage = false) {
   if (!room || room.status === 'play') return;
   room.players = room.players.filter((p) => p.connected);
   for (const p of room.players) p.inGame = true;
-  if (!samePassage || room.passage < 0) room.passage = E.pickPassage(H.rnd, room.used);
-  room.used.add(room.passage);
-  room.text = E.makeText(room.passage, room.settings);
+  if (room.solo !== 'daily') {
+    if (!samePassage || room.passage < 0) room.passage = E.pickPassage(H.rnd, room.used);
+    room.used.add(room.passage);
+    room.text = E.makeText(room.passage, room.settings);
+  }
   room.runs = {};
   room.order = [];
   for (const p of room.players) room.runs[p.id] = { pos: 0, err: 0, done: false, ms: 0, place: 0 };
   Object.assign(room, { status: 'play', game: room.game + 1, results: null, winners: [] });
   cloud.track('game_started', { mode: room.solo || 'room', players: room.players.length, length: room.settings.length });
-  if (room.solo) {
+  if (room.solo === 'daily') {
+    // The server started the clock: count down to it, or pick up a race already running (a refresh)
+    const saved = store.get('dailyRun', null);
+    if (saved && saved.day === DAILY.day) Object.assign(room.runs[SOLO_ID], { pos: Math.min(saved.pos, room.text.length - 1), err: saved.err });
+    if (DAILY.elapsed < 0) {
+      room.phase = 'countdown';
+      room.phaseEnd = Date.now() - DAILY.elapsed;
+      setTimer(-DAILY.elapsed, hostGo);
+    } else {
+      room.phase = 'race';
+      room.raceStart = Date.now() - DAILY.elapsed;
+      room.phaseEnd = room.raceStart + E.limitMs(room.text);
+      setTimer(room.phaseEnd - Date.now(), hostEndRace);
+    }
+  } else if (room.solo) {
     // On your own there's no countdown: the clock starts on the first key
     room.phase = 'race';
     room.phaseEnd = 0;
@@ -213,12 +233,14 @@ function hostProgress(pid, msg) {
   if (!room.solo && !E.plausible(pos, elapsed)) return;      // nobody types that fast
   run.pos = pos;
   run.err = Math.min(9999, Math.max(run.err, err));
+  if (room.solo === 'daily') store.set('dailyRun', { day: DAILY.day, pos: run.pos, err: run.err });
   if (pos >= len) {
     const mine = Number(msg.ms);
     // The player's own clock is used when it agrees with the host's (it's free of network delay)
-    const agrees = Number.isFinite(mine) && mine > 0 && (room.solo || (mine <= elapsed + 250 && mine >= elapsed - 2500));
+    const agrees = Number.isFinite(mine) && mine > 0 && (room.solo === 'practice' || (mine <= elapsed + 250 && mine >= elapsed - 2500));
     run.ms = Math.max(Math.round(agrees ? mine : elapsed), Math.ceil((len / E.MAX_CPS) * 1000));
     run.done = true;
+    if (room.solo === 'daily') dailyFinish(run, mine);
     room.order.push(pid);
     run.place = room.order.length;
     if (!room.solo && run.place === 1) {
@@ -246,6 +268,7 @@ function hostEndRace() {
   const room = H.room;
   if (!room || room.status !== 'play' || room.phase !== 'race') return;
   clearTimeout(H.timer);
+  if (room.solo === 'daily' && !room.runs[SOLO_ID].done) dailyFinish(room.runs[SOLO_ID], 0);
   const elapsed = Date.now() - room.raceStart;
   const len = room.text.length;
   const rows = room.players.filter((p) => room.runs[p.id]).map((p) => {
@@ -286,6 +309,132 @@ function startSolo(samePassage = false) {
 }
 
 const bestKey = (st) => `${st.length}-${st.caps}-${st.punct}`;
+
+/* ---------- The daily paragraph (global, run by the server) ---------- */
+
+// The server picks today's paragraph, starts the clock after the 3-2-1 and times the finish itself.
+// This page runs the race with the same code as practice and reports the finish once.
+const DAILY = { day: E.utcDay(), elapsed: 0, result: null, board: '', token: 0, sending: false };
+const dailyApi = (action, body = {}) =>
+  cloud.api(`/api/fast-fingers/daily/${action}`, { method: 'POST', body: { name: cleanName($('name-input').value) || store.get('name', '') || 'Player', ...body } });
+
+function dailyNote(d) {
+  store.set('daily', { day: d.day, started: Boolean(d.started), done: Boolean(d.done), finished: Boolean(d.finished), wpm: d.wpm || 0, acc: d.acc || 0, pct: d.pct || 0 });
+}
+
+async function startDaily() {
+  const token = ++DAILY.token;
+  $('daily-btn').disabled = true;
+  homeError('');
+  try {
+    let d = await dailyApi('state');
+    if (!d.started && !d.done) { d = await dailyApi('next'); cloud.track('daily_started'); }
+    if (token !== DAILY.token) return;
+    if (d.error && !d.started) throw new Error(d.error);
+    DAILY.day = d.day;
+    dailyNote(d);
+    if (!d.done && d.elapsed >= d.limit) {
+      // Time ran out while this tab was away: hand in what was typed
+      const saved = store.get('dailyRun', null);
+      const pos = saved && saved.day === d.day ? saved.pos : 0;
+      d = await dailyApi('finish', { pos, err: saved && saved.day === d.day ? saved.err : 0 });
+      dailyNote(d);
+    }
+    openDailyRoom(d);
+  } catch (err) {
+    homeError(`Couldn’t open today’s paragraph: ${cloud.errorText(err)}`);
+  } finally {
+    $('daily-btn').disabled = false;
+  }
+}
+
+function openDailyRoom(d) {
+  closeRoom();
+  Object.assign(S, { myId: SOLO_ID, isHost: true, code: '', overSeen: -1, myName: cleanName($('name-input').value) || 'You' });
+  const room = newRoom('', 'daily', E.DAILY_SETTINGS);
+  room.players.push(newPlayer(SOLO_ID, S.myName, true, 0));
+  room.text = d.text;
+  H.room = room;
+  DAILY.board = '';
+  DAILY.result = d.done ? d : null;
+  if (d.done) {
+    // Already played today: straight to the result
+    Object.assign(room, { status: 'over', game: 1, text: d.text, results: [dailyRow(d)], winners: [] });
+    room.runs = { [SOLO_ID]: { pos: d.pos, err: d.err, done: d.finished, ms: d.ms, place: 1 } };
+    hostBroadcast();
+    return;
+  }
+  DAILY.elapsed = d.elapsed;
+  hostStartGame();
+}
+
+const dailyRow = (d) => ({ id: SOLO_ID, pos: d.pos, err: d.err, done: d.finished, ms: d.ms, wpm: d.wpm, acc: d.acc, pct: d.pct });
+
+// Called once when the run ends (finished, or out of time). The server's answer is the result.
+async function dailyFinish(run, mine) {
+  if (DAILY.sending) return;
+  DAILY.sending = true;
+  const token = DAILY.token;
+  try {
+    let d = await dailyApi('finish', { pos: run.pos, err: run.err, ms: Math.round(mine || 0) });
+    // Out of time by this page's clock but not quite yet by the server's: try once more
+    if (d.error === 'not finished') { await new Promise((ok) => setTimeout(ok, 1500)); d = await dailyApi('finish', { pos: run.pos, err: run.err }); }
+    if (token !== DAILY.token) return;
+    if (d.error && !d.done) throw new Error(d.error === 'invalid' ? 'the server didn’t accept that run' : d.error);
+    dailyNote(d);
+    store.remove('dailyRun');
+    DAILY.result = d;
+    cloud.track('daily_finished', { finished: d.finished, wpm: d.wpm });
+    if (H.room && H.room.solo === 'daily') {
+      if (H.room.status === 'play') hostEndRace();
+      H.room.results = [dailyRow(d)];
+      hostBroadcast();
+    }
+  } catch (err) {
+    if (token === DAILY.token) { DAILY.result = { error: cloud.errorText(err) }; hostBroadcast(); }
+    if (!(err instanceof Error && err.message.startsWith('the server'))) console.error(err);
+  } finally {
+    DAILY.sending = false;
+  }
+}
+
+async function renderDailyBoard() {
+  const token = DAILY.token;
+  const el = $('daily-board');
+  if (!el) return;
+  if (DAILY.board) { el.innerHTML = DAILY.board; return; }
+  el.innerHTML = '<p class="muted small">Loading today’s leaderboard…</p>';
+  let html;
+  try {
+    const b = await cloud.api('/api/fast-fingers/daily/board');
+    const mine = b.me ? `You’re <b>#${b.me.rank}</b> of ${plural(b.players, 'typist')} today.` : '';
+    html = (mine ? `<p class="board-me">${mine}</p>` : '')
+      + `<ol class="board">${b.top.slice(0, 10).map((r) => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>`
+      + `<span class="nm">${esc(r.name)}</span><span class="res">${esc(r.detail)}</span></li>`).join('')}</ol>`;
+    DAILY.board = html;
+  } catch {
+    html = '<p class="muted small">Couldn’t load today’s leaderboard.</p>';
+  }
+  if (token === DAILY.token && $('daily-board')) $('daily-board').innerHTML = html;
+}
+
+function dailyShareText(d) {
+  const head = `Fast Fingers daily #${E.dayNumber(DAILY.day)}`;
+  const body = d.finished ? `⌨️ ${d.wpm} wpm · ${d.acc}% · ${E.formatMs(d.ms)}` : `⌨️ ran out of time at ${d.pct}%`;
+  return `${head}\n${body}\n${location.origin}/fast-fingers/`;
+}
+
+function renderDailyCard() {
+  const day = E.utcDay();
+  $('daily-tag').textContent = `#${E.dayNumber(day)}`;
+  const saved = store.get('daily', null);
+  const mine = saved && saved.day === day ? saved : null;
+  $('daily-btn').textContent = mine && mine.done ? 'See today’s result' : mine && mine.started ? 'Back to today’s paragraph' : 'Daily paragraph';
+  const practice = 'Or practise paragraph after paragraph, as long as you like.';
+  $('daily-note').textContent = mine && mine.done
+    ? `Today’s done: ${mine.finished ? `${mine.wpm} wpm at ${mine.acc}%` : `ran out of time at ${mine.pct}%`}. A new paragraph at midnight UTC. ${practice}`
+    : `One paragraph for everyone today (about ${E.TARGET_WORDS.medium} words), one try, global leaderboard. ${practice}`;
+}
 
 /* ---------- Crews ---------- */
 
@@ -361,6 +510,7 @@ function toHost(msg) {
 }
 
 function closeRoom() {
+  DAILY.token++;
   link.close();
   clearTimeout(H.timer);
   clearTimeout(H.soon);
@@ -453,7 +603,7 @@ function applyState(v) {
   const go = racing(v) && (!prev || !racing(prev) || prev.game !== v.game);
   if (go) {
     // Go! (or this tab was refreshed in the middle of a race)
-    if (!v.solo) R.goAt = performance.now() - v.elapsed;
+    if (v.solo !== 'practice') R.goAt = performance.now() - v.elapsed;
     if (prev && prev.phase === 'countdown') SOUND.go();
   }
   // My finish didn't reach the host (a dropped connection): tell it again
@@ -521,7 +671,7 @@ function followCaret() {
 function typeChar(ch) {
   if (!canType() || ch === '\n' || ch === '\r') return;
   const v = S.view;
-  if (v.solo && !R.started) { R.started = true; R.goAt = performance.now(); }
+  if (v.solo === 'practice' && !R.started) { R.started = true; R.goAt = performance.now(); }
   if (E.hit(R.text[R.pos], ch, v.settings)) {
     R.els[R.pos].className = 'c ok';
     R.pos++;
@@ -605,7 +755,7 @@ document.addEventListener('keydown', (e) => {
   if (!v) return;
   if (v.status === 'over') {
     if (e.key === 'Enter' && !e.target.closest('button')) {
-      if (v.solo) { e.preventDefault(); startSolo(); } else if (S.isHost) { e.preventDefault(); roomStart(); }
+      if (v.solo === 'practice') { e.preventDefault(); startSolo(); } else if (!v.solo && S.isHost) { e.preventDefault(); roomStart(); }
     }
     return;
   }
@@ -621,7 +771,7 @@ function settingsLabel(st) {
 }
 
 function renderGame(v) {
-  $('bar-code').textContent = v.solo ? 'Practice' : v.code;
+  $('bar-code').textContent = v.solo === 'daily' ? `Daily #${E.dayNumber(DAILY.day)}` : v.solo ? 'Practice' : v.code;
   $('bar-phase').textContent = settingsLabel(v.settings);
   const over = v.status === 'over';
   const mine = me(v).g;
@@ -652,7 +802,7 @@ const GO_SHOW_MS = 700;
 function renderCountdown(v = S.view) {
   const box = $('count-overlay');
   let label = '';
-  if (v && !$('game').hidden && v.status === 'play' && !v.solo) {
+  if (v && !$('game').hidden && v.status === 'play' && v.solo !== 'practice') {
     if (v.phase === 'countdown') {
       const n = Math.max(1, Math.ceil(phaseLeft(v) / 1000));
       label = String(n);
@@ -690,8 +840,12 @@ function renderStatus(v) {
   else if (v.phase === 'countdown') {
     // The big 3-2-1 sits over the paragraph (renderCountdown)
     html = `<span>${mine ? 'Get ready' : 'Race starting'}</span>`;
-  } else if (v.solo) {
+  } else if (v.solo === 'practice') {
     html = R.started ? '' : '<span>The clock starts on your first key</span>';
+  } else if (v.solo === 'daily') {
+    const left = phaseLeft(v);
+    const chip = `<span class="timer-chip${left <= 10000 ? ' urgent' : ''}">${E.formatMs(left).replace(/\.\d/, '')}</span>`;
+    html = R.done ? '<span class="go">Finished!</span><span>Checking your time…</span>' : `<span class="go">Go!</span>${left <= 15000 ? chip : ''}`;
   } else {
     const left = phaseLeft(v);
     const chip = v.phaseLeft > 0 ? `<span class="timer-chip${left <= 10000 ? ' urgent' : ''}">${E.formatMs(left).replace(/\.\d/, '')}</span>` : '';
@@ -707,7 +861,7 @@ function renderStatus(v) {
 function renderStats(v) {
   const mine = me(v)?.g;
   if (!mine) return;
-  const going = racing(v) && (!v.solo || R.started);
+  const going = racing(v) && (v.solo !== 'practice' || R.started);
   const ms = R.done ? R.ms : going ? performance.now() - R.goAt : 0;
   $('stat-wpm').innerHTML = `${E.wpm(R.pos, ms)}<small> wpm</small>`;
   $('stat-acc').textContent = `${E.accuracy(R.pos, R.err)}%`;
@@ -764,6 +918,23 @@ function renderResult(v) {
       <div><b>${r.done ? E.formatMs(r.ms) : `${r.pct}%`}</b><span>${r.done ? 'Time' : 'Typed'}</span></div>
     </div>`;
   let html = '';
+  if (v.solo === 'daily') {
+    const d = DAILY.result;
+    if (!d) { box.innerHTML = '<div class="result-banner">Checking your time…</div>'; return; }
+    if (d.error) {
+      box.innerHTML = `<div class="result-banner bad">Something went wrong</div><p>${esc(d.error)}</p><button class="btn link" type="button" id="home-btn">Back to home</button>`;
+      return;
+    }
+    const row = dailyRow(d);
+    html = `<div class="result-banner ${d.finished ? 'good' : 'bad'}">${d.finished ? 'Finished!' : 'Out of time!'}</div>
+      ${tiles(row)}
+      <div class="result-actions"><button class="btn primary" type="button" id="share-btn">Share result</button><button class="btn ghost" type="button" id="home-btn">Back to home</button></div>
+      <div id="daily-board" class="daily-board" aria-live="polite"></div>
+      <p class="small-note muted">Ranked by speed, timed by the server. A wrong key never moves you on, so mistakes already cost time. One try a day; a new paragraph at midnight UTC.</p>`;
+    box.innerHTML = html;
+    renderDailyBoard();
+    return;
+  }
   if (v.solo) {
     if (!mine) { box.innerHTML = ''; return; }
     const key = bestKey(v.settings);
@@ -816,7 +987,17 @@ $('result-view').addEventListener('click', (e) => {
   if (id === 'next-btn') startSolo();
   if (id === 'retry-btn') startSolo(true);
   if (id === 'home-btn') { closeRoom(); goHome(); }
+  if (id === 'share-btn' && DAILY.result && !DAILY.result.error) shareDaily(e.target);
 });
+
+async function shareDaily(btn) {
+  const text = dailyShareText(DAILY.result);
+  try {
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ text });
+    else { await navigator.clipboard.writeText(text); btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Share result'; }, 1600); }
+    cloud.track('share_result', { mode: 'daily' });
+  } catch { /* closed the share sheet */ }
+}
 
 $('end-race').addEventListener('click', () => { if (S.isHost) toHost({ t: 'endRace' }); });
 $('end-game').addEventListener('click', () => { if (S.isHost) toHost({ t: 'lobby' }); });
@@ -944,6 +1125,12 @@ function cleanName(n) {
   return String(n || '').replace(/[\u0000-\u001f<>]/g, '').replace(/\s+/g, ' ').trim().slice(0, 16);
 }
 
+$('daily-btn').addEventListener('click', () => {
+  const name = cleanName($('name-input').value);
+  if (name) store.set('name', name);
+  startDaily();
+});
+
 $('practice-btn').addEventListener('click', () => {
   const name = cleanName($('name-input').value);
   if (name) store.set('name', name);
@@ -972,6 +1159,7 @@ function setBusy(busy) {
 
 function goHome() {
   renderSoloCard();
+  renderDailyCard();
   showScreen('home');
 }
 
@@ -1059,6 +1247,9 @@ async function renderSettings() {
         <div><b>${st.wins}</b><span>Wins</span></div>
         <div><b>${st.solos}</b><span>Practice runs</span></div>
         <div><b>${st.chars}</b><span>Characters typed</span></div>
+        <div><b>${st.dailies}</b><span>Dailies</span></div>
+        <div><b>${st.bestDaily ? Math.round(st.bestDaily) : '–'}</b><span>Best daily wpm</span></div>
+        <div><b>${st.streak}</b><span>Day streak (best ${st.bestStreak})</span></div>
       </div>`;
   } catch (err) {
     $('my-stats').innerHTML = `<p class="muted">${esc(cloud.errorText(err))}</p>`;
@@ -1089,6 +1280,7 @@ if (new URLSearchParams(location.search).has('debug')) window.__fastfingers = { 
   }
   paintRoomSettings();
   renderSoloCard();
+  renderDailyCard();
   showScreen('home');
   cloud.onUser((u) => {
     renderAccount(u);

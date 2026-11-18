@@ -126,5 +126,28 @@ test('formatting', () => {
   eq(E.formatMs(75000), '1:15');
 });
 
+test('the daily paragraph: from the seed, about 45 words of whole sentences, varied across days', () => {
+  eq(E.dailyText('seed-one'), E.dailyText('seed-one'), 'same seed');
+  const texts = new Set();
+  for (let i = 0; i < 200; i++) {
+    const t = E.dailyText(`k${i}`);
+    texts.add(t);
+    ok(E.wordCount(t) >= E.TARGET_WORDS.medium && E.wordCount(t) < 80, `about 45 words, got ${E.wordCount(t)}`);
+    ok(/[.?!]"?$/.test(t), 'ends on a whole sentence');
+    ok(/^[\x20-\x7e]+$/.test(t), 'plain keyboard characters');
+  }
+  ok(texts.size > 60, `only ${texts.size} different daily paragraphs in 200 days`);
+  eq(E.dayNumber(E.DAILY_ONE), 1);
+  eq(E.dayNumber('2026-11-25'), 8);
+});
+
+test('the daily score: finishes by speed, an unfinished run under every finish', () => {
+  eq(E.dailyScore(250, 250, 60000, true), 50);
+  ok(E.dailyScore(200, 250, 90000, false) < 1);
+  // The slowest finish the time limit allows (15 wpm) still beats any unfinished run
+  ok(E.dailyScore(249, 250, 90000, false) < E.dailyScore(250, 250, 200000, true));
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
+

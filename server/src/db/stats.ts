@@ -205,14 +205,18 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   'rotten:bestDaily': 'min', // the daily's score is a time (order 'asc')
   'guesstimate:bestDaily': 'max', // the daily's score is points (order 'desc')
   'melonburst:bestDaily': 'min', // the daily's score is solved/wrong/time packed into one number (order 'asc')
+  'fast-fingers:bestDaily': 'max', // the daily's score is wpm to a tenth (order 'desc')
   'forehead:fewestQ': 'min', // fewest questions asked before a right guess (written with `min` in the GameReport)
   'rotten:practiceBest': 'max', // longest practice streak
   'lettuce-party:bestStreak': 'max',
   'guesstimate:bestStreak': 'max',
+  'fast-fingers:bestStreak': 'max',
   // Running streaks can't be added together: keep the longer one (and, for the day streak, the later day)
   'lettuce-party:streak': 'max',
   'guesstimate:streak': 'max',
   'guesstimate:lastDay': 'max',
+  'fast-fingers:streak': 'max',
+  'fast-fingers:lastDay': 'max',
   'a-to-zap:bestRound': 'max', // the most points in one round
 };
 
