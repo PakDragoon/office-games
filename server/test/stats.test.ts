@@ -195,7 +195,14 @@ describe('Guesstimate daily day streak', () => {
       }).then((r) => r.json() as Promise<Record<string, any>>);   // eslint-disable-line @typescript-eslint/no-explicit-any
     let s = await call('state');
     const set = R.makeSet(s.seed, s.kinds, R.DAILY.laps, R.DAILY.difficulty);
-    for (let i = 0; i < s.count; i++) s = await call('answer', { index: i, guess: set[i].answer, name: 'Daily' });
+    // Cut's guess is a line, not its answer (0.5): send two points of a perfect cut, as a browser would
+    const best = (pz: (typeof set)[number]) => {
+      if (pz.kind !== 'cut') return pz.answer;
+      const [x1, y1, x2, y2] = R.perfectCut(pz, 90);
+      const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, len = Math.hypot(x2 - x1, y2 - y1);
+      return [mx - ((x2 - x1) / len) * 100, my - ((y2 - y1) / len) * 100, mx + ((x2 - x1) / len) * 100, my + ((y2 - y1) / len) * 100];
+    };
+    for (let i = 0; i < s.count; i++) s = await call('answer', { index: i, guess: best(set[i]), name: 'Daily' });
     expect(s.done).toBe(true);
     const mine = ((await (await SELF.fetch('https://play.test/api/me/stats?game=guesstimate', { headers: { 'X-Guest': token } })).json()) as { stats: Record<string, number> }).stats;
     expect(mine).toMatchObject({ dailies: 1, streak: 1, bestStreak: 1 });
