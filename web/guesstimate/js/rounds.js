@@ -199,36 +199,112 @@ function makeTime(r, difficulty) {
 
 // ---------- Cut: slice the shape into two equal halves ----------
 
-// A smooth blob: a radius that wobbles with a few waves round the centre, drawn as a
-// many-sided polygon so its area (and each piece's) is exact. Harder shapes wobble more,
-// so they go concave and a cut through the middle is no longer a safe bet.
+// Every shape is a polygon (curves drawn with many short sides), so its area and each
+// piece's are exact. No shape is the same when turned upside down (no circles, squares or
+// hexagons), so a line through the middle is never a free half. Each difficulty draws from
+// its own families: easy ones are round and convex, hard ones have arms, bites and points.
 const CUT = {
-  easy: { waves: [2, 3], amp: 0.12, r: [95, 115] },
-  normal: { waves: [2, 3, 4], amp: 0.2, r: [90, 118] },
-  hard: { waves: [2, 3, 4, 5, 6], amp: 0.26, r: [85, 120] },
+  easy: ['triangle', 'pentagon', 'egg', 'drop', 'blob'],
+  normal: ['egg', 'drop', 'heart', 'ell', 'tee', 'bite', 'arrow', 'blob', 'triangle'],
+  hard: ['star', 'moon', 'cross', 'ell', 'tee', 'arrow', 'bite', 'heart', 'blob'],
 };
-const CUT_SIDES = 64;
+const WOBBLE = { easy: { waves: [2, 3], amp: 0.12 }, normal: { waves: [2, 3, 4], amp: 0.2 }, hard: { waves: [2, 3, 4, 5, 6], amp: 0.26 } };
+const CURVE = 72;   // sides used for a curved outline
+const ring = (n, f) => Array.from({ length: n }, (_, i) => f((i / n) * Math.PI * 2));
+
+// Each maker draws round (0, 0) at about 100 across; makeCut turns it and fits it to the paper.
+const SHAPES = {
+  // A smooth blob: a radius that wobbles with a few waves round the centre
+  blob(r, d) {
+    const c = WOBBLE[d];
+    const waves = c.waves.map((k) => ({ k, a: between(r, 0.3, 1) * c.amp, ph: between(r, 0, Math.PI * 2) }));
+    const sy = between(r, 0.65, 0.95);
+    return ring(CURVE, (t) => {
+      const rad = 100 * Math.max(0.4, 1 + waves.reduce((n, w) => n + w.a * Math.sin(w.k * t + w.ph), 0));
+      return [Math.cos(t) * rad, Math.sin(t) * rad * sy];
+    });
+  },
+  // Three corners, never too thin and never even-sided
+  triangle(r) {
+    const a = [0, between(r, 1.7, 2.4), between(r, 3.6, 4.6)];
+    return a.map((t) => { const rad = between(r, 80, 110); return [Math.cos(t) * rad, Math.sin(t) * rad]; });
+  },
+  // Five uneven corners round a circle (still convex)
+  pentagon(r) {
+    return ring(5, (t) => { const rad = between(r, 78, 108), tt = t + between(r, -0.25, 0.25); return [Math.cos(tt) * rad, Math.sin(tt) * rad]; });
+  },
+  // Fat at one end, narrow at the other
+  egg(r) {
+    const k = between(r, 0.18, 0.3), sy = between(r, 0.62, 0.78);
+    return ring(CURVE, (t) => [Math.cos(t) * 105, Math.sin(t) * 105 * sy * (1 + k * Math.cos(t))]);
+  },
+  // A raindrop: round at one end, a point at the other
+  drop(r) {
+    const m = between(r, 1, 1.8);
+    return ring(CURVE, (t) => [Math.cos(t) * 105, Math.sin(t) * 75 * Math.abs(Math.sin(t / 2)) ** m]);
+  },
+  heart() {
+    return ring(CURVE, (t) => [16 * Math.sin(t) ** 3 * 6.2, -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t)) * 6.2]);
+  },
+  // An L: two arms of different lengths and thicknesses
+  ell(r) {
+    const w = between(r, 150, 200), h = between(r, 140, 180), a = between(r, 45, 75), b = between(r, 45, 75);
+    return [[0, 0], [a, 0], [a, h - b], [w, h - b], [w, h], [0, h]];
+  },
+  // A T with its stem off centre
+  tee(r) {
+    const w = between(r, 170, 210), h = between(r, 140, 180), bar = between(r, 40, 60), stem = between(r, 45, 70);
+    const sx = between(r, 0.2, 0.55) * (w - stem);
+    return [[0, 0], [w, 0], [w, bar], [sx + stem, bar], [sx + stem, h], [sx, h], [sx, bar], [0, bar]];
+  },
+  // A plus with arms of different lengths
+  cross(r) {
+    const t = between(r, 42, 58), [L, R, U, D] = [0, 1, 2, 3].map(() => between(r, 45, 95)), h = t / 2;
+    return [[-h, -h - U], [h, -h - U], [h, -h], [h + R, -h], [h + R, h], [h, h], [h, h + D], [-h, h + D], [-h, h], [-h - L, h], [-h - L, -h], [-h, -h]];
+  },
+  // A round thing with a wedge bitten out
+  bite(r) {
+    const gap = between(r, 0.7, 1.6), n = CURVE;
+    const pts = [[0, 0]];
+    for (let i = 0; i <= n; i++) { const t = gap / 2 + (i / n) * (Math.PI * 2 - gap); pts.push([Math.cos(t) * 100, Math.sin(t) * 100]); }
+    return pts;
+  },
+  // A thick arrow: a shaft and a head
+  arrow(r) {
+    const len = between(r, 120, 160), sh = between(r, 22, 32), head = between(r, 55, 75), hl = between(r, 55, 75);
+    return [[0, -sh], [len, -sh], [len, -head], [len + hl, 0], [len, head], [len, sh], [0, sh]];
+  },
+  // Points round a centre, an odd number so no two face each other
+  star(r) {
+    const n = pick(r, [5, 7]), inner = between(r, 0.42, 0.58);
+    return ring(n * 2, (t) => { const rad = (Math.round((t / (Math.PI * 2)) * n * 2) % 2 ? inner : 1) * between(r, 92, 108); return [Math.cos(t) * rad, Math.sin(t) * rad]; });
+  },
+  // A crescent: a circle with a smaller circle taken out of one side
+  moon(r) {
+    const R = 105, rr = between(r, 82, 96), dd = between(r, 38, 55);
+    const x0 = (R * R - rr * rr + dd * dd) / (2 * dd), y0 = Math.sqrt(R * R - x0 * x0);
+    const a0 = Math.atan2(y0, x0), b0 = Math.atan2(y0, x0 - dd), n = 48, pts = [];
+    for (let i = 0; i <= n; i++) { const t = a0 + (i / n) * (Math.PI * 2 - 2 * a0); pts.push([Math.cos(t) * R, Math.sin(t) * R]); }
+    for (let i = 1; i < n; i++) { const t = Math.PI * 2 - b0 - (i / n) * (Math.PI * 2 - 2 * b0); pts.push([dd + Math.cos(t) * rr, Math.sin(t) * rr]); }
+    return pts;
+  },
+};
+export const CUT_SHAPES = CUT;
 
 function makeCut(r, difficulty) {
-  const c = CUT[difficulty];
-  const R0 = between(r, c.r[0], c.r[1]);
-  const waves = c.waves.map((k) => ({ k, a: between(r, 0.3, 1) * c.amp, ph: between(r, 0, Math.PI * 2) }));
-  const stretch = between(r, 0.8, 1.15);   // a little wider or taller than round
-  const turn = between(r, 0, Math.PI);
-  const cx = BOX.w / 2 + int(r, -15, 15), cy = BOX.h / 2 + int(r, -10, 10);
-  const pts = [];
-  for (let i = 0; i < CUT_SIDES; i++) {
-    const t = (i / CUT_SIDES) * Math.PI * 2;
-    const rad = R0 * Math.max(0.4, 1 + waves.reduce((n, w) => n + w.a * Math.sin(w.k * t + w.ph), 0));
-    const x = Math.cos(t) * rad * stretch, y = Math.sin(t) * rad * 0.8;
-    pts.push([fix(cx + x * Math.cos(turn) - y * Math.sin(turn)), fix(cy + x * Math.sin(turn) + y * Math.cos(turn))]);
-  }
-  // Keep it on the paper whatever the wobble did
+  const family = pick(r, CUT[difficulty]);
+  const raw = SHAPES[family](r, difficulty);
+  // Turned any way, sometimes mirrored, then scaled to fill most of the paper
+  const turn = between(r, 0, Math.PI * 2), flip = r() < 0.5 ? -1 : 1;
+  const pts = raw.map(([x, y]) => [x * flip * Math.cos(turn) - y * Math.sin(turn), x * flip * Math.sin(turn) + y * Math.cos(turn)]);
   const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-  const sx = Math.min(1, (BOX.w - 30) / (Math.max(...xs) - Math.min(...xs)), (BOX.h - 30) / (Math.max(...ys) - Math.min(...ys)));
+  const bw = Math.max(...xs) - Math.min(...xs), bh = Math.max(...ys) - Math.min(...ys);
+  // (a strip is left at the bottom for the hint under the shape)
+  const sc = Math.min((BOX.w - 60) / bw, (BOX.h - 76) / bh) * between(r, 0.78, 0.95);
   const mx = (Math.max(...xs) + Math.min(...xs)) / 2, my = (Math.max(...ys) + Math.min(...ys)) / 2;
-  const shape = pts.map(([x, y]) => [fix(BOX.w / 2 + (x - mx) * sx), fix(BOX.h / 2 + (y - my) * sx)]);
-  return { kind: 'cut', difficulty, shape, answer: 0.5 };
+  const ox = BOX.w / 2 + between(r, -12, 12), oy = BOX.h / 2 - 10 + between(r, -5, 5);
+  const shape = pts.map(([x, y]) => [fix(ox + (x - mx) * sc), fix(oy + (y - my) * sc)]);
+  return { kind: 'cut', difficulty, family, shape, answer: 0.5 };
 }
 
 const area = (poly) => {

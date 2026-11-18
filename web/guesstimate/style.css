@@ -409,7 +409,12 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .cut-piece.other { fill: color-mix(in srgb, var(--pc) 10%, transparent); }
 .knife { stroke: var(--pc); stroke-width: 2.4; stroke-linecap: round; }
 .knife.done { stroke-width: 1.6; opacity: 0.9; }
-.knife-grip { fill: var(--paper); stroke: var(--pc); stroke-width: 1.6; }
+.knife-grip { fill: var(--paper); stroke: var(--pc); stroke-width: 2.2; }
+.knife-hit { stroke: transparent; stroke-width: 22; stroke-linecap: round; cursor: move; pointer-events: stroke; }
+.knife-handle { cursor: grab; }
+.knife-hit-dot { fill: transparent; pointer-events: all; }
+.board.grabbing, .board.grabbing .knife-handle { cursor: grabbing; }
+.lbl.cut-hint { fill: var(--muted); font-size: 12px; pointer-events: none; }
 .lbl.cut-share { font-size: 17px; font-weight: 800; fill: var(--ink); }
 .scale-base { fill: var(--ink); opacity: 0.85; }
 .scale-post { stroke: var(--ink); stroke-width: 3; stroke-linecap: round; }

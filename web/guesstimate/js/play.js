@@ -420,41 +420,76 @@ export const TESTS = {
 
   cut: {
     name: 'Cut',
-    how: 'Drag one straight line across the shape to cut it into two pieces of the same size. Drag again to move it. Keys: arrows left and right slide it, up and down turn it.',
+    how: 'Drag a straight line across the shape to cut it into two pieces of the same size. Then drag the line to slide it, or a round handle to turn it. Keys: arrows left and right slide it, up and down turn it.',
     ask: () => 'Cut the shape exactly in half',
     mount(stage, pz, { ready, color }) {
       const b = board(stage);
+      // The two pieces are shaded as you cut, so you can compare them by eye
+      const pieceA = el('path', { class: `cut-piece live pc${color}`, visibility: 'hidden' }, b.inside);
+      const pieceB = el('path', { class: `cut-piece other live pc${color}`, visibility: 'hidden' }, b.inside);
       el('path', { d: shapePath(pz.shape), class: 'cut-shape' }, b.inside);
       const knife = el('line', { class: `knife pc${color}`, visibility: 'hidden' }, b.inside);
-      const grips = el('g', { class: `pc${color}`, visibility: 'hidden' }, b.inside);
-      const g1 = el('circle', { r: 4, class: 'knife-grip' }, grips);
-      const g2 = el('circle', { r: 4, class: 'knife-grip' }, grips);
-      let line = null, start = null;
-      const clamp = (v) => Math.min(BOX.w + 40, Math.max(-40, v));
+      // Wide invisible strokes and circles, so the line and handles are easy to grab with a finger
+      const knifeHit = el('line', { class: 'knife-hit', visibility: 'hidden' }, b.over);
+      const grips = [0, 1].map(() => {
+        const g = el('g', { class: `knife-handle pc${color}`, visibility: 'hidden' }, b.over);
+        el('circle', { r: 18, class: 'knife-hit-dot' }, g);
+        el('circle', { r: 7, class: 'knife-grip' }, g);
+        return g;
+      });
+      const hint = label(b.over, BOX.w / 2, BOX.h - 12, 'Drag across the shape to cut it', { cls: 'cut-hint' });
+      let line = null, mode = null, from = null, base = null;
+
       const show = () => {
-        const [x1, y1, x2, y2] = longLine(line);
-        Object.entries({ x1, y1, x2, y2 }).forEach(([k, v]) => knife.setAttribute(k, v));
-        g1.setAttribute('cx', line[0]); g1.setAttribute('cy', line[1]);
-        g2.setAttribute('cx', line[2]); g2.setAttribute('cy', line[3]);
-        knife.setAttribute('visibility', 'visible');
-        grips.setAttribute('visibility', 'visible');
+        Object.entries({ x1: line[0], y1: line[1], x2: line[2], y2: line[3] }).forEach(([k, v]) => { knife.setAttribute(k, v); knifeHit.setAttribute(k, v); });
+        grips.forEach((g, i) => g.setAttribute('transform', `translate(${line[i * 2]} ${line[i * 2 + 1]})`));
+        const pa = clipLeft(pz.shape, line), pb = clipLeft(pz.shape, [line[2], line[3], line[0], line[1]]);
+        pieceA.setAttribute('d', pa.length > 2 ? shapePath(pa) : '');
+        pieceB.setAttribute('d', pb.length > 2 ? shapePath(pb) : '');
+        for (const n of [knife, knifeHit, pieceA, pieceB, ...grips]) n.setAttribute('visibility', 'visible');
+        hint.textContent = 'Drag the line to slide it, or a handle to turn it';
+        // The hint moves to whichever edge the line doesn't cross (and hides if it crosses both)
+        const crosses = (y) => { const t = (y - line[1]) / (line[3] - line[1]); const x = line[0] + (line[2] - line[0]) * t; return Number.isFinite(t) ? Math.abs(x - BOX.w / 2) < 150 : Math.abs(line[1] - y) < 14; };
+        const spot = [BOX.h - 12, 24].find((y) => !crosses(y) && !crosses(y - 10));
+        hint.setAttribute('visibility', spot ? 'visible' : 'hidden');
+        if (spot) hint.setAttribute('y', spot);
         ready(true);
       };
+      // Takes any two points on a line and, if it crosses the paper, keeps it as its two
+      // ends just inside the edges (where the handles sit)
+      const put = (two) => {
+        const ends = frameEnds(two, 16);
+        if (!ends || Math.hypot(ends[2] - ends[0], ends[3] - ends[1]) < 40) return;
+        line = ends;
+        show();
+      };
+
       b.svg.classList.add('aim');
       b.svg.addEventListener('pointerdown', (e) => {
         try { b.svg.setPointerCapture(e.pointerId); } catch { /* synthetic pointer */ }
         const p = toBoard(b.svg, e);
-        start = [clamp(p.x), clamp(p.y)];
+        from = [p.x, p.y];
+        base = line;
+        const grip = grips.findIndex((g) => g.contains(e.target));
+        mode = grip >= 0 ? `end${grip}` : e.target === knifeHit ? 'move' : 'draw';
+        b.svg.classList.toggle('grabbing', mode !== 'draw');
       });
       b.svg.addEventListener('pointermove', (e) => {
-        if (!start) return;
+        if (!mode) return;
         const p = toBoard(b.svg, e);
-        const end = [clamp(p.x), clamp(p.y)];
-        if (Math.hypot(end[0] - start[0], end[1] - start[1]) < 12) return;
-        line = [...start, ...end];
-        show();
+        if (mode === 'draw') {
+          if (Math.hypot(p.x - from[0], p.y - from[1]) >= 12) put([...from, p.x, p.y]);
+        } else if (mode === 'move') {
+          const dx = p.x - from[0], dy = p.y - from[1];
+          put([base[0] + dx, base[1] + dy, base[2] + dx, base[3] + dy]);
+        } else {
+          // Turn round the other handle: the dragged one follows the pointer's direction
+          const keep = mode === 'end0' ? [base[2], base[3]] : [base[0], base[1]];
+          if (Math.hypot(p.x - keep[0], p.y - keep[1]) < 12) return;
+          put(mode === 'end0' ? [p.x, p.y, ...keep] : [...keep, p.x, p.y]);
+        }
       });
-      const up = () => { start = null; };
+      const up = () => { mode = null; b.svg.classList.remove('grabbing'); };
       b.svg.addEventListener('pointerup', up);
       b.svg.addEventListener('pointercancel', up);
       b.svg.tabIndex = 0;
@@ -462,16 +497,15 @@ export const TESTS = {
         const slide = { ArrowLeft: -1, ArrowRight: 1 }[e.key], spin = { ArrowUp: 1, ArrowDown: -1 }[e.key];
         if (!slide && !spin) return;
         e.preventDefault();
-        if (!line) line = [BOX.w / 2, BOX.h / 2 - 100, BOX.w / 2, BOX.h / 2 + 100];
+        const cur = line || [BOX.w / 2, BOX.h / 2 - 100, BOX.w / 2, BOX.h / 2 + 100];
         const n = e.shiftKey ? 10 : 1;
-        const mx = (line[0] + line[2]) / 2, my = (line[1] + line[3]) / 2;
-        let a = Math.atan2(line[3] - line[1], line[2] - line[0]);
-        if (spin) a += rad(spin * n);
+        const mx = (cur[0] + cur[2]) / 2, my = (cur[1] + cur[3]) / 2;
+        let a = Math.atan2(cur[3] - cur[1], cur[2] - cur[0]);
+        if (spin && line) a += rad(spin * n);
         const dx = Math.cos(a), dy = Math.sin(a);
-        const off = (slide || 0) * n;   // sideways, square to the line
+        const off = line ? (slide || 0) * n : 0;   // sideways, square to the line
         const cx = mx - dy * off, cy = my + dx * off;
-        line = [cx - dx * 100, cy - dy * 100, cx + dx * 100, cy + dy * 100].map(clamp);
-        show();
+        put([cx - dx * 100, cy - dy * 100, cx + dx * 100, cy + dy * 100]);
       });
       return { guess: () => (line ? line.map((v) => Math.round(v * 10) / 10) : null), destroy() {} };
     },
@@ -767,7 +801,8 @@ function compact(v) {
   return fmtCount(v);
 }
 
-// A balance scale: the heavy thing on the left pan, a pile of the light thing on the right.
+// A balance scale: the heavy thing on the left pan, one of the light thing on the right
+// (the label under it says how many).
 // set(deg) leans the beam (positive = right side down); the pans hang straight below its ends.
 function scale(parent, pz, rightText, color = null, down = 0) {
   const g = el('g', { class: 'scale', transform: `translate(0 ${down})` }, parent);
@@ -790,7 +825,7 @@ function scale(parent, pz, rightText, color = null, down = 0) {
   };
   const left = pan([[0, -4, 38, pz.heavy.emoji]], `1 ${pz.heavy.one}`, null);
   const e = pz.light.emoji;
-  const right = pan([[-20, -3, 16, e], [0, -3, 16, e], [20, -3, 16, e], [-10, -16, 16, e], [10, -16, 16, e], [0, -29, 16, e]], rightText, color);
+  const right = pan([[0, -4, 32, e]], rightText, color);
   const set = (deg) => {
     beam.setAttribute('transform', `rotate(${deg} ${PIVOT.x} ${PIVOT.y})`);
     const dx = Math.cos(rad(deg)) * ARM, dy = Math.sin(rad(deg)) * ARM;
@@ -825,6 +860,21 @@ function longLine([x1, y1, x2, y2]) {
   const dx = ((x2 - x1) / len) * 700, dy = ((y2 - y1) / len) * 700;
   const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
   return [mx - dx, my - dy, mx + dx, my + dy];
+}
+
+// The two points where a line (given by any two of its points) crosses a frame `m` inside
+// the paper, in the order the points were given; null if it misses the paper.
+function frameEnds([x1, y1, x2, y2], m) {
+  const dx = x2 - x1, dy = y2 - y1;
+  let lo = -Infinity, hi = Infinity;
+  for (const [p, d, a, z] of [[x1, dx, m, BOX.w - m], [y1, dy, m, BOX.h - m]]) {
+    if (Math.abs(d) < 1e-9) { if (p < a || p > z) return null; continue; }
+    const t1 = (a - p) / d, t2 = (z - p) / d;
+    lo = Math.max(lo, Math.min(t1, t2));
+    hi = Math.min(hi, Math.max(t1, t2));
+  }
+  if (!(lo < hi)) return null;
+  return [x1 + dx * lo, y1 + dy * lo, x1 + dx * hi, y1 + dy * hi];
 }
 
 // Where the line crosses a frame just inside the paper (the far end when `last`), for its label

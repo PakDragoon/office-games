@@ -176,6 +176,27 @@ for (const d of R.DIFFICULTIES) {
     assert.equal(R.score(pz, best), 100);
   }
 }
+// Many shapes, not one: every family turns up on its difficulty, and no outline crosses itself
+// (a crossing outline would make the areas wrong)
+const crosses = (a, b, c, d) => {
+  const o = (p, q, r) => Math.sign((q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]));
+  return o(a, b, c) * o(a, b, d) < 0 && o(c, d, a) * o(c, d, b) < 0;
+};
+for (const d of R.DIFFICULTIES) {
+  const seen = new Set();
+  for (let s = 1; s <= 300; s++) {
+    const pz = R.makeRound('cut', R.roundSeed(31, s, 'cut'), d);
+    seen.add(pz.family);
+    const P = pz.shape, n = P.length;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        assert.ok(!crosses(P[i], P[(i + 1) % n], P[j], P[(j + 1) % n]), `cut/${d} ${pz.family} outline crosses itself`);
+      }
+    }
+  }
+  assert.deepEqual([...seen].sort(), [...R.CUT_SHAPES[d]].sort(), `cut/${d} doesn't use every shape`);
+}
 const cz = R.makeRound('cut', 42, 'normal');
 // Missing the shape entirely leaves it all on one side: 0 points
 assert.equal(R.cutShare(cz, [5, 0, 5, R.BOX.h]) === 0 || R.cutShare(cz, [5, 0, 5, R.BOX.h]) === 1, true);
