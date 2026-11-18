@@ -147,6 +147,25 @@ h1, h2 { line-height: 1.15; margin: 0; }
 .choice .btn { margin-top: auto; }
 
 @media (max-width: 520px) { .choices { grid-template-columns: 1fr; } }
+/* Daily: one button per mode, with today's result once played */
+.daily-card { grid-column: 1 / -1; }
+.daily-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
+.daily-tag { font-weight: 800; color: var(--hit); font-variant-numeric: tabular-nums; }
+.daily-modes { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 0.6rem; }
+.daily-modes .btn { margin-top: 0; display: grid; gap: 0.1rem; justify-items: center; padding-block: 0.55rem; }
+.daily-modes .btn small { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.daily-modes .btn.done small { color: var(--hit); }
+/* The game screen during a daily: no scores column, no rivals */
+.arena.daily { grid-template-columns: auto; grid-template-areas: "me"; justify-content: center; }
+.arena.daily .scoreboard, .arena.daily .rivals { display: none; }
+.daily-board { width: 100%; text-align: left; margin-top: 0.25rem; }
+.daily-board .board-me { margin: 0 0 0.4rem; }
+.daily-board .lb { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.daily-board .lb li { display: grid; grid-template-columns: 2rem minmax(0, 1fr) auto; gap: 0.5rem; padding: 0.35rem 0.1rem; border-bottom: 1px solid var(--line); font-size: 0.92rem; }
+.daily-board .lb li.me { font-weight: 700; color: var(--hit); }
+.daily-board .rk { color: var(--muted); font-variant-numeric: tabular-nums; }
+.daily-board .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.daily-board .res { font-variant-numeric: tabular-nums; text-align: right; }
 
 /* ---------- Lobby ---------- */
 .lobby { display: grid; place-items: center; padding: 2rem 1.25rem; }

@@ -220,7 +220,10 @@ function applyState(v) {
   drawHot();
   renderMarks();
   $('game-code').textContent = v.code;
-  $('game-round').textContent = v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
+  $('game-round').textContent = S.daily ? MODE_NAMES[v.mode] : v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`;
+  document.querySelector('.bar-word').hidden = Boolean(S.daily);
+  $('scores-btn').hidden = Boolean(S.daily);
+  document.querySelector('.arena').classList.toggle('daily', Boolean(S.daily));
   renderRivals(v);
   renderScores(v);
   announceRivals(prev, v);
@@ -641,7 +644,8 @@ function submit() {
     return toast('Not enough letters');
   }
   S.pending = true;
-  send({ t: 'guess', word: S.current });
+  if (S.daily) dailyGuess(S.current);
+  else send({ t: 'guess', word: S.current });
 }
 
 /* ---------- on-screen keyboard ---------- */
@@ -1198,6 +1202,26 @@ function showResults(v) {
     $('results-round-label').textContent = (v.maxRounds ? `Round ${v.matchRound} of ${v.maxRounds}` : `Round ${v.matchRound}`) + (ladder ? '. The target was' : '. The word was');
   }
   renderResultBoards(v, order);
+  const daily = Boolean(S.daily);
+  if (daily) {
+    const m = me();
+    $('results-title').textContent = m.solved ? `${winLine(m.used)} ${m.used}/${v.attempts}` : 'Not this time';
+    $('results-round-label').textContent = `${MODE_NAMES[v.mode]} daily #${E.dayNumber(DAILY.day)}. The word was`;
+    $('results-rule').textContent = `${MODE_NAMES[v.mode]}, ${v.attempts} guesses. Ranked by fewest guesses, then time. A new word at midnight UTC.`;
+  }
+  let lb = $('daily-board');
+  if (daily && !lb) {
+    lb = document.createElement('div');
+    lb.id = 'daily-board';
+    lb.className = 'daily-board';
+    lb.setAttribute('aria-live', 'polite');
+    $('results-boards').before(lb);
+  }
+  if (lb) lb.hidden = !daily;
+  $('results-list').hidden = daily;
+  $('results-scores-btn').hidden = daily;
+  $('results-leave-btn').textContent = daily ? 'Back to home' : 'Leave room';
+  if (daily) renderDailyBoard();
 
   $('again-btn').hidden = !S.isHost || over;
   $('end-btn').hidden = !S.isHost || over;
@@ -1205,7 +1229,7 @@ function showResults(v) {
   $('newgame-btn').hidden = !S.isHost || !over;
   $('share-btn').hidden = !me() || me().used === 0;
   showMeaning(ladder ? v.ladder?.target : v.word);
-  $('again-wait').hidden = S.isHost;
+  $('again-wait').hidden = S.isHost || daily;
   $('again-wait').textContent = over
     ? 'Waiting for the host to set up a new game.'
     : 'Waiting for the host to start the next round.';
@@ -1239,7 +1263,8 @@ function renderResultBoards(v, order) {
     path.append(title(`One shortest way (${v.ladder.par} steps)`), chain(v.ladder.path, v.ladder.target));
     box.appendChild(path);
   }
-  box.appendChild(title(v.mode === 'ladder' ? 'Everyone’s ladder' : v.mode === 'hotcold' ? 'Everyone’s closest words' : 'Everyone’s guesses'));
+  const whose = S.daily ? 'Your' : 'Everyone’s';
+  box.appendChild(title(`${whose} ${v.mode === 'ladder' ? 'ladder' : v.mode === 'hotcold' ? 'closest words' : 'guesses'}`));
   for (const p of order) {
     if (!p.rows || !p.rows.length) continue;
     const item = document.createElement('div');
@@ -1335,7 +1360,7 @@ async function shareResult() {
   const v = S.view;
   const m = me();
   if (!v || !m) return;
-  const roundLabel = v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
+  const roundLabel = S.daily ? `daily #${E.dayNumber(DAILY.day)}` : v.maxRounds ? `round ${v.matchRound} of ${v.maxRounds}` : `round ${v.matchRound}`;
   const time = m.solved ? ` in ${fmtTime(m.finishMs)}` : '';
   let text;
   if (v.mode === 'hotcold') {
@@ -1364,8 +1389,9 @@ async function shareResult() {
     const squares = PREFS.contrast ? { h: '🟧', n: '🟦', m: '⬛' } : { h: '🟩', n: '🟨', m: '⬛' };
     const score = m.solved ? `${m.patterns.length}/${v.attempts}` : `X/${v.attempts}`;
     const grid = m.patterns.map((p) => [...p].map((c) => squares[c]).join('')).join('\n');
-    text = `Lettuce Party, ${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
+    text = `Lettuce Party, ${S.daily ? 'classic, ' : ''}${roundLabel}${v.hard ? ' (hard)' : ''}: ${score}${time}\n\n${grid}`;
   }
+  if (S.daily) text += `\n${location.origin}/lettuce-party/`;
   try {
     if (navigator.share && matchMedia('(pointer: coarse)').matches) {
       await navigator.share({ text });
@@ -1388,6 +1414,132 @@ function gameWinner(v) {
   if (a.wins === 0 && a.solved === 0) return null;
   const p = v.players.find((x) => x.name.toLowerCase() === a.name.toLowerCase());
   return { name: a.name, me: p?.id === S.myId };
+}
+
+/* =========================================================
+   Dailies: one word per mode for everyone today (global, run by the server)
+   ========================================================= */
+// The server keeps the word, checks every guess and times the run (server/src/daily/lettuce.ts).
+// This page plays it on the normal game screen, fed by a one-player view built from the server's answers.
+const DAILY = { day: E.utcDay(), board: '', token: 0, data: null };
+const dailyApi = (mode, action, body = {}) => cloud.api(`/api/lettuce-party/daily/${action}?mode=${mode}`, {
+  method: 'POST', body: { name: cleanName($('name-input').value) || S.myName || 'Player', ...body },
+});
+
+function readDailySaves() {
+  try { return JSON.parse(localStorage.getItem('lettuce-daily')) || {}; } catch { return {}; }
+}
+function saveDaily(d) {
+  const all = readDailySaves();
+  const today = Object.fromEntries(Object.entries(all).filter(([, v]) => v.day === d.day));
+  today[d.mode] = { day: d.day, started: Boolean(d.started), done: Boolean(d.done), solved: Boolean(d.solved), used: d.guesses.length, attempts: d.attempts, ms: d.ms };
+  try { localStorage.setItem('lettuce-daily', JSON.stringify(today)); } catch {}
+}
+
+function renderDailyCard() {
+  const day = E.utcDay();
+  $('daily-tag').textContent = `#${E.dayNumber(day)}`;
+  const saves = readDailySaves();
+  $('daily-modes').innerHTML = E.DAILY_MODES.map((mode) => {
+    const s = saves[mode] && saves[mode].day === day ? saves[mode] : null;
+    const note = s && s.done ? `${s.solved ? `${s.used}/${s.attempts}` : `X/${s.attempts}`} · ${fmtTime(s.ms)} ✓` : s && s.started ? 'Keep going' : `${E.DAILY_ATTEMPTS[mode]} guesses`;
+    return `<button class="btn${s && s.done ? ' done' : ''}" type="button" data-daily="${mode}"><span>${MODE_NAMES[mode]}</span><small>${note}</small></button>`;
+  }).join('');
+}
+
+$('daily-modes').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-daily]');
+  if (b) startDaily(b.dataset.daily);
+});
+
+async function startDaily(mode) {
+  const name = cleanName($('name-input').value);
+  if (name) { try { localStorage.setItem('wordleparty-name', name); } catch {} }
+  homeError('');
+  for (const b of $('daily-modes').querySelectorAll('button')) b.disabled = true;
+  try {
+    let d = await dailyApi(mode, 'state');
+    if (!d.started && !d.done) { d = await dailyApi(mode, 'next'); cloud.track('daily_started', { mode }); }
+    if (d.error && !d.started) throw new Error(d.error);
+    link.close();
+    resetLocal();
+    Object.assign(S, { daily: mode, myId: 'me', myName: name || 'You' });
+    DAILY.token++;
+    DAILY.day = d.day;
+    DAILY.board = '';
+    dailyShow(d, true);
+  } catch (err) {
+    homeError(`Couldn’t open today’s ${MODE_NAMES[mode]}: ${cloud.errorText(err)}`);
+  } finally {
+    for (const b of $('daily-modes').querySelectorAll('button')) b.disabled = false;
+  }
+}
+
+// The server's answer as the one-player room view the game screen draws
+function dailyView(d) {
+  const done = Boolean(d.done);
+  return {
+    t: 'state', code: `Daily #${E.dayNumber(d.day)}`, status: done ? 'ended' : 'playing', round: 1, matchRound: 1, maxRounds: 0,
+    mode: d.mode, attempts: d.attempts, timer: 0, ladderTime: 0, hotTime: 0, winRule: 'fewest', hard: false, strict: true,
+    elapsed: d.ms, word: d.word, ladder: null, nearest: null, stats: [], history: [], crew: null, crewStatus: '', public: false,
+    players: [{
+      id: 'me', name: S.myName, color: 0, isHost: false, connected: true, photo: '',
+      used: d.guesses.length,
+      patterns: d.mode === 'classic' ? d.guesses.map((g) => g.pattern) : [],
+      counts: d.mode === 'counts' ? d.guesses.map((g) => g.counts) : [],
+      rows: done && d.mode === 'counts' ? d.guesses.map((g, i) => ({ word: g.word, pattern: d.patterns[i] })) : null,
+      match: null, best: null, hints: 0,
+      solved: Boolean(d.solved), done, finishMs: done ? d.ms : null, timedOut: false, stopped: false,
+    }],
+  };
+}
+
+function dailyShow(d, redraw) {
+  DAILY.data = d;
+  saveDaily(d);
+  applyState(dailyView(d));
+  if (redraw) onMessage({ t: 'board', round: 1, mode: d.mode, attempts: d.attempts, guesses: d.guesses });
+}
+
+async function dailyGuess(word) {
+  const token = DAILY.token;
+  const mode = S.daily;
+  try {
+    const d = await dailyApi(mode, 'guess', { word });
+    if (token !== DAILY.token) return;
+    if (d.error) {
+      onMessage({ t: 'invalid', reason: d.error === 'busy' ? 'One at a time' : d.error });
+      return;
+    }
+    if (d.last) onMessage({ t: 'result', round: 1, ...d.last });
+    else S.pending = false;
+    if (d.done) cloud.track('daily_finished', { mode, solved: d.solved, guesses: d.guesses.length });
+    // Let the last row's tiles flip before the results open
+    setTimeout(() => { if (token === DAILY.token) dailyShow(d, false); }, d.done && !reduceMotion ? (mode === 'counts' ? 700 : COLS * 250 + 450) : 0);
+  } catch (err) {
+    if (token !== DAILY.token) return;
+    onMessage({ t: 'invalid', reason: cloud.errorText(err) });
+  }
+}
+
+async function renderDailyBoard() {
+  const token = DAILY.token;
+  const el = $('daily-board');
+  if (!el) return;
+  if (DAILY.board) { el.innerHTML = DAILY.board; return; }
+  el.innerHTML = '<p class="muted small-note">Loading today’s leaderboard…</p>';
+  let html;
+  try {
+    const b = await cloud.api(`/api/lettuce-party/daily/board?mode=${S.daily}`);
+    const mine = b.me ? `You’re <b>#${b.me.rank}</b> of ${b.players} today.` : '';
+    html = (mine ? `<p class="board-me">${mine}</p>` : '')
+      + `<ol class="lb">${b.top.slice(0, 10).map((r) => `<li class="${r.me ? 'me' : ''}"><span class="rk">${r.rank}</span>`
+      + `<span class="nm">${esc(r.name)}</span><span class="res">${esc(r.detail)}</span></li>`).join('')}</ol>`;
+    DAILY.board = html;
+  } catch {
+    html = '<p class="muted small-note">Couldn’t load today’s leaderboard.</p>';
+  }
+  if (token === DAILY.token && $('daily-board')) $('daily-board').innerHTML = html;
 }
 
 /* =========================================================
@@ -1477,6 +1629,7 @@ function resetLocal() {
   S.code = null;
   S.roundShown = 0;
   S.localStartRound = 0;
+  if (S.daily) { S.daily = null; DAILY.token++; renderDailyCard(); }
 }
 
 function leaveRoom() {
@@ -1798,6 +1951,7 @@ document.addEventListener('keydown', (e) => {
     ($('name-input').value ? $('join-btn') : $('name-input')).focus();
   }
   buildKeyboard();
+  renderDailyCard();
   showScreen('home');
   savePrefs();
   cloud.onUser((u) => {

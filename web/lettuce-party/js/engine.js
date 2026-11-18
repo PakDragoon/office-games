@@ -193,3 +193,45 @@ export function hotOrder(players) {
     || (a.solved && b.solved ? (a.finishMs ?? 0) - (b.finishMs ?? 0) : 0)
     || a.best - b.best || a.used - b.used);
 }
+
+/* ---------- Dailies: one puzzle per mode for everyone each UTC day (run by server/src/daily/lettuce.ts) ---------- */
+
+export const DAILY_ONE = '2026-11-18';
+/** Guesses allowed in the daily: Counts tells you less, so it gets more. */
+export const DAILY_ATTEMPTS = { classic: 6, counts: 8 };
+export const DAILY_MODES = Object.keys(DAILY_ATTEMPTS);
+
+export function dayNumber(day) {
+  const [y, m, d] = day.split('-').map(Number);
+  const [y0, m0, d0] = DAILY_ONE.split('-').map(Number);
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(y0, m0 - 1, d0)) / 86400000) + 1;
+}
+export const utcDay = (now = new Date()) => now.toISOString().slice(0, 10);
+
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/** Today's word for a mode, from the server's secret seed (each mode gets its own word). */
+export function dailyWord(answers, seed, mode) {
+  let a = hashString(`lettuce:${mode}:${seed}`);
+  a = (a + 0x6d2b79f5) >>> 0;
+  let t = Math.imul(a ^ (a >>> 15), a | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  return answers[Math.floor(r * answers.length)];
+}
+
+// One number ranks a finished daily, lower is better: solved first, by fewest guesses, then fastest.
+// Not solved ranks below every solve (by time). Time is capped just under 10,000 s.
+const SLOT = 1e7;
+export function dailyScore(solved, used, attempts, ms) {
+  const time = Math.min(SLOT - 1, Math.max(0, Math.round(ms)));
+  return (solved ? used : attempts + 1) * SLOT + time;
+}
+export function dailyParts(score) {
+  const n = Math.floor(score / SLOT);
+  return { n, ms: score - n * SLOT };
+}

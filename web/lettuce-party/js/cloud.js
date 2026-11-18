@@ -4,6 +4,8 @@ import { api, getUser, signOutUser } from '../../shared/cloud.js';
 
 export { onUser, restore, signIn, errorText, analyticsConfigured, initAnalytics, setAnalyticsEnabled, track, mountDeleteData } from '../../shared/cloud.js';
 
+export { api };
+
 export const currentUser = () => getUser();
 export const signOut = () => signOutUser();
 

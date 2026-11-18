@@ -4,6 +4,7 @@ import { dailyStreakWrites } from '../db/stats';
 import { fastfingersDaily } from './fastfingers';
 import { guesstimateDaily } from './guesstimate';
 import { melonburstDaily } from './melonburst';
+import { lettuceDaily } from './lettuce';
 import { rottenDaily } from './rotten';
 
 /**
@@ -11,7 +12,13 @@ import { rottenDaily } from './rotten';
  * result on the leaderboard is one the server watched happen. One day for everyone: UTC.
  */
 export interface DailyGame<S = unknown> {
+  /** The game's id, or `<game>:<mode>` for one of several dailies in a game (asked for with ?mode=). */
   id: string;
+  /**
+   * Where the player's daily stats go when they aren't the game's own `dailies` / `bestDaily`: a game
+   * with several dailies writes `<key>:plays` and `<key>:best` under `game` (see bestDailyStat).
+   */
+  stats?: { game: string; key: string };
   /** 'asc': lower score wins (time). 'desc': higher score wins (points). */
   order: 'asc' | 'desc';
   /** Keep a day streak (days in a row with a finished daily) as the `streak` / `bestStreak` stats. */
@@ -33,7 +40,14 @@ export const DAILIES: Record<string, DailyGame> = {
   guesstimate: guesstimateDaily as DailyGame,
   melonburst: melonburstDaily as DailyGame,
   'fast-fingers': fastfingersDaily as DailyGame,
+  'lettuce-party:classic': lettuceDaily('classic') as DailyGame,
+  'lettuce-party:counts': lettuceDaily('counts') as DailyGame,
 };
+
+/** The player_stats rows a daily writes: [game, played counter, best score] (BEST_STATS must list `<game>:<best>`). */
+export function dailyStats(d: DailyGame): [string, string, string] {
+  return d.stats ? [d.stats.game, `${d.stats.key}Plays`, `${d.stats.key}Best`] : [d.id, 'dailies', 'bestDaily'];
+}
 
 export const utcDay = (d = new Date()) => d.toISOString().slice(0, 10);
 
@@ -42,9 +56,13 @@ const json = (data: unknown, status = 200) =>
 
 type PlayerOf = (request: Request, env: Env) => Promise<string | null>;
 
-export async function handleDaily(request: Request, env: Env, game: string, action: string | undefined, playerOf: PlayerOf): Promise<Response> {
-  const daily = DAILIES[game];
+export async function handleDaily(request: Request, env: Env, gameId: string, action: string | undefined, playerOf: PlayerOf): Promise<Response> {
+  // A game with several dailies (one per mode) is asked with ?mode=
+  const mode = new URL(request.url).searchParams.get('mode');
+  const daily = DAILIES[mode && /^[a-z]{1,20}$/.test(mode) ? `${gameId}:${mode}` : gameId];
   if (!daily) return json({ error: 'no daily for this game' }, 404);
+  const game = daily.id;
+  const [statGame, playedStat, bestStat] = dailyStats(daily);
   const day = utcDay();
   if (action === 'board' && request.method === 'GET') {
     const asked = new URL(request.url).searchParams.get('day');
@@ -97,15 +115,15 @@ export async function handleDaily(request: Request, env: Env, game: string, acti
          ON CONFLICT (game, day, player_id) DO NOTHING`,
       ).bind(game, day, player, name || 'Player', res.score, res.detail, now),
       env.DB.prepare(
-        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, 'dailies', 1 WHERE changes() > 0
+        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, ?3, 1 WHERE changes() > 0
          ON CONFLICT (player_id, game, stat) DO UPDATE SET value = value + 1`,
-      ).bind(player, game),
+      ).bind(player, statGame, playedStat),
       env.DB.prepare(
-        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, 'bestDaily', ?3 WHERE changes() > 0
+        `INSERT INTO player_stats (player_id, game, stat, value) SELECT ?1, ?2, ?3, ?4 WHERE changes() > 0
          ON CONFLICT (player_id, game, stat) DO UPDATE SET value = ${daily.order === 'asc' ? 'MIN' : 'MAX'}(value, excluded.value)`,
-      ).bind(player, game, res.score),
+      ).bind(player, statGame, bestStat, res.score),
     );
-    if (daily.streak) stmts.push(...(await dailyStreakWrites(env.DB, player, game, day)));
+    if (daily.streak) stmts.push(...(await dailyStreakWrites(env.DB, player, statGame, day)));
   }
   if (!row || acting) {
     const out = await env.DB.batch(stmts);

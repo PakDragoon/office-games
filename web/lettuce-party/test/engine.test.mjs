@@ -243,5 +243,21 @@ test('pickPair: any random number gives a whole line, and skipped lines are avoi
   }
 });
 
+test('dailies: a word per mode from the seed, scores rank solves by guesses then time', () => {
+  const answers = ['apple', 'beach', 'crane', 'delta', 'eagle', 'flame', 'grape', 'house'];
+  eq(E.dailyWord(answers, 'k1', 'classic'), E.dailyWord(answers, 'k1', 'classic'), 'same seed, same word');
+  const seen = new Set();
+  for (let i = 0; i < 50; i++) seen.add(E.dailyWord(answers, `k${i}`, 'classic'));
+  ok(seen.size >= 6, 'words vary by day');
+  let differ = 0;
+  for (let i = 0; i < 50; i++) if (E.dailyWord(answers, `k${i}`, 'classic') !== E.dailyWord(answers, `k${i}`, 'counts')) differ++;
+  ok(differ > 35, 'modes get their own word');
+  eq(E.dayNumber(E.DAILY_ONE), 1);
+  eq(E.dailyParts(E.dailyScore(true, 3, 6, 61000)), { n: 3, ms: 61000 });
+  ok(E.dailyScore(true, 2, 6, 900000) < E.dailyScore(true, 3, 6, 1000), 'fewer guesses beats faster');
+  ok(E.dailyScore(true, 6, 6, 9e6) < E.dailyScore(false, 6, 6, 1000), 'any solve beats a miss');
+  ok(E.dailyScore(true, 3, 6, 1000) < E.dailyScore(true, 3, 6, 2000), 'then time');
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

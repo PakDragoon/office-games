@@ -2,7 +2,7 @@ import { SELF, env } from 'cloudflare:test';
 import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { newGuest } from '../src/auth';
-import { DAILIES } from '../src/daily';
+import { DAILIES, dailyStats } from '../src/daily';
 import { BEST_STATS, deletePlayer, mergePlayer } from '../src/db/stats';
 
 /*
@@ -71,7 +71,10 @@ const count = async (table: string, col: string, id: string) =>
 
 describe('BEST_STATS', () => {
   it('agrees with every daily: bestDaily is MIN for a time score, MAX for points', () => {
-    for (const d of Object.values(DAILIES)) expect(BEST_STATS[`${d.id}:bestDaily`], d.id).toBe(d.order === 'asc' ? 'min' : 'max');
+    for (const d of Object.values(DAILIES)) {
+      const [game, , best] = dailyStats(d);
+      expect(BEST_STATS[`${game}:${best}`], d.id).toBe(d.order === 'asc' ? 'min' : 'max');
+    }
   });
   it('lists only game:stat keys', () => {
     for (const k of Object.keys(BEST_STATS)) expect(k).toMatch(/^[a-z-]+:[A-Za-z]+$/);

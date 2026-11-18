@@ -25,7 +25,8 @@ interface Guess { word: string; pattern: string; rank?: number; hint?: boolean }
 interface Ladder { start: string; target: string; par: number; path: string[] }
 
 let WORDS: { answers: string[]; valid: { has(w: string): boolean }; blocked: Set<string> } | null = null;
-function words() {
+/** The answer list (blocked words removed) and the guesses allowed, shared with the dailies. */
+export function words() {
   if (!WORDS) {
     const blocked = new Set<string>(BLOCKED_ANSWERS);
     const answers = ANSWERS_TEXT.split('\n').map((w) => w.trim()).filter((w) => /^[a-z]{5}$/.test(w) && !blocked.has(w));
