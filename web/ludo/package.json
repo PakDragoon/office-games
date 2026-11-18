@@ -1,0 +1,6 @@
+{
+  "name": "ludo",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test/engine.test.mjs" }
+}

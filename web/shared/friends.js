@@ -18,6 +18,7 @@ const GAME_NAMES = {
   forehead: 'Forehead',
   'a-to-zap': 'A to Zap',
   alzheimers: 'Alzheimer’s',
+  ludo: 'Ludo',
 };
 const gameName = (id) => GAME_NAMES[id] || id;
 

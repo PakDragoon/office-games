@@ -7,6 +7,7 @@ import { forehead } from './forehead';
 import { guesstimate } from './guesstimate';
 import { lettuce } from './lettuce';
 import { liar } from './liar';
+import { ludo } from './ludo';
 import { melonburst } from './melonburst';
 import { rotten } from './rotten';
 import { thulla } from './thulla';
@@ -24,4 +25,5 @@ export const GAMES: Record<string, GameModule> = {
   forehead,
   'a-to-zap': atozap,
   alzheimers,
+  ludo,
 };
