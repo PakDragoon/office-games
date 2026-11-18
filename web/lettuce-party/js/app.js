@@ -232,6 +232,8 @@ function applyState(v) {
   const roundOver = v.status === 'ended' || v.status === 'over';
   $('results-btn').hidden = !roundOver;
   $('endround-btn').hidden = !(S.isHost && v.status === 'playing');
+  // Dailies without a guess limit can be given up (two taps)
+  $('giveup-btn').hidden = !(S.daily && (v.mode === 'ladder' || v.mode === 'hotcold') && v.status === 'playing');
   if (prev && prev.status === 'playing' && roundOver && prev.round === v.round) {
     const m = me();
     if (m && m.timedOut) toast('Time’s up!');
@@ -1205,9 +1207,16 @@ function showResults(v) {
   const daily = Boolean(S.daily);
   if (daily) {
     const m = me();
-    $('results-title').textContent = m.solved ? `${winLine(m.used)} ${m.used}/${v.attempts}` : 'Not this time';
-    $('results-round-label').textContent = `${MODE_NAMES[v.mode]} daily #${E.dayNumber(DAILY.day)}. The word was`;
-    $('results-rule').textContent = `${MODE_NAMES[v.mode]}, ${v.attempts} guesses. Ranked by fewest guesses, then time. A new word at midnight UTC.`;
+    const n = m.used;
+    if (ladder) {
+      $('results-title').textContent = m.solved ? `Reached it in ${n} step${n === 1 ? '' : 's'}!` : 'You didn’t reach it this time';
+      $('results-round-label').textContent = `Word ladder daily #${E.dayNumber(DAILY.day)}. The target was`;
+      $('results-rule').textContent = `Par ${v.ladder?.par}. Ranked by fewest steps, then time. A new ladder at midnight UTC.`;
+    } else {
+      $('results-title').textContent = m.solved ? `${winLine(n)} ${n}/${v.attempts}` : 'Not this time';
+      $('results-round-label').textContent = `${MODE_NAMES[v.mode]} daily #${E.dayNumber(DAILY.day)}. The word was`;
+      $('results-rule').textContent = `${MODE_NAMES[v.mode]}, ${v.attempts} guesses. Ranked by fewest guesses, then time. A new word at midnight UTC.`;
+    }
   }
   let lb = $('daily-board');
   if (daily && !lb) {
@@ -1442,7 +1451,9 @@ function renderDailyCard() {
   const saves = readDailySaves();
   $('daily-modes').innerHTML = E.DAILY_MODES.map((mode) => {
     const s = saves[mode] && saves[mode].day === day ? saves[mode] : null;
-    const note = s && s.done ? `${s.solved ? `${s.used}/${s.attempts}` : `X/${s.attempts}`} · ${fmtTime(s.ms)} ✓` : s && s.started ? 'Keep going' : `${E.DAILY_ATTEMPTS[mode]} guesses`;
+    const ladder = mode === 'ladder';
+    const result = !s || !s.done ? '' : ladder ? (s.solved ? `${s.used} steps` : 'didn’t reach it') : s.solved ? `${s.used}/${s.attempts}` : `X/${s.attempts}`;
+    const note = s && s.done ? `${result} · ${fmtTime(s.ms)} ✓` : s && s.started ? 'Keep going' : ladder ? 'Fewest steps' : `${E.DAILY_ATTEMPTS[mode]} guesses`;
     return `<button class="btn${s && s.done ? ' done' : ''}" type="button" data-daily="${mode}"><span>${MODE_NAMES[mode]}</span><small>${note}</small></button>`;
   }).join('');
 }
@@ -1481,15 +1492,17 @@ function dailyView(d) {
   return {
     t: 'state', code: `Daily #${E.dayNumber(d.day)}`, status: done ? 'ended' : 'playing', round: 1, matchRound: 1, maxRounds: 0,
     mode: d.mode, attempts: d.attempts, timer: 0, ladderTime: 0, hotTime: 0, winRule: 'fewest', hard: false, strict: true,
-    elapsed: d.ms, word: d.word, ladder: null, nearest: null, stats: [], history: [], crew: null, crewStatus: '', public: false,
+    ladderReuse: true, elapsed: d.ms, word: d.word, ladder: d.ladder || null, nearest: null, stats: [], history: [], crew: null, crewStatus: '', public: false,
     players: [{
       id: 'me', name: S.myName, color: 0, isHost: false, connected: true, photo: '',
       used: d.guesses.length,
       patterns: d.mode === 'classic' ? d.guesses.map((g) => g.pattern) : [],
       counts: d.mode === 'counts' ? d.guesses.map((g) => g.counts) : [],
-      rows: done && d.mode === 'counts' ? d.guesses.map((g, i) => ({ word: g.word, pattern: d.patterns[i] })) : null,
-      match: null, best: null, hints: 0,
-      solved: Boolean(d.solved), done, finishMs: done ? d.ms : null, timedOut: false, stopped: false,
+      rows: done && d.mode === 'counts' ? d.guesses.map((g, i) => ({ word: g.word, pattern: d.patterns[i] }))
+        : done && d.mode === 'ladder' ? d.guesses.map((g) => ({ word: g.word })) : null,
+      match: d.mode === 'ladder' && d.ladder && d.guesses.length ? E.matchCount(d.guesses[d.guesses.length - 1].word, d.ladder.target) : null,
+      best: null, hints: 0,
+      solved: Boolean(d.solved), done, finishMs: done ? d.ms : null, timedOut: false, stopped: Boolean(d.gaveUp),
     }],
   };
 }
@@ -1872,6 +1885,26 @@ $('endround-btn').addEventListener('click', () => {
   if (S.isHost && confirm('End this round now for everyone? Anyone still guessing won’t get the word.')) send({ t: 'endRound' });
 });
 $('results-leave-btn').addEventListener('click', () => leaveRoom());
+let giveUpArmed = 0;
+$('giveup-btn').addEventListener('click', async () => {
+  const btn = $('giveup-btn');
+  if (!S.daily) return;
+  if (!giveUpArmed) {
+    btn.textContent = 'Tap again to give up';
+    giveUpArmed = setTimeout(() => { giveUpArmed = 0; btn.textContent = 'Give up'; }, 4000);
+    return;
+  }
+  clearTimeout(giveUpArmed);
+  giveUpArmed = 0;
+  btn.textContent = 'Give up';
+  const token = DAILY.token;
+  try {
+    const d = await dailyApi(S.daily, 'giveup');
+    if (token === DAILY.token && !d.error) dailyShow(d, false);
+  } catch (err) {
+    toast(cloud.errorText(err));
+  }
+});
 for (const id of ['rounds-select', 'timer-select', 'attempts-select']) {
   $(id).addEventListener('change', () => {
     if (!S.isHost || !S.view) return;

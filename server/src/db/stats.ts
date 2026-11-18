@@ -209,6 +209,7 @@ export const BEST_STATS: Record<string, 'max' | 'min'> = {
   // Lettuce Party has one daily per mode; each score packs guesses (or steps) and time, lower is better
   'lettuce-party:dailyClassicBest': 'min',
   'lettuce-party:dailyCountsBest': 'min',
+  'lettuce-party:dailyLadderBest': 'min',
   'forehead:fewestQ': 'min', // fewest questions asked before a right guess (written with `min` in the GameReport)
   'rotten:practiceBest': 'max', // longest practice streak
   'lettuce-party:bestStreak': 'max',

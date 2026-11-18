@@ -197,8 +197,8 @@ export function hotOrder(players) {
 /* ---------- Dailies: one puzzle per mode for everyone each UTC day (run by server/src/daily/lettuce.ts) ---------- */
 
 export const DAILY_ONE = '2026-11-18';
-/** Guesses allowed in the daily: Counts tells you less, so it gets more. */
-export const DAILY_ATTEMPTS = { classic: 6, counts: 8 };
+/** Guesses allowed in the daily: Counts tells you less, so it gets more. The ladder has no limit but a cap on steps. */
+export const DAILY_ATTEMPTS = { classic: 6, counts: 8, ladder: 60 };
 export const DAILY_MODES = Object.keys(DAILY_ATTEMPTS);
 
 export function dayNumber(day) {
@@ -214,14 +214,25 @@ function hashString(s) {
   return h >>> 0;
 }
 
+/** Seeded random numbers for one mode's daily (each mode gets its own stream from the server's secret seed). */
+export function dailyRandom(seed, mode) {
+  let a = hashString(`lettuce:${mode}:${seed}`);
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), a | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /** Today's word for a mode, from the server's secret seed (each mode gets its own word). */
 export function dailyWord(answers, seed, mode) {
-  let a = hashString(`lettuce:${mode}:${seed}`);
-  a = (a + 0x6d2b79f5) >>> 0;
-  let t = Math.imul(a ^ (a >>> 15), a | 1);
-  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-  const r = ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  return answers[Math.floor(r * answers.length)];
+  return answers[Math.floor(dailyRandom(seed, mode)() * answers.length)];
+}
+
+/** Today's ladder: a precomputed pair from words/ladders.txt, picked with the seed. */
+export function dailyLadder(text, seed) {
+  return pickPair(text, dailyRandom(seed, 'ladder'));
 }
 
 // One number ranks a finished daily, lower is better: solved first, by fewest guesses, then fastest.

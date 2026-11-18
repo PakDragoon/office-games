@@ -23,6 +23,13 @@ const board = (token: string, mode: string) =>
 const today = () => new Date().toISOString().slice(0, 10);
 
 /** The secret word the server holds (the test peeks; the API must not show it before the end). */
+async function session(id: string, mode: string): Promise<Json> {
+  const row = await env.DB.prepare('SELECT state FROM daily_sessions WHERE game = ?1 AND day = ?2 AND player_id = ?3')
+    .bind(`lettuce-party:${mode}`, today(), id)
+    .first<{ state: string }>();
+  return JSON.parse(row!.state);
+}
+
 async function secret(id: string, mode: string): Promise<string> {
   const row = await env.DB.prepare('SELECT state FROM daily_sessions WHERE game = ?1 AND day = ?2 AND player_id = ?3')
     .bind(`lettuce-party:${mode}`, today(), id)
@@ -106,5 +113,43 @@ describe('lettuce party dailies on the server', () => {
     // Same seed source, different salts: they can only match by a rare coincidence
     expect(words[0]).toMatch(/^[a-z]{5}$/);
     expect(words[1]).toMatch(/^[a-z]{5}$/);
+  });
+
+  it('Word ladder: public start and target, every step checked, the shortest path only at the end', async () => {
+    const { token, id } = await guest();
+    const d = await call(token, 'ladder', 'state');
+    expect(d.ladder).toBeNull();   // nothing before you start
+    const s = await call(token, 'ladder', 'next');
+    expect(s.ladder.start).toMatch(/^[a-z]{5}$/);
+    expect(s.ladder.path).toBeNull();
+    const path: string[] = (await session(id, 'ladder')).ladder.path;
+    expect(path[0]).toBe(s.ladder.start);
+    expect((await call(token, 'ladder', 'guess', { word: 'zzzzz' })).error).toBeTruthy();
+    // Two letters at once is refused
+    const two = path[2];
+    if (two && E.diffCount(s.ladder.start, two) === 2) expect((await call(token, 'ladder', 'guess', { word: two })).error).toBe('Change exactly one letter');
+    let r: Json = {};
+    for (const w of path.slice(1)) r = await call(token, 'ladder', 'guess', { word: w });
+    expect(r.done).toBe(true);
+    expect(r.solved).toBe(true);
+    expect(r.ladder.path).toEqual(path);
+    const mine = (await board(token, 'ladder')).top.find((x: Json) => x.me);
+    expect(E.dailyParts(mine.score).n).toBe(path.length - 1);
+    expect(mine.detail).toContain(`par ${s.ladder.par}`);
+  });
+
+  it('Word ladder: giving up ends it below every finish, and only the ladder can be given up', async () => {
+    const a = await guest();
+    await call(a.token, 'ladder', 'next');
+    const g = await call(a.token, 'ladder', 'giveup');
+    expect(g.done).toBe(true);
+    expect(g.solved).toBe(false);
+    expect(g.gaveUp).toBe(true);
+    expect(g.ladder.path.length).toBeGreaterThan(2);
+    const top = (await board(a.token, 'ladder')).top;
+    expect(top.find((x: Json) => x.me).detail).toBe('didn’t reach it');
+    const b = await guest();
+    await call(b.token, 'classic', 'next');
+    expect((await call(b.token, 'classic', 'giveup')).error).toBe('unknown action');
   });
 });

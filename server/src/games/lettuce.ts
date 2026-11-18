@@ -37,7 +37,8 @@ export function words() {
 }
 
 /** A word a ladder step may use: any valid word except the blocked ones, which the pairs' par was worked out without. */
-const ladderWord = (w: string) => words().valid.has(w) && !words().blocked.has(w);
+export const ladderWord = (w: string) => words().valid.has(w) && !words().blocked.has(w);
+export { LADDERS_TEXT };
 
 // Hot & Cold's vectors are read in place the first time a room needs them (no copying, no big Set)
 let HOT_VEC: ReturnType<typeof H.readVectors> | null = null;

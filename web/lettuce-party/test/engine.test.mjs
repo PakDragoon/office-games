@@ -259,5 +259,15 @@ test('dailies: a word per mode from the seed, scores rank solves by guesses then
   ok(E.dailyScore(true, 3, 6, 1000) < E.dailyScore(true, 3, 6, 2000), 'then time');
 });
 
+test('daily ladder: a real pair from the file, picked by the seed', () => {
+  const lad = text('ladders.txt');
+  const a = E.dailyLadder(lad, 'seed-1'), b = E.dailyLadder(lad, 'seed-1');
+  eq(a, b, 'same seed, same ladder');
+  ok(a && a.path.length === a.par + 1, 'a whole pair');
+  const seen = new Set();
+  for (let i = 0; i < 40; i++) seen.add(E.dailyLadder(lad, `s${i}`).start + E.dailyLadder(lad, `s${i}`).target);
+  ok(seen.size > 30, 'ladders vary by day');
+});
+
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
