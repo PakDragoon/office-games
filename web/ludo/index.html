@@ -35,7 +35,7 @@
           <rect class="lm c0" x="0" y="0" width="46" height="46" rx="8"/><rect class="lm c1" x="54" y="0" width="46" height="46" rx="8"/>
           <rect class="lm c3" x="0" y="54" width="46" height="46" rx="8"/><rect class="lm c2" x="54" y="54" width="46" height="46" rx="8"/>
         </svg>
-        <span class="logo-word" aria-hidden="true">Ludo</span>
+        <span class="logo-word" aria-hidden="true">Ludo<span class="logo-die" id="logo-die"></span></span>
         <span class="logo-sub" aria-hidden="true">roll, race, get home first</span>
       </h1>
       <p class="lede">The board game everyone grew up with, for 2 to 4 players or 2 vs 2. Roll a 6 to get out, race once round the board, land on rivals to send them back, and bring every token home first. You pick the house rules.</p>
@@ -196,7 +196,7 @@
     </button>
   </header>
   <div class="arena">
-    <section class="table" aria-label="Board">
+    <section class="table" id="table" aria-label="Board">
       <div class="corner k0" id="corner-0"></div>
       <div class="corner k1" id="corner-1"></div>
       <div class="board-wrap" id="board-wrap">
@@ -217,7 +217,6 @@
       <div class="corner k3" id="corner-3"></div>
       <div class="corner k2" id="corner-2"></div>
       <div class="action">
-        <div id="die" role="img" aria-label="Die"></div>
         <p class="status" id="status" aria-live="polite"></p>
         <button class="btn roll-btn" id="roll-btn" type="button" hidden>Roll</button>
         <button class="btn ghost small" id="back-btn" type="button" hidden>I’m back</button>

@@ -201,8 +201,8 @@ function applyState(v) {
 }
 
 /* =========================================================
-   The game screen: a card per player at the board's corners, the board, one action row (die, status,
-   Roll), and a side panel (reactions, room, this game's rules, log) that becomes tabs on phones
+   The game screen: a card per player at the board's corners (each with its own die showing that player's
+   last roll), the board, the status line and Roll under it, and a side panel (reactions, room, this game's rules, log) that becomes tabs on phones
    ========================================================= */
 const board = createBoard($('board-wrap'), {
   onPick: (c, i) => {
@@ -212,7 +212,9 @@ const board = createBoard($('board-wrap'), {
     toHost({ t: 'move', c, i, seq: v.g.seq });
   },
 });
-const die = createDie($('die'));
+// One die per colour, inside that player's card. Cards are built once per game and then only updated, so a
+// die that is rolling is never pulled out of the page mid-roll.
+let dice = {};
 
 function renderGame(v) {
   const g = v.g;
@@ -230,9 +232,11 @@ function renderGame(v) {
     S.startedAt = Date.now();
     $('log').innerHTML = '';
     $('result').hidden = true;
-    const lastRoll = [...g.events].reverse().find((e) => e.k === 'roll');
-    die.set(g.roll || lastRoll?.v || 0);
-    setDieColour(lastRoll ? lastRoll.c : g.turn);
+    buildCorners(v);
+    for (const c of g.colours) {
+      const last = [...g.events].reverse().find((e) => e.k === 'roll' && e.c === c);
+      dice[c].set(last ? last.v : 0);
+    }
     renderRulesNow(g.settings);
   } else {
     const fresh = g.events.filter((e) => e.s > S.seen);
@@ -275,10 +279,9 @@ async function pump() {
 async function playEvent(v, e, speed) {
   if (e.k === 'roll') {
     S.rolling = false;
-    setDieColour(e.c);
     status(`${whoName(v, e.c)} rolled`);
     sound('rattle');
-    await die.roll(e.v, Math.round(480 * speed));
+    await dice[e.c]?.roll(e.v, Math.round(480 * speed));
     sound('land');
     status(`${whoName(v, e.c)} rolled ${e.v}`);
     log(v, e.c, `rolled ${e.v}`);
@@ -314,9 +317,6 @@ const colourName = (v, c) => {
 };
 const whoName = (v, c) => (v.seats[c] === S.myId ? 'You' : nameAt(v, c));
 const status = (text) => { $('status').textContent = text; };
-function setDieColour(c) {
-  $('die').style.setProperty('--pc', c >= 0 ? `var(--c${c})` : 'var(--line)');
-}
 
 /** Caught up: the real positions, whose turn it is, and what this player may do now. */
 function settle(v) {
@@ -338,7 +338,6 @@ function settle(v) {
   $('result').hidden = true;
   const note = S.note ? `${S.note} · ` : '';
   if (g.phase === 'roll') {
-    setDieColour(g.turn);
     if (mine) {
       $('roll-btn').hidden = false;
       $('roll-btn').disabled = S.rolling;
@@ -365,18 +364,20 @@ const forPartner = (g) => {
 };
 
 $('roll-btn').addEventListener('click', roll);
-$('die').addEventListener('click', roll);
+// Clicking your own die rolls too
+$('table').addEventListener('click', (e) => { if (e.target.closest('.card.me .die')) roll(); });
 function roll() {
   const v = S.view;
   if (!v?.g || v.status !== 'play' || v.g.phase !== 'roll' || v.seats[v.g.turn] !== S.myId || S.busy || S.rolling) return;
   S.rolling = true;
   $('roll-btn').disabled = true;
-  die.shake(true);
+  const myDie = dice[v.g.turn];
+  myDie?.shake(true);
   toHost({ t: 'roll', seq: v.g.seq });
   setTimeout(() => {
     if (!S.rolling) return;
     S.rolling = false;
-    die.shake(false);
+    myDie?.shake(false);
     if (S.view) settle(S.view);
   }, 2500);
 }
@@ -399,28 +400,43 @@ document.addEventListener('keydown', (e) => {
 $('back-btn').addEventListener('click', () => { toHost({ t: 'back' }); $('back-btn').hidden = true; });
 
 /* ---------- A card per player, in the corner of their yard ---------- */
-function renderCorners(v) {
+/** Build the four corners for a new game: each playing colour gets a card with its own die. */
+function buildCorners(v) {
   const g = v.g;
+  dice = {};
   for (let k = 0; k < 4; k++) {
     const host = $(`corner-${k}`);
     const c = [0, 1, 2, 3].find((x) => board.corner(x) === k);
-    if (!g.colours.includes(c)) {
-      host.className = `corner k${k} empty`;
-      host.innerHTML = '';
-      continue;
-    }
+    host.className = `corner k${k}${g.colours.includes(c) ? '' : ' empty'}`;
+    host.innerHTML = '';
+    if (!g.colours.includes(c)) continue;
+    host.innerHTML = `<div class="card c${c}" data-c="${c}">
+      <span class="sw" aria-hidden="true"></span>
+      <span class="who"><b class="nm"></b><span class="meta"><span class="pips"></span><span class="st"></span></span></span>
+      <div class="die" role="img" aria-label="${NAMES[c]}’s last roll"></div>
+      <i class="timer"></i></div>`;
+    dice[c] = createDie(host.querySelector('.die'));
+  }
+}
+
+/** Names, home pips, state and whose turn it is; the dice are left alone. */
+function renderCorners(v) {
+  const g = v.g;
+  for (const c of g.colours) {
+    const card = document.querySelector(`.corner .card[data-c="${c}"]`);
+    if (!card) continue;
     const p = playerAt(v, c);
     const home = g.tokens[c].filter((x) => x === E.HOME).length;
-    const turn = g.turn === c && v.status === 'play';
     const done = g.done.indexOf(c);
     const state = done >= 0 ? PLACES[done] : !p ? 'left' : p.autoplay ? 'auto' : !active(p) ? 'away' : '';
     const team = g.settings.teams ? ` · T${c % 2 ? 2 : 1}` : '';
-    host.className = `corner k${k}`;
-    host.innerHTML = `<div class="card c${c}${turn ? ' turn' : ''}${p?.id === S.myId ? ' me' : ''}">
-      <span class="sw" aria-hidden="true"></span>
-      <span class="who"><b>${esc(p ? p.name : NAMES[c])}${p?.id === S.myId ? ' (you)' : ''}${botTag(p)}</b>
-        <span class="meta"><span class="pips" title="${home} of ${g.tokens[c].length} home">${g.tokens[c].map((x) => `<i class="${x === E.HOME ? 'in' : ''}"></i>`).join('')}</span><span>${NAMES[c].toUpperCase()}${team} · ${home}/${g.tokens[c].length}${state ? ` · ${state.toUpperCase()}` : ''}</span></span></span>
-      <i class="timer"></i></div>`;
+    card.classList.toggle('turn', g.turn === c && v.status === 'play');
+    card.classList.toggle('me', p?.id === S.myId);
+    card.querySelector('.nm').innerHTML = `${esc(p ? p.name : NAMES[c])}${p?.id === S.myId ? ' (you)' : ''}${botTag(p)}`;
+    card.querySelector('.pips').innerHTML = g.tokens[c].map((x) => `<i class="${x === E.HOME ? 'in' : ''}"></i>`).join('');
+    card.querySelector('.pips').title = `${home} of ${g.tokens[c].length} home`;
+    card.querySelector('.st').textContent = `${home}/${g.tokens[c].length}${team}${state ? ` · ${state.toUpperCase()}` : ''}`;
+    card.title = `${NAMES[c]}${p ? `: ${p.name}` : ''}`;
   }
   const left = v.turnLeft ?? v.idleLeft;
   S.endMs = v.turnLeft != null ? v.turnMs : v.idleLeft != null ? 60000 : 0;
@@ -828,6 +844,13 @@ if (new URLSearchParams(location.search).has('debug')) window.__ludo = { S, link
 /* =========================================================
    Start
    ========================================================= */
+// The die next to the title on the home screen rolls every few seconds while the home screen is showing
+const logoDie = createDie($('logo-die'));
+logoDie.set(6);
+setInterval(() => {
+  if (!$('home').hidden && !document.hidden && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) logoDie.roll(1 + Math.floor(Math.random() * 6), 600);
+}, 2800);
+
 (function init() {
   const saved = store.get('name', '');
   if (saved) $('name-input').value = saved;
