@@ -1,12 +1,14 @@
-// The Ludo board: a flat SVG drawn from the rules file's geometry, the tokens on it and their moves.
-// Plain on purpose: hairline squares, solid colour yards, flat tokens. The only highlights are the ones you
-// can act on (tokens that can move, and where the one you point at would land).
+// The Ludo board: an SVG drawn from the rules file's geometry, the tokens on it and their moves.
+// Crisp lines, no glow: yards and lanes outlined in their colour, solid start squares, stars on safe squares.
+// Highlights only on what you can act on (tokens that can move, where the pointed-at one lands) and a dashed
+// outline round the yard whose turn it is.
 // It knows nothing about the network: app.js tells it what to show and hears back which token was picked.
 import * as E from './engine.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const U = 40;          // one cell, in board units (the board is 15 × 15 cells = 600 × 600)
 const R = 12.5;        // token radius
+const YARD_SCALE = 1.35;   // tokens waiting in the yard are drawn bigger (their slots are roomy)
 const el = (tag, attrs = {}, parent) => {
   const n = document.createElementNS(NS, tag);
   for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v);
@@ -56,19 +58,31 @@ export function createBoard(host, { onPick }) {
     gBoard.replaceChildren();
     el('rect', { x: 0, y: 0, width: 600, height: 600, class: 'b-bg' }, gBoard);
     for (let c = 0; c < 4; c++) {
+      const yg = el('g', { class: `yard-g c${c}${colours.includes(c) ? '' : ' off'}`, 'data-c': c }, gBoard);
       const y = box(0, 0, 6, 6, c);
-      el('rect', { x: y.x, y: y.y, width: y.w, height: y.h, class: `yard c${c}${colours.includes(c) ? '' : ' off'}` }, gBoard);
+      el('rect', { x: y.x + 1, y: y.y + 1, width: y.w - 2, height: y.h - 2, rx: 3, class: 'yard' }, yg);
       const inner = box(1, 1, 5, 5, c);
-      el('rect', { x: inner.x, y: inner.y, width: inner.w, height: inner.h, rx: 6, class: 'yard-in' }, gBoard);
+      el('rect', { x: inner.x, y: inner.y, width: inner.w, height: inner.h, rx: 3, class: 'yard-in' }, yg);
       for (let i = 0; i < 4; i++) {
         const [x, yy] = P(E.spot(c, E.BASE, i));
-        el('circle', { cx: x, cy: yy, r: R + 4, class: 'slot' }, gBoard);
+        el('circle', { cx: x, cy: yy, r: R * YARD_SCALE + 5, class: 'slot' }, yg);
       }
+      el('rect', { x: y.x + 6, y: y.y + 6, width: y.w - 12, height: y.h - 12, rx: 3, class: 'turn-mark' }, yg);
     }
     for (let a = 0; a < E.TRACK; a++) {
       const start = E.STARTS.indexOf(a);
       const safe = start < 0 && settings.safe === 'stars' && E.STARS.includes(a);
       square(E.trackCell(a), start >= 0 ? `sq start c${start}` : safe ? 'sq safe' : 'sq');
+      if (safe) {
+        const { x, y } = cellAt(E.trackCell(a));
+        let d = '';
+        for (let k = 0; k < 10; k++) {
+          const an = -Math.PI / 2 + (k * Math.PI) / 5;
+          const rr = k % 2 ? 4.4 : 10;
+          d += `${k ? 'L' : 'M'}${(x + U / 2 + Math.cos(an) * rr).toFixed(1)} ${(y + U / 2 + Math.sin(an) * rr).toFixed(1)}`;
+        }
+        el('path', { d: `${d}Z`, class: 'star' }, gBoard);
+      }
     }
     for (let c = 0; c < 4; c++) for (let j = 0; j < 5; j++) square(E.laneCell(c, j), `sq lane c${c}`);
     for (let c = 0; c < 4; c++) {
@@ -85,6 +99,7 @@ export function createBoard(host, { onPick }) {
     const g = el('g', { class: `tok c${c}`, 'data-c': c, 'data-i': i, tabindex: '-1', role: 'button', 'aria-label': `${E.COLOUR_NAMES[c]} token ${i + 1}` }, gTok);
     el('circle', { r: R + 5.5, class: 'tok-ring' }, g);
     el('circle', { r: R, class: 'tok-disc' }, g);
+    el('circle', { r: R * 0.38, class: 'tok-core' }, g);
     tokEls[key] = g;
     return g;
   }
@@ -103,7 +118,7 @@ export function createBoard(host, { onPick }) {
     for (const c of colours) (tokens[c] || []).forEach((p, i) => {
       const [x, y] = posOf(c, p, i);
       const id = `${c}:${i}`;
-      if (p === E.BASE) out[id] = { x, y, s: 1 };
+      if (p === E.BASE) out[id] = { x, y, s: YARD_SCALE };
       else if (p === E.HOME) out[id] = { x, y, s: 0.66 };
       else {
         const g = groups[stackKey(c, p)];
@@ -250,7 +265,7 @@ export function createBoard(host, { onPick }) {
         const vg = tokenEl(v.c, v.i);
         const home = posOf(v.c, E.BASE, v.i);
         vg.classList.add('no-ease');
-        put(vg, { x: home[0], y: home[1], s: 1 });
+        put(vg, { x: home[0], y: home[1], s: YARD_SCALE });
         await slide(vg, at, home, ms(380));
         tokens[v.c][v.i] = E.BASE;
       }));
@@ -280,6 +295,12 @@ export function createBoard(host, { onPick }) {
     },
     setLegal,
     playMove,
+    /** The dashed outline round the yard whose turn it is (-1: nobody's). */
+    setTurn(c) {
+      gBoard.querySelectorAll('.yard-g').forEach((y) => y.classList.toggle('turn', Number(y.dataset.c) === c));
+    },
+    /** Which corner (0 top-left, 1 top-right, 2 bottom-right, 3 bottom-left) a colour's yard is drawn in. */
+    corner: (c) => (c + rot) % 4,
     setSpeed(s) { speed = s; },
   };
 }

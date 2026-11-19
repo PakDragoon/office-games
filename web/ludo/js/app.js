@@ -95,6 +95,8 @@ const S = {
   moving: null,       // host: the seated player being moved to another colour
   botWant: null,      // host: a bot was just asked for this colour ({ want, before })
   endArmed: 0,
+  startedAt: 0,       // when this game began here (log times)
+  tab: 'log',         // phones: the open panel
   note: '',           // what the last move did ("Sara sent you home"), shown with the next status
 };
 
@@ -159,6 +161,9 @@ function onMessage(msg) {
     case 'toast':
       toast(String(msg.text || ''));
       break;
+    case 'react':
+      showReaction(msg.pid, msg.e);
+      break;
     case 'state':
       applyState(msg);
       break;
@@ -196,7 +201,8 @@ function applyState(v) {
 }
 
 /* =========================================================
-   The game screen: players strip, board, one action row (die, status, Roll)
+   The game screen: a card per player at the board's corners, the board, one action row (die, status,
+   Roll), and a side panel (reactions, room, this game's rules, log) that becomes tabs on phones
    ========================================================= */
 const board = createBoard($('board-wrap'), {
   onPick: (c, i) => {
@@ -221,6 +227,8 @@ function renderGame(v) {
     S.queue = [];
     S.rolling = false;
     S.note = '';
+    S.startedAt = Date.now();
+    $('log').innerHTML = '';
     $('result').hidden = true;
     const lastRoll = [...g.events].reverse().find((e) => e.k === 'roll');
     die.set(g.roll || lastRoll?.v || 0);
@@ -236,7 +244,8 @@ function renderGame(v) {
     S.seen = g.seq;
   }
   $('end-btn').hidden = !(S.isHost && v.status === 'play');
-  renderPlayers(v);
+  renderCorners(v);
+  renderRoom(v);
   pump();
 }
 
@@ -272,26 +281,32 @@ async function playEvent(v, e, speed) {
     await die.roll(e.v, Math.round(480 * speed));
     sound('land');
     status(`${whoName(v, e.c)} rolled ${e.v}`);
+    log(v, e.c, `rolled ${e.v}`);
     await wait(150 * speed);
   } else if (e.k === 'move') {
     await board.playMove(e);
     if (e.cap.length) {
       sound('capture');
       S.note = `${whoName(v, e.by)} sent ${e.cap.map((x) => colourName(v, x.c)).join(' and ')} home`;
+      log(v, e.by, `sent ${e.cap.map((x) => colourName(v, x.c)).join(' and ')} home`);
     } else if (e.home) {
       sound('home');
       S.note = `${whoName(v, e.by)} got a token home`;
-    }
+      log(v, e.by, 'got a token home');
+    } else if (e.from === E.BASE) log(v, e.by, 'came out of the yard');
   } else if (e.k === 'pass') {
     sound('nope');
     status(e.why === 'sixes' ? 'Three 6s in a row: turn over' : `${whoName(v, e.c)}: no move`);
+    log(v, e.c, e.why === 'sixes' ? 'rolled three 6s, turn over' : 'had no move');
     await wait(650 * speed);
   } else if (e.k === 'done') {
     sound('home');
-    const place = ['1st', '2nd', '3rd', '4th'][e.place - 1] || `${e.place}th`;
+    const place = PLACES[e.place - 1] || `${e.place}th`;
     S.note = `${whoName(v, e.c)} finished ${place}`;
+    log(v, e.c, `finished ${place}`);
   }
 }
+const PLACES = ['1st', '2nd', '3rd', '4th'];
 
 const colourName = (v, c) => {
   const p = playerAt(v, c);
@@ -307,7 +322,8 @@ function setDieColour(c) {
 function settle(v) {
   const g = v.g;
   board.snap(g.tokens);
-  renderPlayers(v);
+  board.setTurn(v.status === 'play' ? g.turn : -1);
+  renderCorners(v);
   const myself = me(v);
   const mine = v.seats[g.turn] === S.myId && v.status === 'play';
   $('back-btn').hidden = !(myself && myself.autoplay && v.status === 'play');
@@ -320,12 +336,13 @@ function settle(v) {
     return;
   }
   $('result').hidden = true;
-  const note = S.note ? `${S.note}. ` : '';
+  const note = S.note ? `${S.note} · ` : '';
   if (g.phase === 'roll') {
     setDieColour(g.turn);
     if (mine) {
       $('roll-btn').hidden = false;
       $('roll-btn').disabled = S.rolling;
+      $('roll-btn').style.setProperty('--pc', `var(--c${g.turn})`);
       status(`${note}${g.sixes ? 'Roll again' : 'Your turn'}`);
       const key = `${v.game}:${g.seq}`;
       if (S.turnSoundFor !== key) {
@@ -337,7 +354,7 @@ function settle(v) {
   } else if (g.phase === 'move') {
     if (mine) {
       board.setLegal(g.legal);
-      status(E.distinctMoves(g.legal).length === 1 ? `You rolled ${g.roll}` : `You rolled ${g.roll}: pick a token`);
+      status(E.distinctMoves(g.legal).length === 1 ? `You rolled ${g.roll}` : `You rolled ${g.roll} · pick a token`);
     } else status(`${nameAt(v, g.turn)}${forPartner(g)} rolled ${g.roll}`);
   }
   S.note = '';
@@ -381,27 +398,37 @@ document.addEventListener('keydown', (e) => {
 });
 $('back-btn').addEventListener('click', () => { toHost({ t: 'back' }); $('back-btn').hidden = true; });
 
-/* ---------- Players strip ---------- */
-function renderPlayers(v) {
+/* ---------- A card per player, in the corner of their yard ---------- */
+function renderCorners(v) {
   const g = v.g;
-  $('players').innerHTML = g.colours.map((c) => {
+  for (let k = 0; k < 4; k++) {
+    const host = $(`corner-${k}`);
+    const c = [0, 1, 2, 3].find((x) => board.corner(x) === k);
+    if (!g.colours.includes(c)) {
+      host.className = `corner k${k} empty`;
+      host.innerHTML = '';
+      continue;
+    }
     const p = playerAt(v, c);
     const home = g.tokens[c].filter((x) => x === E.HOME).length;
     const turn = g.turn === c && v.status === 'play';
     const done = g.done.indexOf(c);
-    const sub = done >= 0 ? ['1st', '2nd', '3rd', '4th'][done]
-      : !p ? 'left' : p.autoplay ? 'auto' : !active(p) ? 'away' : `${home}/${g.tokens[c].length}`;
-    const team = g.settings.teams ? ` <span class="muted">· ${c % 2 ? 'Team 2' : 'Team 1'}</span>` : '';
-    return `<li class="${turn ? 'turn' : ''}${p?.id === S.myId ? ' me' : ''}" style="--pc: var(--c${c})">
-      <span class="dot"></span><span class="nm">${esc(p ? p.name : NAMES[c])}${team}</span><span class="sub">${esc(sub)}</span><i class="bar"></i></li>`;
-  }).join('');
+    const state = done >= 0 ? PLACES[done] : !p ? 'left' : p.autoplay ? 'auto' : !active(p) ? 'away' : '';
+    const team = g.settings.teams ? ` · T${c % 2 ? 2 : 1}` : '';
+    host.className = `corner k${k}`;
+    host.innerHTML = `<div class="card c${c}${turn ? ' turn' : ''}${p?.id === S.myId ? ' me' : ''}">
+      <span class="sw" aria-hidden="true"></span>
+      <span class="who"><b>${esc(p ? p.name : NAMES[c])}${p?.id === S.myId ? ' (you)' : ''}${botTag(p)}</b>
+        <span class="meta"><span class="pips" title="${home} of ${g.tokens[c].length} home">${g.tokens[c].map((x) => `<i class="${x === E.HOME ? 'in' : ''}"></i>`).join('')}</span><span>${NAMES[c].toUpperCase()}${team} · ${home}/${g.tokens[c].length}${state ? ` · ${state.toUpperCase()}` : ''}</span></span></span>
+      <i class="timer"></i></div>`;
+  }
   const left = v.turnLeft ?? v.idleLeft;
   S.endMs = v.turnLeft != null ? v.turnMs : v.idleLeft != null ? 60000 : 0;
   S.endAt = left != null && v.status === 'play' ? performance.now() + left : 0;
 }
 
 setInterval(() => {
-  const bar = document.querySelector('.players li.turn .bar');
+  const bar = document.querySelector('.corner .card.turn .timer');
   if (!bar || $('game').hidden) return;
   if (!S.endAt || !S.endMs) { bar.style.transform = 'scaleX(0)'; return; }
   const left = Math.max(0, S.endAt - performance.now());
@@ -409,23 +436,73 @@ setInterval(() => {
   bar.classList.toggle('low', left < 5000 && S.view?.turnLeft != null);
 }, 100);
 
+/* ---------- Side panel ---------- */
+function renderRoom(v) {
+  $('who-list').innerHTML = [...v.players].sort((a, b) => b.wins - a.wins).map((p) => {
+    const colour = p.seat >= 0 ? `style="--pc: var(--c${p.seat})"` : '';
+    const st = !active(p) && !p.bot ? 'away' : p.seat < 0 || !p.inGame ? 'watching' : `${p.wins} win${p.wins === 1 ? '' : 's'}`;
+    return `<li class="${active(p) || p.bot ? '' : 'off'}" ${colour}><span class="d"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${p.bot ? ' · bot' : ''}</span><span class="v">${esc(st)}</span></li>`;
+  }).join('');
+}
+
 function renderRulesNow(s) {
   const items = [
-    `${s.tokens} tokens each`,
-    s.leave === 'six' ? 'Out of the yard on a 6' : 'Out of the yard on a 1 or 6',
-    s.timer ? `${s.timer} s a turn` : 'No turn timer',
-    s.teams ? '2 vs 2' : s.end === 'all' ? 'Play on for every place' : 'First one home wins',
-    s.safe === 'stars' ? 'Start squares and grey squares are safe' : s.safe === 'starts' ? 'Only start squares are safe' : 'Nowhere is safe',
+    `${s.tokens} tokens`,
+    s.leave === 'six' ? 'Out on a 6' : 'Out on a 1 or 6',
+    s.timer ? `${s.timer} s turns` : 'No timer',
+    s.teams ? '2 vs 2' : s.end === 'all' ? 'Every place' : 'First home wins',
+    s.safe === 'stars' ? 'Stars + starts safe' : s.safe === 'starts' ? 'Starts safe' : 'Nowhere safe',
   ];
-  const extra = [s.bonusSix && 'a 6', s.bonusCapture && 'a capture', s.bonusHome && 'getting home'].filter(Boolean);
-  items.push(extra.length ? `Roll again after ${extra.join(', ')}` : 'No extra rolls');
-  if (s.threeSixes === 'lose') items.push('Three 6s in a row end the turn');
-  if (s.blocks) items.push('Blocks: two of a colour can’t be passed');
-  if (s.mustCapture) items.push('Capture someone before going home');
-  items.push(s.exact ? 'Exact roll to get home' : 'No exact roll needed');
-  $('rules-now').innerHTML = items.map((t) => `<li>${esc(t)}</li>`).join('');
-  $('rules-room').hidden = false;
+  const extra = [s.bonusSix && '6', s.bonusCapture && 'capture', s.bonusHome && 'home'].filter(Boolean);
+  items.push(extra.length ? `Extra roll: ${extra.join(' · ')}` : 'No extra rolls');
+  if (s.threeSixes === 'lose') items.push('Three 6s end the turn');
+  if (s.blocks) items.push('Blocks');
+  if (s.mustCapture) items.push('Capture before home');
+  items.push(s.exact ? 'Exact roll home' : 'No exact roll');
+  $('rules-now').innerHTML = items.map((t) => `<span>${esc(t)}</span>`).join('');
 }
+
+function log(v, c, text) {
+  const li = document.createElement('li');
+  li.style.setProperty('--pc', `var(--c${c})`);
+  const secs = Math.max(0, Math.round((Date.now() - (S.startedAt || Date.now())) / 1000));
+  const who = colourName(v, c);
+  li.innerHTML = `<span class="t">${String(Math.floor(secs / 60)).padStart(2, '0')}:${String(secs % 60).padStart(2, '0')}</span><span class="d"></span><span>${esc(who === 'you' ? 'You' : who)} ${esc(text)}</span>`;
+  $('log').prepend(li);
+  while ($('log').children.length > 40) $('log').lastChild.remove();
+}
+
+const REACTIONS = ['👏', '😮', '😂', '😬', '🔥', '🤝'];
+$('reacts').innerHTML = REACTIONS.map((e) => `<button type="button" data-react="${e}" aria-label="React ${e}">${e}</button>`).join('');
+$('reacts').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-react]');
+  if (b) toHost({ t: 'react', e: b.dataset.react });
+});
+/** A reaction rises from the player's card (or the panel, for someone watching). */
+function showReaction(pid, emoji) {
+  const v = S.view;
+  if (!v || !REACTIONS.includes(emoji)) return;
+  const p = v.players.find((x) => x.id === pid);
+  let host = $('reacts');
+  if (v.g && p && p.seat >= 0 && v.g.colours.includes(p.seat)) host = $(`corner-${board.corner(p.seat)}`);
+  const n = document.createElement('span');
+  n.className = 'float-react';
+  n.textContent = emoji;
+  host.append(n);
+  setTimeout(() => n.remove(), 1500);
+}
+
+// Phones: the four panels are tabs under the board
+function showTab(tab) {
+  S.tab = tab;
+  $('ptabs').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tab === tab)));
+  document.querySelectorAll('.side .panel').forEach((sec) => sec.classList.toggle('on', sec.dataset.sec === tab));
+}
+$('ptabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-tab]');
+  if (b) showTab(b.dataset.tab);
+});
+showTab('log');
 
 $('end-btn').addEventListener('click', () => {
   if (!S.isHost) return;
@@ -442,13 +519,13 @@ function renderResult(v) {
   const g = v.g;
   const winners = r.winners;
   const iWon = winners.some((c) => v.seats[c] === S.myId);
-  $('result-title').textContent = !winners.length ? 'Game over'
+  $('result-title').textContent = !winners.length ? 'No winner'
     : iWon ? (g.settings.teams ? 'Your team wins' : 'You win')
       : `${winners.map((c) => r.names[c]).join(' & ')} win${winners.length > 1 ? '' : 's'}`;
   $('podium').innerHTML = r.order.map((c) => {
     const st = g.stats[c];
-    return `<li style="--pc: var(--c${c})"><span class="place">${r.places[c]}</span><span class="dot"></span><b>${esc(r.names[c])}</b>
-      <span class="facts">${g.tokens[c].filter((x) => x === E.HOME).length}/${g.tokens[c].length} home · ${st.captures} sent back</span></li>`;
+    return `<li style="--pc: var(--c${c})"><span class="place">${r.places[c]}</span><span class="d"></span><b>${esc(r.names[c])}</b>
+      <span class="facts">${g.tokens[c].filter((x) => x === E.HOME).length}/${g.tokens[c].length} HOME · ${st.captures} SENT BACK · ${st.sixes} SIXES</span></li>`;
   }).join('');
   $('again-btn').hidden = !S.isHost;
   $('to-lobby').hidden = !S.isHost;
@@ -464,7 +541,8 @@ $('again-btn').addEventListener('click', () => { if (S.isHost) toHost({ t: 'star
 $('to-lobby').addEventListener('click', () => { if (S.isHost) toHost({ t: 'lobby' }); });
 $('quit-btn').addEventListener('click', () => { closeRoom(); goHome(); });
 function paintSoundBtn() {
-  $('sound-btn').textContent = PREFS.sound !== false ? '🔊' : '🔇';
+  $('sound-btn').textContent = PREFS.sound !== false ? '♪' : '–';
+  $('sound-btn').setAttribute('aria-label', PREFS.sound !== false ? 'Sound on' : 'Sound off');
 }
 $('sound-btn').addEventListener('click', () => {
   PREFS.sound = PREFS.sound === false;

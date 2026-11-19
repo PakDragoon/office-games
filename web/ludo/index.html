@@ -9,7 +9,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%2315171b'/><rect x='4' y='4' width='11' height='11' rx='3' fill='%23ef5350'/><rect x='17' y='4' width='11' height='11' rx='3' fill='%2334b36f'/><rect x='17' y='17' width='11' height='11' rx='3' fill='%23f5b82e'/><rect x='4' y='17' width='11' height='11' rx='3' fill='%234285f4'/><circle cx='16' cy='16' r='4.500' fill='%23fff'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,700;12..96,800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="js/app.js"></script>
 </head>
@@ -64,7 +64,7 @@
         <ol class="step-list">
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="6" y="6" width="20" height="20" rx="5"/><circle cx="11.5" cy="11.5" r="1.600"/><circle cx="20.5" cy="11.5" r="1.600"/><circle cx="16" cy="16" r="1.600"/><circle cx="11.5" cy="20.5" r="1.600"/><circle cx="20.5" cy="20.5" r="1.600"/></svg><b>Roll</b><span>The server rolls a fair die for everyone.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><rect x="4" y="4" width="13" height="13" rx="3"/><circle cx="10.5" cy="10.5" r="3"/><path d="M19 22h9M24 18l4 4-4 4"/></svg><b>Out with a 6</b><span>A 6 brings a token out, and rolls again.</span></li>
-          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24c0-10 6-16 16-16"/><path d="M18 4l4 4-4 4"/><circle cx="8" cy="26" r="3"/></svg><b>Race round</b><span>Start squares and grey squares are safe.</span></li>
+          <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M6 24c0-10 6-16 16-16"/><path d="M18 4l4 4-4 4"/><circle cx="8" cy="26" r="3"/></svg><b>Race round</b><span>Start squares and stars are safe.</span></li>
           <li><svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 24l16-16M14 8h10v10"/><circle cx="8" cy="24" r="3"/><path d="M5 9l3 3M3 15h4"/></svg><b>Knock them home</b><span>Land on a rival: back to the yard it goes.</span></li>
         </ol>
       </section>
@@ -150,7 +150,7 @@
             <div class="setting">
               <span class="setting-label">Safe squares</span>
               <div class="seg" id="set-safe" role="group" aria-label="Safe squares">
-                <button type="button" data-value="stars"><b>Starts + grey</b></button>
+                <button type="button" data-value="stars"><b>★ + starts</b></button>
                 <button type="button" data-value="starts"><b>Starts</b></button>
                 <button type="button" data-value="none"><b>None</b></button>
               </div>
@@ -189,35 +189,53 @@
   <header class="game-bar">
     <span class="bar-code" id="bar-code"></span>
     <span class="bar-phase" id="bar-phase"></span>
-    <button class="btn ghost small" id="end-btn" type="button" hidden>End game</button>
     <button class="icon-btn" id="sound-btn" type="button" aria-label="Sound"></button>
     <button class="icon-btn" type="button" data-open="rules" aria-label="How to play">?</button>
     <button class="icon-btn" id="quit-btn" type="button" aria-label="Leave">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
     </button>
   </header>
-  <div class="play">
-    <ol class="players" id="players" aria-label="Players"></ol>
-    <div class="board-wrap" id="board-wrap">
-      <div class="result" id="result" hidden>
-        <div class="result-card">
-          <h2 id="result-title"></h2>
-          <ol class="podium" id="podium"></ol>
-          <div class="result-actions">
-            <button class="btn primary" id="again-btn" type="button">Play again</button>
-            <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+  <div class="arena">
+    <section class="table" aria-label="Board">
+      <div class="corner k0" id="corner-0"></div>
+      <div class="corner k1" id="corner-1"></div>
+      <div class="board-wrap" id="board-wrap">
+        <div class="result" id="result" hidden>
+          <div class="result-card">
+            <p class="eyebrow">Game over</p>
+            <h2 id="result-title"></h2>
+            <ol class="podium" id="podium"></ol>
+            <div class="result-actions">
+              <button class="btn primary" id="again-btn" type="button">Play again</button>
+              <button class="btn ghost" id="to-lobby" type="button">Change settings</button>
+            </div>
+            <p class="muted small-note" id="result-wait">The host starts the next game.</p>
+            <p class="muted small-note" id="crew-line"></p>
           </div>
-          <p class="muted small-note" id="result-wait">The host starts the next game.</p>
-          <p class="muted small-note" id="crew-line"></p>
         </div>
       </div>
-    </div>
-    <div class="action">
-      <div id="die" role="img" aria-label="Die"></div>
-      <p class="status" id="status" aria-live="polite"></p>
-      <button class="btn primary roll-btn" id="roll-btn" type="button" hidden>Roll</button>
-      <button class="btn ghost small" id="back-btn" type="button" hidden>I’m back</button>
-    </div>
+      <div class="corner k3" id="corner-3"></div>
+      <div class="corner k2" id="corner-2"></div>
+      <div class="action">
+        <div id="die" role="img" aria-label="Die"></div>
+        <p class="status" id="status" aria-live="polite"></p>
+        <button class="btn roll-btn" id="roll-btn" type="button" hidden>Roll</button>
+        <button class="btn ghost small" id="back-btn" type="button" hidden>I’m back</button>
+      </div>
+    </section>
+    <aside class="side">
+      <nav class="ptabs" id="ptabs" aria-label="Panels">
+        <button type="button" data-tab="log" aria-pressed="true">Log</button>
+        <button type="button" data-tab="room" aria-pressed="false">Room</button>
+        <button type="button" data-tab="rules" aria-pressed="false">Rules</button>
+        <button type="button" data-tab="react" aria-pressed="false">React</button>
+      </nav>
+      <section class="panel" data-sec="react"><h2>React</h2><div class="reacts" id="reacts"></div></section>
+      <section class="panel" data-sec="room"><h2>Room</h2><ul class="rows" id="who-list"></ul></section>
+      <section class="panel" data-sec="rules"><h2>This game</h2><div class="chips" id="rules-now"></div></section>
+      <section class="panel" data-sec="log"><h2>Log</h2><ol class="log" id="log"></ol></section>
+      <button class="end-btn" id="end-btn" type="button" hidden>End game</button>
+    </aside>
   </div>
 </main>
 
@@ -237,13 +255,12 @@
 
 <section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
-  <div id="rules-room" hidden><h3>This room</h3><ul class="rule-points" id="rules-now"></ul></div>
   <p>2 to 4 players each have a colour, a yard in their corner and (usually) four tokens. Everyone races their tokens once round the board, clockwise, then up their own coloured lane to the middle. The first to bring every token home wins.</p>
   <ol class="rule-steps">
     <li><b>Roll.</b> On your turn press <b>Roll</b> (or Space). The server rolls the die, so it’s fair for everyone.</li>
     <li><b>Get out.</b> A token leaves the yard onto your start square only on a <b>6</b> (or a 1 or 6, if the host chose that).</li>
     <li><b>Move.</b> Pick a token and it moves that many squares. Tokens you can move have a ring; hover or tap one to see where it would land. If only one move is possible it’s played for you.</li>
-    <li><b>Capture.</b> Land on a rival’s token and it goes back to its yard. Start squares and the grey squares are safe: nobody can be captured there.</li>
+    <li><b>Capture.</b> Land on a rival’s token and it goes back to its yard. Start squares and squares with a star are safe: nobody can be captured there.</li>
     <li><b>Roll again</b> after a 6, a capture or getting a token home. Three 6s in a row and your turn is over.</li>
     <li><b>Get home.</b> You need the exact number to reach the middle.</li>
   </ol>
