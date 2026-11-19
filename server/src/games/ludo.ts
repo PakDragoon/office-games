@@ -10,7 +10,7 @@ const GAME = 'ludo';
 const REACTIONS = ['👏', '😮', '😂', '😬', '🔥', '🤝'];
 
 type Settings = ReturnType<typeof E.cleanSettings>;
-interface Move { c: number; i: number; from: number; to: number; path: number[]; cap: Array<{ c: number; i: number }>; home: boolean }
+interface Move { c: number; i: number; r: number; v: number; from: number; to: number; path: number[]; cap: Array<{ c: number; i: number }>; home: boolean }
 interface ColourStats { rolls: number; sixes: number; captures: number; captured: number; home: number }
 /** The game itself (see newGame in the rules file); saved in the room snapshot as it is. */
 interface Game {
@@ -21,6 +21,8 @@ interface Game {
   turn: number;
   phase: 'roll' | 'move' | 'pass' | 'over';
   roll: number;
+  rolls: number[];
+  extra: boolean;
   sixes: number;
   passWhy: string;
   legal: Move[];
@@ -130,7 +132,7 @@ class LudoRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     switch (msg.t) {
       case 'roll': return this.roll(p.id, msg.seq);
-      case 'move': return this.move(p.id, Number(msg.c), Number(msg.i), msg.seq);
+      case 'move': return this.move(p.id, Number(msg.c), Number(msg.i), msg.seq, false, typeof msg.r === 'number' ? msg.r : undefined);
       case 'back':
         // "I'm back": the computer stops playing for me
         if (p.autoplay || room.strikes[p.id]) {
@@ -321,7 +323,7 @@ class LudoRoom extends SeatRoom<Player, Room> {
     if (!p) return;
     if (!this.robotic(p)) {
       // Only the single possible move is played for a person who is here
-      if (g.phase === 'move' && E.distinctMoves(g.legal).length === 1) this.move(p.id, g.legal[0].c, g.legal[0].i, g.seq, true);
+      if (g.phase === 'move' && E.distinctMoves(g.legal).length === 1) this.move(p.id, g.legal[0].c, g.legal[0].i, g.seq, true, g.legal[0].r);
       else if (!p.connected) this.afterBroadcast();   // still offline: plan again
       return;
     }
@@ -336,7 +338,7 @@ class LudoRoom extends SeatRoom<Player, Room> {
     if (g.phase !== 'move') return;
     const level = p.bot ? p.botLevel || 'normal' : 'normal';
     const m = E.chooseMove(g, level, this.rnd) as Move | null;
-    if (m) this.move(p.id, m.c, m.i, g.seq, true);
+    if (m) this.move(p.id, m.c, m.i, g.seq, true, m.r);
   }
 
   /** A person ran out of time: the computer plays this step for them; enough in a row and it keeps playing for them. */
@@ -383,10 +385,10 @@ class LudoRoom extends SeatRoom<Player, Room> {
     this.afterTurn();
   }
 
-  private move(pid: string, c: number, i: number, seq: unknown, auto = false): void {
+  private move(pid: string, c: number, i: number, seq: unknown, auto = false, r?: number): void {
     const g = this.room.g;
     if (!g || !this.mayAct(pid, seq) || g.phase !== 'move') return;
-    if (!E.move(g, c, i)) return;
+    if (!E.move(g, c, i, r)) return;
     this.acted(pid, auto);
     if ((g.phase as string) === 'over') return this.gameOver();
     this.afterTurn();
@@ -438,7 +440,7 @@ class LudoRoom extends SeatRoom<Player, Room> {
       })),
       seats: [...room.seats],
       g: g ? {
-        settings: g.settings, colours: g.colours, tokens: g.tokens, turn: g.turn, phase: g.phase, roll: g.roll, sixes: g.sixes,
+        settings: g.settings, colours: g.colours, tokens: g.tokens, turn: g.turn, phase: g.phase, roll: g.roll, rolls: g.rolls, sixes: g.sixes,
         passWhy: g.passWhy, legal: g.legal, killed: g.killed, done: g.done, seq: g.seq, events: g.events, stats: g.stats,
       } : null,
       turnLeft: room.turnEnd ? room.turnEnd - now : null,

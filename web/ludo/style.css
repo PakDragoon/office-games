@@ -364,7 +364,7 @@ details * { box-sizing: border-box; }
 .icon-btn { font-family: var(--mono); }
 .arena { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 1rem; max-width: 1200px; width: 100%; margin: 0 auto; padding: 0.8rem 1rem 1rem; align-items: start; }
 .table {
-  --bw: min(100%, calc(100dvh - 200px), 700px);
+  --bw: min(100%, calc(100dvh - 215px), 700px);
   width: var(--bw); justify-self: center;
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, 190px) minmax(0, 1fr);
   grid-template-areas: "k0 . k1" "board board board" "k3 act k2"; gap: 0.45rem 0.6rem; align-items: center;
@@ -465,10 +465,8 @@ details * { box-sizing: border-box; }
 .board .turn-mark { fill: none; stroke: var(--pc); stroke-width: 3; stroke-dasharray: 10 6; opacity: 0; }
 .board .yard-g.turn .turn-mark { opacity: 1; }
 .board .sq { fill: var(--cell); stroke: var(--cell-line); stroke-width: 1; }
-.board .sq.safe { fill: var(--safe); }
-.board .star { fill: none; stroke: var(--muted); stroke-width: 1.4; stroke-linejoin: round; pointer-events: none; }
 .board .sq.start { fill: var(--pc); stroke: var(--pc); }
-.board .sq.lane { fill: color-mix(in srgb, var(--pc) 18%, var(--cell)); stroke: var(--pc); }
+.board .sq.lane, .board .sq.safe { fill: color-mix(in srgb, var(--pc) 18%, var(--cell)); stroke: var(--pc); }
 .board .tri { fill: color-mix(in srgb, var(--pc) 22%, var(--cell)); stroke: var(--pc); stroke-width: 1.5; }
 .board .tok { transition: transform 0.2s ease; outline: none; }
 .board .tok.no-ease { transition: none; }
@@ -500,3 +498,21 @@ details * { box-sizing: border-box; }
 .logo-word { display: inline-flex; align-items: center; gap: 0.35em; }
 .logo-die.die { width: 0.78em; height: 0.78em; padding: 0.1em; margin: 0; border: 3px solid var(--c0); background: var(--surface); }
 .logo-die.die i { width: 0.1em; height: 0.1em; }
+
+/* Rolls waiting to be used (after 6s): small dice by the status line; on your move they pick the roll */
+.pending { display: flex; gap: 0.3rem; flex: none; }
+.pending:empty { display: none; }
+.pd { width: 28px; height: 28px; padding: 4px; display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(3, 1fr);
+  border: 1.5px solid var(--line2); border-radius: var(--r); background: var(--surface); cursor: pointer; }
+.pd i { width: 4px; height: 4px; margin: auto; border-radius: 1px; }
+.pd i.pip { background: var(--ink); }
+.pd[aria-pressed="true"] { border-color: var(--pc); box-shadow: inset 0 0 0 1px var(--pc); }
+.pd.used { opacity: 0.35; cursor: default; }
+.pd.idle { cursor: default; border-color: var(--pc); }
+/* Bottom middle: waiting dice and Roll side by side, the status line under them */
+.action { display: grid; grid-template-columns: auto auto; justify-content: center; align-items: center; gap: 0.35rem 0.5rem; }
+.action .pending { grid-row: 1; }
+.action .roll-btn, .action #back-btn { grid-row: 1; }
+.action .status { grid-row: 2; grid-column: 1 / -1; }
+.action:has(.pending:empty) { grid-template-columns: auto; }
+@media (max-width: 640px) { .action { justify-content: stretch; grid-template-columns: auto 1fr auto; } .action .status { grid-row: 1; grid-column: 2; text-align: left; } .action .roll-btn, .action #back-btn { grid-column: 3; } .action:has(.pending:empty) { grid-template-columns: 1fr auto; } .action:has(.pending:empty) .status { grid-column: 1; } }

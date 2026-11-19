@@ -97,6 +97,7 @@ const S = {
   endArmed: 0,
   startedAt: 0,       // when this game began here (log times)
   tab: 'log',         // phones: the open panel
+  pickV: 0,           // the waiting roll picked to move with (when there are several)
   note: '',           // what the last move did ("Sara sent you home"), shown with the next status
 };
 
@@ -208,8 +209,10 @@ const board = createBoard($('board-wrap'), {
   onPick: (c, i) => {
     const v = S.view;
     if (!v?.g) return;
+    const m = v.g.legal.find((x) => x.c === c && x.i === i && x.v === S.pickV) || v.g.legal.find((x) => x.c === c && x.i === i);
+    if (!m) return;
     board.setLegal([]);
-    toHost({ t: 'move', c, i, seq: v.g.seq });
+    toHost({ t: 'move', c, i, r: m.r, seq: v.g.seq });
   },
 });
 // One die per colour, inside that player's card. Cards are built once per game and then only updated, so a
@@ -337,27 +340,59 @@ function settle(v) {
   }
   $('result').hidden = true;
   const note = S.note ? `${S.note} · ` : '';
+  const rolls = g.rolls || [];
+  renderPending(v, mine && g.phase === 'move');
   if (g.phase === 'roll') {
     if (mine) {
       $('roll-btn').hidden = false;
       $('roll-btn').disabled = S.rolling;
       $('roll-btn').style.setProperty('--pc', `var(--c${g.turn})`);
-      status(`${note}${g.sixes ? 'Roll again' : 'Your turn'}`);
+      status(`${note}${rolls.length ? 'Rolled a 6 · roll again' : g.sixes ? 'Roll again' : 'Your turn'}`);
       const key = `${v.game}:${g.seq}`;
       if (S.turnSoundFor !== key) {
         S.turnSoundFor = key;
         sound('turn');
         if (!document.activeElement || document.activeElement === document.body) $('roll-btn').focus({ preventScroll: true });
       }
-    } else status(`${note}${nameAt(v, g.turn)}${forPartner(g)} to roll`);
+    } else status(`${note}${nameAt(v, g.turn)}${forPartner(g)} ${rolls.length ? 'rolls again' : 'to roll'}`);
   } else if (g.phase === 'move') {
     if (mine) {
-      board.setLegal(g.legal);
-      status(E.distinctMoves(g.legal).length === 1 ? `You rolled ${g.roll}` : `You rolled ${g.roll} · pick a token`);
-    } else status(`${nameAt(v, g.turn)}${forPartner(g)} rolled ${g.roll}`);
+      board.setLegal(g.legal.filter((m) => m.v === S.pickV));
+      const several = new Set(g.legal.map((m) => m.v)).size > 1;
+      status(E.distinctMoves(g.legal).length === 1 ? `You rolled ${rolls.join(', ')}`
+        : several ? `You rolled ${rolls.join(', ')} · pick a die, then a token` : `You rolled ${rolls.join(', ')} · pick a token`);
+    } else status(`${nameAt(v, g.turn)}${forPartner(g)} rolled ${rolls.join(', ') || g.roll}`);
   }
   S.note = '';
 }
+/**
+ * The rolls waiting to be used this turn, as small dice by the status line. On your own move, the dice that
+ * can move something are buttons: the one picked (S.pickV) decides which tokens light up.
+ */
+function renderPending(v, choosing) {
+  const g = v.g;
+  const rolls = v.status === 'play' ? g.rolls || [] : [];
+  const usable = new Set(choosing ? g.legal.map((m) => m.v) : []);
+  if (choosing && !usable.has(S.pickV)) S.pickV = [...usable][0] ?? 0;
+  const show = rolls.length > 1 || (rolls.length === 1 && g.phase === 'roll');
+  $('pending').innerHTML = show ? rolls.map((n, r) => {
+    const can = usable.has(n);
+    const on = can && n === S.pickV && rolls.indexOf(n) === r;
+    const cls = !choosing ? ' idle' : can ? '' : ' used';
+    return `<button type="button" class="pd${cls}" data-v="${n}" aria-pressed="${on}" ${can ? '' : 'disabled'} aria-label="${choosing ? `Use the ${n}` : `Rolled ${n}`}">${pipsHtml(n)}</button>`;
+  }).join('') : '';
+  $('pending').style.setProperty('--pc', `var(--c${g.turn})`);
+}
+const PIPS = { 1: [5], 2: [3, 7], 3: [3, 5, 7], 4: [1, 3, 7, 9], 5: [1, 3, 5, 7, 9], 6: [1, 3, 4, 6, 7, 9] };
+const pipsHtml = (n) => Array.from({ length: 9 }, (_, k) => `<i${PIPS[n].includes(k + 1) ? ' class="pip"' : ''}></i>`).join('');
+$('pending').addEventListener('click', (e) => {
+  const b = e.target.closest('.pd:not(.used)');
+  const v = S.view;
+  if (!b || !v?.g || v.g.phase !== 'move' || v.seats[v.g.turn] !== S.myId || S.busy) return;
+  S.pickV = Number(b.dataset.v);
+  settle(v);
+});
+
 const forPartner = (g) => {
   const ctl = E.controls(g, g.turn);
   return ctl.length && ctl[0] !== g.turn ? ` (for ${NAMES[ctl[0]]})` : '';
@@ -393,8 +428,8 @@ document.addEventListener('keydown', (e) => {
   }
   // 1 … 4 moves that token (yours, or your partner's in teams)
   if (/^[1-4]$/.test(e.key) && v.g.phase === 'move' && v.seats[v.g.turn] === S.myId && !S.busy) {
-    const m = v.g.legal.find((x) => x.i === Number(e.key) - 1);
-    if (m) { board.setLegal([]); toHost({ t: 'move', c: m.c, i: m.i, seq: v.g.seq }); }
+    const m = v.g.legal.find((x) => x.i === Number(e.key) - 1 && x.v === S.pickV) || v.g.legal.find((x) => x.i === Number(e.key) - 1);
+    if (m) { board.setLegal([]); toHost({ t: 'move', c: m.c, i: m.i, r: m.r, seq: v.g.seq }); }
   }
 });
 $('back-btn').addEventListener('click', () => { toHost({ t: 'back' }); $('back-btn').hidden = true; });
@@ -471,6 +506,7 @@ function renderRulesNow(s) {
   ];
   const extra = [s.bonusSix && '6', s.bonusCapture && 'capture', s.bonusHome && 'home'].filter(Boolean);
   items.push(extra.length ? `Extra roll: ${extra.join(' · ')}` : 'No extra rolls');
+  if (s.bonusSix) items.push(s.sixRule === 'stack' ? 'Roll all 6s first' : 'Move each 6 first');
   if (s.threeSixes === 'lose') items.push('Three 6s end the turn');
   if (s.blocks) items.push('Blocks');
   if (s.mustCapture) items.push('Capture before home');
@@ -571,7 +607,7 @@ $('sound-btn').addEventListener('click', () => {
 /* =========================================================
    Lobby
    ========================================================= */
-const SEGS = ['tokens', 'timer', 'end', 'teams', 'leave', 'threeSixes', 'safe'];
+const SEGS = ['tokens', 'timer', 'end', 'teams', 'leave', 'sixRule', 'threeSixes', 'safe'];
 const CHECKS = ['bonusSix', 'bonusCapture', 'bonusHome', 'exact', 'blocks', 'mustCapture'];
 const parseVal = (key, raw) => (key === 'tokens' || key === 'timer' ? Number(raw) : key === 'teams' ? raw === 'true' : raw);
 
@@ -604,6 +640,7 @@ function houseSummary(s) {
   const diff = [];
   if (s.leave !== d.leave) diff.push('1 or 6 out');
   if (s.bonusSix !== d.bonusSix || s.bonusCapture !== d.bonusCapture || s.bonusHome !== d.bonusHome) diff.push('extra rolls');
+  if (s.sixRule !== d.sixRule) diff.push('move each 6 first');
   if (s.threeSixes !== d.threeSixes) diff.push('three 6s ok');
   if (s.safe !== d.safe) diff.push(s.safe === 'none' ? 'nowhere safe' : 'starts safe');
   if (s.exact !== d.exact) diff.push('no exact roll');

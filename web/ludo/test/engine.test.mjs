@@ -8,13 +8,17 @@ const ok = (name, fn) => {
   n++;
 };
 const seeded = (seed) => { let a = seed; return () => ((a = (a * 16807) % 2147483647) / 2147483647); };
-const game = (settings = {}, colours = [0, 1, 2, 3], first = 0) => E.newGame(settings, colours, first);
+// Most rule tests play each 6 before rolling again ('move'); the 'stack' default has tests of its own below
+const game = (settings = {}, colours = [0, 1, 2, 3], first = 0) => E.newGame({ sixRule: 'move', ...settings }, colours, first);
 /** Put tokens where a test needs them: { 0: [p, p, ...], 2: [...] }. */
 const place = (g, at) => { for (const [c, list] of Object.entries(at)) list.forEach((p, i) => { g.tokens[c][i] = p; }); return g; };
 const rollMove = (g, v, c, i) => { assert.ok(E.roll(g, v), 'roll accepted'); return E.move(g, c, i); };
 
 ok('settings: only the offered choices, defaults otherwise', () => {
   assert.deepEqual(E.cleanSettings(null), E.DEFAULT_SETTINGS);
+  assert.equal(E.DEFAULT_SETTINGS.sixRule, 'stack');
+  assert.equal(E.cleanSettings({ sixRule: 'move' }).sixRule, 'move');
+  assert.equal(E.cleanSettings({ sixRule: 'later' }).sixRule, 'stack');
   const s = E.cleanSettings({ tokens: 2, leave: 'oneSix', timer: 30, safe: 'none', blocks: true, teams: true, end: 'all', exact: false });
   assert.equal(s.tokens, 2); assert.equal(s.leave, 'oneSix'); assert.equal(s.timer, 30); assert.equal(s.safe, 'none');
   assert.equal(s.blocks, true); assert.equal(s.teams, true); assert.equal(s.end, 'all'); assert.equal(s.exact, false);
@@ -171,6 +175,65 @@ ok('three 6s in a row lose the turn (unless allowed); the count starts again eac
   assert.equal(g3.turn, 1);
 });
 
+ok('roll all first: a 6 rolls again straight away, then every roll is used in any order', () => {
+  const g = E.newGame({}, [0, 1, 2, 3], 0);
+  assert.ok(E.roll(g, 6));
+  assert.equal(g.phase, 'roll');
+  assert.deepEqual(g.rolls, [6]);
+  assert.ok(E.roll(g, 3));
+  assert.equal(g.phase, 'move');
+  assert.deepEqual(g.rolls, [6, 3]);
+  // Only the 6 can bring a token out; the 3 has nothing to move yet
+  assert.deepEqual([...new Set(g.legal.map((m) => m.v))], [6]);
+  const out = E.move(g, 0, 0);
+  assert.equal(out.v, 6);
+  assert.deepEqual(g.rolls, [3]);
+  assert.equal(g.phase, 'move');
+  assert.deepEqual(g.legal.map((m) => [m.i, m.v]), [[0, 3]]);
+  E.move(g, 0, 0);
+  assert.equal(g.tokens[0][0], 3);
+  assert.equal(g.turn, 1, 'all rolls used, no capture: next player');
+  // Two 6s and a 4: three moves, the player picks which roll each token uses
+  const h = place(E.newGame({}, [0, 2], 0), { 0: [10, 20, E.BASE, E.BASE] });
+  E.roll(h, 6); E.roll(h, 6); E.roll(h, 4);
+  assert.deepEqual(h.rolls, [6, 6, 4]);
+  E.move(h, 0, 1, h.legal.find((m) => m.i === 1 && m.v === 4).r);
+  assert.equal(h.tokens[0][1], 24);
+  assert.deepEqual(h.rolls, [6, 6]);
+  E.move(h, 0, 0); E.move(h, 0, 0);
+  assert.equal(h.tokens[0][0], 22);
+  assert.equal(h.turn, 2);
+});
+
+ok('roll all first: a third 6 loses every waiting roll; unusable rolls are dropped; a capture rolls again at the end', () => {
+  const g = place(E.newGame({}, [0, 1, 2, 3], 0), { 0: [10] });
+  E.roll(g, 6); E.roll(g, 6); E.roll(g, 6);
+  assert.equal(g.phase, 'pass');
+  assert.deepEqual(g.rolls, []);
+  E.pass(g);
+  assert.equal(g.turn, 1);
+  // Exact roll needed: the 6 can't be used once the 1 is spent, so it is dropped and the turn moves on
+  const h = place(E.newGame({}, [0, 1], 0), { 0: [55, E.HOME, E.HOME, E.HOME] });
+  E.roll(h, 6); E.roll(h, 1);
+  assert.deepEqual(h.legal.map((m) => m.v), [1]);
+  E.move(h, 0, 0);
+  assert.equal(h.turn, 1);
+  assert.deepEqual(h.rolls, []);
+  // A capture with the first roll: the second roll is still played, then the same player rolls again
+  const k = place(E.newGame({}, [0, 1, 2, 3], 0), { 0: [10, 30], 1: [1] });   // green on abs 14
+  E.roll(k, 6); E.roll(k, 4);
+  E.move(k, 0, 0, k.legal.find((m) => m.i === 0 && m.v === 4).r);
+  assert.equal(k.tokens[1][0], E.BASE);
+  assert.equal(k.phase, 'move');
+  E.move(k, 0, 1);
+  assert.equal(k.turn, 0);
+  assert.equal(k.phase, 'roll');
+  // With the 6 bonus off, 'stack' changes nothing: a 6 is played like any roll
+  const m = E.newGame({ bonusSix: false }, [0, 1], 0);
+  E.roll(m, 6);
+  assert.equal(m.phase, 'move');
+});
+
 ok('reaching home gives another roll (when on); the first one home wins', () => {
   const g = place(game({ tokens: 2 }), { 0: [55, 56] });
   rollMove(g, 2, 0, 0);
@@ -251,7 +314,7 @@ ok('thousands of random games keep the rules and always finish', () => {
   let caps = 0;
   for (let k = 0; k < 1200; k++) {
     const settings = {
-      tokens: pickOf(E.TOKENS), leave: pickOf(['six', 'oneSix']), bonusSix: rnd() < 0.8, bonusCapture: rnd() < 0.7, bonusHome: rnd() < 0.7,
+      tokens: pickOf(E.TOKENS), leave: pickOf(['six', 'oneSix']), bonusSix: rnd() < 0.8, sixRule: pickOf(['stack', 'move']), bonusCapture: rnd() < 0.7, bonusHome: rnd() < 0.7,
       threeSixes: pickOf(['lose', 'allow']), safe: pickOf(['stars', 'starts', 'none']), blocks: rnd() < 0.3, mustCapture: rnd() < 0.25,
       exact: rnd() < 0.7, end: pickOf(['first', 'all']), teams: rnd() < 0.25,
     };
@@ -265,7 +328,7 @@ ok('thousands of random games keep the rules and always finish', () => {
       else if (g.phase === 'pass') E.pass(g);
       else {
         const m = E.chooseMove(g, rnd() < 0.5 ? 'easy' : 'normal', rnd);
-        assert.ok(E.move(g, m.c, m.i));
+        assert.ok(E.move(g, m.c, m.i, m.r));
         caps += m.cap.length;
       }
       assert.ok(g.seq === before + 1);
@@ -299,7 +362,7 @@ ok('the careful computer beats the random one', () => {
       else if (g.phase === 'pass') E.pass(g);
       else {
         const m = E.chooseMove(g, g.turn === 0 ? 'normal' : 'easy', rnd);
-        E.move(g, m.c, m.i);
+        E.move(g, m.c, m.i, m.r);
       }
     }
     if (g.result.winners[0] === 0) wins++;

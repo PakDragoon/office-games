@@ -35,6 +35,8 @@ export const DEFAULT_SETTINGS = {
   tokens: 4,            // tokens per player
   leave: 'six',         // 'six' | 'oneSix': the rolls that bring a token out of the yard
   bonusSix: true,       // a 6 gives another roll
+  sixRule: 'stack',     // 'stack': after a 6 you roll again straight away and use all your rolls afterwards
+                        // (6, 6, 3: three moves) | 'move': play each 6 before rolling again
   bonusCapture: true,   // sending a rival home gives another roll
   bonusHome: true,      // getting a token home gives another roll
   threeSixes: 'lose',   // 'lose': a third 6 in a row ends the turn with no move | 'allow'
@@ -65,6 +67,7 @@ export function cleanSettings(raw) {
     tokens: pick(r.tokens, TOKENS, d.tokens),
     leave: pick(r.leave, ['six', 'oneSix'], d.leave),
     bonusSix: bool(r.bonusSix, d.bonusSix),
+    sixRule: pick(r.sixRule, ['stack', 'move'], d.sixRule),
     bonusCapture: bool(r.bonusCapture, d.bonusCapture),
     bonusHome: bool(r.bonusHome, d.bonusHome),
     threeSixes: pick(r.threeSixes, ['lose', 'allow'], d.threeSixes),
@@ -146,10 +149,12 @@ export function newGame(settings, colours, first) {
     settings: s, colours: cols, tokens, stats,
     turn: cols.includes(first) ? first : cols[0],
     phase: 'roll',        // 'roll' | 'move' | 'pass' | 'over'
-    roll: 0,
+    roll: 0,              // the last number rolled
+    rolls: [],            // rolls waiting to be used this turn (with sixRule 'stack': e.g. [6, 6, 3])
+    extra: false,         // 'stack': a capture or getting home earned another roll once the rolls are used
     sixes: 0,             // 6s in a row this turn
     passWhy: '',          // 'nomove' | 'sixes' while phase is 'pass'
-    legal: [],            // the moves the roll allows (phase 'move')
+    legal: [],            // the moves the rolls allow (phase 'move'), each with the roll it uses: { r, v }
     killed: {},           // colour -> has sent a rival home (mustCapture)
     done: [],             // colours in the order they got every token home
     seq: 0,               // goes up with every roll and move (stale messages are ignored)
@@ -226,18 +231,28 @@ export function moveFor(g, c, i, roll) {
   return { c, i, from: p, to, path, cap, home: to === HOME };
 }
 
-/** Every move the roll allows the colour whose turn it is. */
-export function legalMoves(g, roll) {
+/**
+ * Every move the colour whose turn it is can make with one of its rolls (`rolls`: the waiting rolls, or one
+ * number). Each move says which roll it uses: `r` (index in g.rolls) and `v` (the number).
+ */
+export function legalMoves(g, rolls = g.rolls) {
+  const list = typeof rolls === 'number' ? [rolls] : rolls;
   const out = [];
-  for (const tc of controls(g, g.turn)) g.tokens[tc].forEach((_, i) => { const m = moveFor(g, tc, i, roll); if (m) out.push(m); });
+  list.forEach((v, r) => {
+    if (list.indexOf(v) !== r) return;   // the same number twice gives the same moves
+    for (const tc of controls(g, g.turn)) g.tokens[tc].forEach((_, i) => { const m = moveFor(g, tc, i, v); if (m) out.push({ ...m, r, v }); });
+  });
   return out;
 }
+
+/** Rolling a 6 means rolling again before moving ('stack'), as opposed to playing the 6 first. */
+const stacking = (g) => g.settings.sixRule === 'stack' && g.settings.bonusSix;
 
 /** Moves that really differ (four tokens in the yard on a 6 are one choice, not four). */
 export function distinctMoves(list) {
   const seen = new Set();
   return list.filter((m) => {
-    const k = `${m.c}:${m.from}`;
+    const k = `${m.c}:${m.from}:${m.v}`;
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -261,14 +276,18 @@ export function roll(g, value) {
     g.stats[c].sixes++;
   } else g.sixes = 0;
   addEvent(g, { k: 'roll', c, v: value });
+  g.legal = [];
   if (value === 6 && g.settings.threeSixes === 'lose' && g.sixes >= 3) {
+    g.rolls = [];   // every roll waiting this turn is lost too
     g.phase = 'pass';
     g.passWhy = 'sixes';
-    g.legal = [];
     return true;
   }
-  g.legal = legalMoves(g, value);
+  g.rolls.push(value);
+  if (value === 6 && stacking(g)) return true;   // roll again first, move afterwards
+  g.legal = legalMoves(g);
   if (!g.legal.length) {
+    g.rolls = [];
     g.phase = 'pass';
     g.passWhy = 'nomove';
     return true;
@@ -286,10 +305,13 @@ export function pass(g) {
   return true;
 }
 
-/** Move token i of colour c (one of g.legal). Returns the move, or null if it isn't allowed. */
-export function move(g, c, i) {
+/**
+ * Move token i of colour c with roll r (index in g.rolls; left out: the first roll that moves it).
+ * Returns the move, or null if it isn't allowed.
+ */
+export function move(g, c, i, r) {
   if (g.phase !== 'move') return null;
-  const m = g.legal.find((x) => x.c === c && x.i === i);
+  const m = g.legal.find((x) => x.c === c && x.i === i && (r === undefined || r === null || x.r === r));
   if (!m) return null;
   const s = g.settings;
   const by = g.turn;
@@ -305,18 +327,31 @@ export function move(g, c, i) {
     g.stats[by].captures += m.cap.length;
   }
   if (m.home) g.stats[by].home++;
-  addEvent(g, { k: 'move', c, i, by, from: m.from, path: m.path, cap: capFrom, home: m.home });
+  addEvent(g, { k: 'move', c, i, by, v: m.v, from: m.from, path: m.path, cap: capFrom, home: m.home });
+  g.rolls.splice(m.r, 1);
   if (finished(g, c) && !g.done.includes(c)) {
     g.done.push(c);
     addEvent(g, { k: 'done', c, place: g.done.length });
   }
   if (checkOver(g)) return m;
-  const extra = (g.roll === 6 && s.bonusSix) || (m.cap.length > 0 && s.bonusCapture) || (m.home && s.bonusHome);
-  endTurn(g, extra);
+  const earned = (m.cap.length > 0 && s.bonusCapture) || (m.home && s.bonusHome);
+  if (stacking(g)) {
+    // Use the rest of the rolls; a capture or getting home rolls again once they're used (or can't be)
+    g.extra = g.extra || earned;
+    if (g.rolls.length) {
+      g.legal = legalMoves(g);
+      if (g.legal.length && controls(g, g.turn).length) return m;
+    }
+    endTurn(g, g.extra);
+    return m;
+  }
+  endTurn(g, (m.v === 6 && s.bonusSix) || earned);
   return m;
 }
 function endTurn(g, extra) {
   g.legal = [];
+  g.rolls = [];
+  g.extra = false;
   g.roll = 0;
   g.passWhy = '';
   if (extra && controls(g, g.turn).length) {

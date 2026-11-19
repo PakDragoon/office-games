@@ -141,6 +141,13 @@
               </div>
             </div>
             <div class="setting">
+              <span class="setting-label">After a 6</span>
+              <div class="seg two" id="set-sixRule" role="group" aria-label="After a 6">
+                <button type="button" data-value="stack"><b>Roll again first</b><small>then use every roll</small></button>
+                <button type="button" data-value="move"><b>Move first</b><small>then roll again</small></button>
+              </div>
+            </div>
+            <div class="setting">
               <span class="setting-label">Three 6s in a row</span>
               <div class="seg two" id="set-threeSixes" role="group" aria-label="Three 6s in a row">
                 <button type="button" data-value="lose"><b>Lose the turn</b></button>
@@ -217,6 +224,7 @@
       <div class="corner k3" id="corner-3"></div>
       <div class="corner k2" id="corner-2"></div>
       <div class="action">
+        <div class="pending" id="pending" aria-label="Rolls waiting to be used"></div>
         <p class="status" id="status" aria-live="polite"></p>
         <button class="btn roll-btn" id="roll-btn" type="button" hidden>Roll</button>
         <button class="btn ghost small" id="back-btn" type="button" hidden>I’m back</button>
@@ -260,12 +268,13 @@
     <li><b>Get out.</b> A token leaves the yard onto your start square only on a <b>6</b> (or a 1 or 6, if the host chose that).</li>
     <li><b>Move.</b> Pick a token and it moves that many squares. Tokens you can move have a ring; hover or tap one to see where it would land. If only one move is possible it’s played for you.</li>
     <li><b>Capture.</b> Land on a rival’s token and it goes back to its yard. Start squares and squares with a star are safe: nobody can be captured there.</li>
-    <li><b>Roll again</b> after a 6, a capture or getting a token home. Three 6s in a row and your turn is over.</li>
+    <li><b>Roll again</b> after a 6, a capture or getting a token home. After a 6 you roll again straight away and then use all your rolls: with 6, 6 and 3 you make three moves, tapping a die to pick which roll a token uses. Three 6s in a row and your turn is over (those rolls are lost). A capture or getting home gives one more roll once your rolls are used.</li>
     <li><b>Get home.</b> You need the exact number to reach the middle.</li>
   </ol>
   <h3>House rules (the host picks)</h3>
   <ul class="rule-points">
     <li><b>Tokens each:</b> 2 or 3 make a quicker game.</li>
+    <li><b>After a 6:</b> roll again first and use every roll afterwards (the usual), or move with each 6 before rolling again.</li>
     <li><b>Time per turn:</b> when it runs out the computer rolls or moves for you. Three times in a row and it keeps playing for you until you tap <b>I’m back</b>.</li>
     <li><b>2 vs 2:</b> partners sit opposite and never capture each other. Once your tokens are home you roll for your partner and move their tokens. A team wins when both are home.</li>
     <li><b>Blocks:</b> two tokens of one colour on a square form a wall rivals can’t pass or land on.</li>

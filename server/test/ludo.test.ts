@@ -75,6 +75,7 @@ describe('Ludo', () => {
       g.tokens[0] = [10, -1, -1, -1];
       g.tokens[2] = [40, -1, -1, -1];
       g.roll = 4;
+      (g as unknown as { rolls: number[] }).rolls = [4];
       g.phase = 'move';
       g.legal = E.legalMoves(g, 4);
       return g.seq;
@@ -86,6 +87,27 @@ describe('Ludo', () => {
     const s = await ann.state((v) => gOf(v).tokens[0]?.[0] === 14);
     expect(gOf(s).tokens[2][0]).toBe(-1);
     expect(gOf(s).turn).toBe(0);   // capture bonus
+  });
+
+  it('roll all first: the player picks which waiting roll each move uses; a forged roll index is refused', async () => {
+    const { code, ann } = await started();
+    const seq = await inRoom(code, (r) => {
+      const g = r.g as G & { rolls: number[] };
+      g.tokens[0] = [10, 20, -1, -1];
+      g.rolls = [6, 3];
+      g.roll = 3;
+      g.phase = 'move';
+      g.legal = E.legalMoves(g);
+      return g.seq;
+    });
+    ann.send({ t: 'move', c: 0, i: 1, r: 5, seq });   // no such roll
+    await sleep(100);
+    expect(await inRoom(code, (r) => r.g?.tokens[0][1])).toBe(20);
+    ann.send({ t: 'move', c: 0, i: 1, r: 1, seq });   // the 3
+    const s = await ann.state((v) => gOf(v).tokens[0]?.[1] === 23);
+    expect((s.g as { rolls: number[] }).rolls).toEqual([6]);
+    expect(gOf(s).phase).toBe('move');
+    expect(gOf(s).turn).toBe(0);
   });
 
   it('no possible move: the turn moves on after a pause', async () => {
@@ -101,7 +123,7 @@ describe('Ludo', () => {
   });
 
   it('a single possible move is played for the player after the die lands', async () => {
-    const { code, ann } = await started();
+    const { code, ann } = await started({ sixRule: 'move' });
     await inRoom(code, (r) => {
       const g = r.g as G;
       g.tokens[0] = [20, -1, -1, -1];
@@ -174,8 +196,8 @@ describe('Ludo', () => {
       const who = g.turn === 0 ? ann : bob;
       if (g.phase === 'roll') who.send({ t: 'roll', seq: g.seq });
       else if (g.phase === 'move') {
-        const m = E.chooseMove(g, 'normal', Math.random) as { c: number; i: number };
-        who.send({ t: 'move', c: m.c, i: m.i, seq: g.seq });
+        const m = E.chooseMove(g, 'normal', Math.random) as { c: number; i: number; r: number };
+        who.send({ t: 'move', c: m.c, i: m.i, r: m.r, seq: g.seq });
       } else if (g.phase === 'pass') await fire(code, 'step');
       await sleep(130);
     }

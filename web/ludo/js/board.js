@@ -1,5 +1,6 @@
 // The Ludo board: an SVG drawn from the rules file's geometry, the tokens on it and their moves.
-// Crisp lines, no glow: yards and lanes outlined in their colour, solid start squares, stars on safe squares.
+// Crisp lines, no glow: yards and lanes outlined in their colour, solid start squares, safe squares tinted
+// like the home lane next to them.
 // Highlights only on what you can act on (tokens that can move, where the pointed-at one lands) and a dashed
 // outline round the yard whose turn it is.
 // It knows nothing about the network: app.js tells it what to show and hears back which token was picked.
@@ -72,17 +73,8 @@ export function createBoard(host, { onPick }) {
     for (let a = 0; a < E.TRACK; a++) {
       const start = E.STARTS.indexOf(a);
       const safe = start < 0 && settings.safe === 'stars' && E.STARS.includes(a);
-      square(E.trackCell(a), start >= 0 ? `sq start c${start}` : safe ? 'sq safe' : 'sq');
-      if (safe) {
-        const { x, y } = cellAt(E.trackCell(a));
-        let d = '';
-        for (let k = 0; k < 10; k++) {
-          const an = -Math.PI / 2 + (k * Math.PI) / 5;
-          const rr = k % 2 ? 4.4 : 10;
-          d += `${k ? 'L' : 'M'}${(x + U / 2 + Math.cos(an) * rr).toFixed(1)} ${(y + U / 2 + Math.sin(an) * rr).toFixed(1)}`;
-        }
-        el('path', { d: `${d}Z`, class: 'star' }, gBoard);
-      }
+      // A safe square takes the colour of the home lane in its arm of the board (no icon)
+      square(E.trackCell(a), start >= 0 ? `sq start c${start}` : safe ? `sq safe c${(Math.floor(a / 13) + 1) % 4}` : 'sq');
     }
     for (let c = 0; c < 4; c++) for (let j = 0; j < 5; j++) square(E.laneCell(c, j), `sq lane c${c}`);
     for (let c = 0; c < 4; c++) {
