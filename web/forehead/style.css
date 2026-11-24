@@ -391,6 +391,28 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .chat-reactions .btn { padding: 0.3rem 0.65rem; }
 .chat-body .error { font-size: 0.85rem; }
 
+/* Give messages more room in the game while keeping lobby chat compact. */
+.desk .chat-messages { max-height: min(14rem, 32dvh); }
+
+@supports selector(details::details-content) {
+  @media (min-width: 901px) and (min-height: 760px) {
+    .desk:has(.room-chat[open]) .stage { flex-basis: auto; }
+    .desk .room-chat[open] {
+      display: grid; flex: 1 2 11rem; min-height: 10rem; max-height: 25rem;
+      grid-template-rows: auto minmax(0, 1fr);
+    }
+    .desk .room-chat[open]::details-content { min-height: 0; }
+    .desk .room-chat[open] .chat-body {
+      display: flex; flex-direction: column; box-sizing: border-box; height: 100%;
+    }
+    .desk .room-chat[open] .chat-body > * { flex: none; }
+    .desk .room-chat[open] .chat-messages {
+      flex: 1 1 auto; min-height: 0; max-height: none; align-content: start;
+    }
+    .desk .room-chat[open] .chat-form { margin-top: auto; }
+  }
+}
+
 /* The question log */
 .panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; }
 .panel-head h2 { font-size: 1.05rem; }
