@@ -384,6 +384,8 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .chat-messages li { overflow-wrap: anywhere; font-size: 0.9rem; }
 .chat-messages b { margin-right: 0.3rem; }
 .chat-form { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.45rem; }
+/* Size the input explicitly inside the collapsible chat panel. */
+.chat-form .text-input { box-sizing: border-box; min-width: 0; }
 .chat-live { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.65rem; }
 .chat-reactions { display: flex; flex-wrap: wrap; gap: 0.35rem; }
 .chat-reactions .btn { padding: 0.3rem 0.65rem; }
