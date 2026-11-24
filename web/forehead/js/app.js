@@ -517,7 +517,7 @@ $('ask-form').addEventListener('submit', (e) => {
 /* ---------- Room chat ---------- */
 const chatPanel = $('room-chat');
 let chatEntries = [];
-let chatUnread = 0;
+const chatUnread = new Set();
 let chatDraft = null;
 let chatTimer = 0;
 
@@ -529,15 +529,15 @@ function chatError(text) {
 
 function resetChat() {
   chatEntries = [];
-  chatUnread = 0;
+  chatUnread.clear();
   chatPanel.hidden = true;
   $('chat-input').value = '';
   chatError('');
 }
 
 function paintUnread() {
-  $('chat-unread').hidden = chatUnread === 0;
-  $('chat-unread').textContent = `${chatUnread} new`;
+  $('chat-unread').hidden = chatUnread.size === 0;
+  $('chat-unread').textContent = `${chatUnread.size} new`;
 }
 
 function paintChat() {
@@ -560,31 +560,31 @@ function showChat(v) {
   const opening = chatPanel.hidden;
   if (opening) chatPanel.open = matchMedia('(min-width: 901px) and (min-height: 721px)').matches;
   chatPanel.hidden = false;
-  const live = v.status === 'play';
-  show('chat-live', live);
-  show('chat-form', !live);
+  show('chat-live', v.status === 'play');
   const history = v.chat || [];
-  if (opening || chatEntries.at(-1)?.n !== history.at(-1)?.n) {
-    chatEntries = history;
+  if (opening || chatEntries.length !== history.length || chatEntries.some((entry, i) => entry.id !== history[i].id)) {
+    chatEntries = [...history];
+    for (const id of chatUnread) if (!history.some((entry) => entry.id === id)) chatUnread.delete(id);
     paintChat();
   }
 }
 
 function receiveChat(entry) {
-  if (entry.n <= (chatEntries.at(-1)?.n ?? 0)) return;
-  chatEntries = [...chatEntries, entry].slice(-E.CHAT_HISTORY);
+  if (chatEntries.some((previous) => previous.id === entry.id)) return;
+  chatEntries.push(entry);
+  if (chatEntries.length > E.CHAT_HISTORY) chatUnread.delete(chatEntries.shift().id);
   if (entry.pid === S.myId && entry.text === chatDraft) {
     const input = $('chat-input');
     if (E.cleanChat(input.value) === chatDraft) input.value = '';
     chatError('');
   }
-  if (!chatPanel.open && entry.pid !== S.myId) chatUnread++;
+  if (!chatPanel.open && entry.pid !== S.myId) chatUnread.add(entry.id);
   paintChat();
 }
 
 chatPanel.addEventListener('toggle', () => {
   if (!chatPanel.open) return;
-  chatUnread = 0;
+  chatUnread.clear();
   paintUnread();
   const list = $('chat-messages');
   list.scrollTop = list.scrollHeight;
@@ -592,7 +592,7 @@ chatPanel.addEventListener('toggle', () => {
 
 $('chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!S.view || S.view.status === 'play' || chatDraft !== null) return;
+  if (!S.view || chatDraft !== null) return;
   const text = E.cleanChat($('chat-input').value);
   if (!text) return chatError('Type a message first.');
   if (S.reconnecting) return chatError('Reconnecting. Try again in a moment.');
@@ -606,7 +606,7 @@ $('chat-reactions').innerHTML = Object.entries(E.REACTIONS).map(([key, [emoji, l
   `<button class="btn ghost" type="button" data-reaction="${key}" aria-label="${esc(label)}" title="${esc(label)}">${emoji}</button>`).join('');
 $('chat-reactions').addEventListener('click', (e) => {
   const button = e.target.closest('[data-reaction]');
-  if (!button || S.view?.status !== 'play') return;
+  if (!button || S.view?.status !== 'play' || chatDraft !== null) return;
   if (S.reconnecting) return chatError('Reconnecting. Try again in a moment.');
   chatError('');
   toHost({ t: 'chat', reaction: button.dataset.reaction });

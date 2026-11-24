@@ -49,11 +49,12 @@ interface LogEntry {
 }
 
 interface ChatEntry {
-  n: number;
+  id: string;
   pid: string;
   name: string;
   at: number;
   text?: string;
+  tokens?: string;
   reaction?: string;
 }
 
@@ -433,28 +434,45 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     const reject = (reason: string) => this.tell(p.id, { t: 'chat-error', reason });
     if (last && now - last.at < 1000) return reject('Wait a moment before sending again.');
 
-    const entry: ChatEntry = { n: (room.chat.at(-1)?.n ?? 0) + 1, pid: p.id, name: p.name, at: now };
-    if (room.status === 'play') {
-      if (typeof msg.reaction !== 'string' || !Object.hasOwn(E.REACTIONS, msg.reaction)) {
-        return reject('Use quick reactions during the round.');
+    const entry: ChatEntry = { id: crypto.randomUUID(), pid: p.id, name: p.name, at: now };
+    if (msg.reaction !== undefined) {
+      if (room.status !== 'play' || typeof msg.reaction !== 'string' || !Object.hasOwn(E.REACTIONS, msg.reaction)) {
+        return reject('Choose a quick reaction during the round.');
       }
       entry.reaction = msg.reaction;
     } else {
       const text = E.cleanChat(msg.text);
       if (!text) return reject('Type a message first.');
       entry.text = text;
+      entry.tokens = E.tokens(text);
     }
     room.chat.push(entry);
     if (room.chat.length > E.CHAT_HISTORY) room.chat.shift();
     this.ctx.dirty();
-    this.tellAll({ t: 'chat', entry });
+    const deck = deckOf(room.settings.deck);
+    for (const viewer of room.players) {
+      if (!viewer.connected) continue;
+      const visible = this.chatFor(entry, viewer.id, this.spoilerCard(viewer, deck));
+      if (visible) this.tell(viewer.id, { t: 'chat', entry: visible });
+    }
   }
 
   /* ---------- What each player may see ---------- */
 
+  private spoilerCard(viewer: Player | undefined, deck: Deck): Deck['entries'][number] | null {
+    if (this.room.status !== 'play' || !viewer?.inGame || viewer.done) return null;
+    return deck.entries[this.room.cards[viewer.id]] ?? null;
+  }
+
+  private chatFor(entry: ChatEntry, viewerId: string | null, card: Deck['entries'][number] | null) {
+    if (entry.pid !== viewerId && card && entry.tokens && E.mentionsCard(entry.tokens, card)) return null;
+    const { tokens, ...visible } = entry;
+    return visible;
+  }
+
   /**
    * One player's view. Everyone's card is shown except the viewer's own, until it is revealed. Text that names
-   * the viewer's own card (someone typing it into a question or a guess) is hidden from that viewer only.
+   * the viewer's own card is hidden from that viewer in questions, other players' wrong guesses, and room chat.
    */
   protected view(forId: string | null): Msg {
     const room = this.room;
@@ -464,7 +482,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     const deck = deckOf(room.settings.deck);
     const reveal = room.status === 'result';
     // The card whose name must not reach this viewer through other people's text
-    const spoil = live && !reveal && me && me.inGame && !me.done && room.cards[me.id] !== undefined ? deck.entries[room.cards[me.id]] : null;
+    const spoil = this.spoilerCard(me, deck);
     const spoils = (toks: string | undefined) => Boolean(spoil && toks && E.mentionsCard(toks, spoil));
     const cardOf = (p: Player): string | null => {
       const idx = room.cards[p.id];
@@ -502,7 +520,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
         done: live ? p.done : null, asked: live ? p.asked : 0, pts: live ? room.delta[p.id] || 0 : 0,
         hasCard: live && room.cards[p.id] !== undefined, card: cardOf(p),
       })),
-      chat: room.chat,
+      chat: room.chat.map((entry) => this.chatFor(entry, forId, spoil)).filter((entry) => entry !== null),
       crewName: room.crew ? room.crew.name : '',
       crewStatus: room.crewStatus,
     };
