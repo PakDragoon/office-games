@@ -1,6 +1,7 @@
 import { env, runDurableObjectAlarm, runInDurableObject, SELF } from 'cloudflare:test';
 import { describe, expect, it, vi } from 'vitest';
 import ANIMALS_TEXT from '../../web/forehead/words/animals.txt';
+import JOBS_TEXT from '../../web/forehead/words/jobs.txt';
 import FAMOUS_TEXT from '../../web/forehead/words/famous.txt';
 import * as E from '../../web/forehead/js/engine.js';
 import { GAMES } from '../src/games';
@@ -15,6 +16,7 @@ const pace = () => sleep(80);
 const stub = (code: string) => env.ROOMS.get(env.ROOMS.idFromName(`forehead:${code}`));
 const famous = E.makeDeck('famous', FAMOUS_TEXT);
 const animals = E.makeDeck('animals', ANIMALS_TEXT);
+const jobs = E.makeDeck('jobs', JOBS_TEXT);
 const numbers = E.makeDeck('numbers');
 
 /* ---------- A tiny harness: players that keep every raw message, and "wait for the view I expect" ---------- */
@@ -47,7 +49,8 @@ interface PView {
   first: string | null;
   public: boolean;
   settings: { deck: string; minutes: number };
-  log: Array<{ n: number; pid: string; q: string | null; tally: Record<string, number> | null; top: string[]; outcome: string | null; guess: string | null; guessTurn: boolean }>;
+  log: Array<{ n: number; pid: string; q: string | null; tally: Record<string, number> | null; top: string[]; outcome: string | null; guess: string | null; guessTurn: boolean; close?: boolean }>;
+  chat: Array<{ id: string; name: string; text?: string; reaction?: string }>;
   players: Array<{
     id: string; name: string; isHost: boolean; connected: boolean; away: boolean; inGame: boolean; score: number;
     done: string | null; asked: number; pts: number; hasCard: boolean; card: string | null;
@@ -638,7 +641,96 @@ describe('forehead: away and left players', () => {
   });
 });
 
+describe('forehead: room chat', () => {
+  it('delivers text in every phase and keeps live card names and aliases out of the card owner’s view', async () => {
+    const host = await seat(null, 'Hana');
+    const code = (await host.c.state()).code as string;
+    const guest = await seat(code, 'Zed');
+    const other = await seat(code, 'Pia');
+    const g = { code, p: [host, guest, other] };
+    await all(g, (v) => v.players.length === 3, 'everyone seated');
+    const nextChat = (p: P, text: string) => p.c.next((m) => m.t === 'chat' && (m.entry as { text?: string }).text === text);
+    guest.c.send({ t: 'chat', text: '  IT   Support might be in this deck.  ' });
+    const lobbyEntry = await nextChat(host, 'IT Support might be in this deck.');
+    expect(lobbyEntry.entry).toMatchObject({ name: 'Zed' });
+
+    host.c.send({ t: 'begin', settings: { deck: 'jobs', minutes: 0 } });
+    await all(g, (v) => v.status === 'play');
+    await runInDurableObject(stub(code), (i) => {
+      const { cards } = (i as unknown as { game: { room: RoomPeek } }).game.room;
+      cards[host.id] = jobs.entries.findIndex((entry) => entry.name === 'IT Support');
+      cards[guest.id] = jobs.entries.findIndex((entry) => entry.name === 'Dentist');
+      cards[other.id] = jobs.entries.findIndex((entry) => entry.name === 'Photographer');
+    });
+    // Joining refreshes history for everyone. Lobby text can name the card a player has since been dealt.
+    const late = await seat(code, 'Quinn');
+    await waitFor(host, (v) => v.players.length === 4 && v.chat.length === 0, 'filtered lobby history');
+    expect((await waitFor(late, (v) => v.chat.length === 1)).chat[0].text).toBe('IT Support might be in this deck.');
+    const before = host.raw.length;
+
+    other.c.send({ t: 'chat', text: 'Try TECH-support!' });
+    const blocked = await nextChat(guest, 'Try TECH-support!');
+    expect(blocked.entry).not.toHaveProperty('tokens');
+
+    host.c.send({ t: 'chat', text: 'Could I be IT Support head?' });
+    const ownEntry = await nextChat(host, 'Could I be IT Support head?');
+    expect(ownEntry.entry).toMatchObject({ name: 'Hana' });
+    await nextChat(other, 'Could I be IT Support head?');
+
+    late.c.send({ t: 'chat', text: 'Good luck!' });
+    await nextChat(host, 'Good luck!');
+    expect(host.raw.slice(before).some((raw) => raw.includes('Try TECH-support!'))).toBe(false);
+
+    const newcomer = await seat(code, 'Mira');
+    const hostHistory = (await waitFor(host, (v) => v.players.length === 5)).chat;
+    expect(hostHistory.map((entry) => entry.text)).toEqual(['Could I be IT Support head?', 'Good luck!']);
+    const spectatorHistory = (await waitFor(newcomer, (v) => v.chat.length === 4)).chat;
+    expect(spectatorHistory.some((entry) => entry.text === 'Try TECH-support!')).toBe(true);
+
+    newcomer.c.send({ t: 'chat', reaction: 'constructor' });
+    expect((await newcomer.c.next((m) => m.t === 'chat-error')).reason).toBe('Choose a quick reaction during the round.');
+    newcomer.c.send({ t: 'chat', reaction: 'nice', text: 'spoiler' });
+    const reaction = await host.c.next((m) => m.t === 'chat' && (m.entry as { reaction?: string }).reaction === 'nice');
+    expect(reaction.entry).toMatchObject({ name: 'Mira', reaction: 'nice' });
+    expect(reaction.entry).not.toHaveProperty('text');
+    newcomer.c.send({ t: 'chat', reaction: 'nice' });
+    expect((await newcomer.c.next((m) => m.t === 'chat-error')).reason).toBe('Wait a moment before sending again.');
+
+    host.c.send({ t: 'endround' });
+    const result = await waitFor(host, (v) => v.status === 'result');
+    expect(result.chat.some((entry) => entry.text === 'Try TECH-support!')).toBe(true);
+    const resultGuest = await seat(code, 'Lee');
+    resultGuest.c.send({ t: 'chat', text: 'Good round!' });
+    await nextChat(host, 'Good round!');
+    resultGuest.c.close();
+    newcomer.c.close();
+    late.c.close();
+    closeAll(g);
+  });
+});
+
 describe('forehead: guesses and scoring', () => {
+  it('keeps an overlapping wrong guess visible to its author and sends the close badge only to them', async () => {
+    const g = await newGame(['Hana', 'Zed'], { deck: 'jobs', minutes: 0 });
+    const a = asker(g);
+    const other = g.p.find((p) => p !== a)!;
+    const card = jobs.entries.findIndex((entry) => entry.name === 'IT Support');
+    await runInDurableObject(stub(g.code), (i) => {
+      const { cards } = (i as unknown as { game: { room: RoomPeek } }).game.room;
+      cards[a.id] = card;
+      cards[other.id] = jobs.entries.findIndex((entry) => entry.name === 'Dentist');
+    });
+    await wrong(g, 'IT Support head');
+    const av = latest(a)!;
+    const ov = latest(other)!;
+    expect(av.asker).toBe(other.id);
+    expect(av.players.find((p) => p.id === a.id)).toMatchObject({ asked: 0, done: null, card: null });
+    expect(av.log[0]).toMatchObject({ outcome: 'wrong', guess: 'IT Support head', close: true });
+    expect(ov.log[0]).toMatchObject({ outcome: 'wrong', guess: 'IT Support head' });
+    expect(ov.log[0]).not.toHaveProperty('close');
+    closeAll(g);
+  });
+
   it('a right guess scores 12 minus the questions asked, plus 2 for the first; a guess is a turn of its own', async () => {
     const g = await newGame(['Hana', 'Zed', 'Pia', 'Quinn']);
     const p1 = asker(g);

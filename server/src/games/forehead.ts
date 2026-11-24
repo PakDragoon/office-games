@@ -1,6 +1,6 @@
 // Forehead on the server. Every player has a secret card that everyone else can see; the server deals the
 // cards, checks every guess and sends each player their OWN view. A player's own card is never put in any
-// message to that player until it has been revealed (they guessed it, gave up, or the round is over).
+// message to that player until it has been revealed (they guessed it, gave up, or the round is over), except in their own typed guesses.
 import * as E from '../../../web/forehead/js/engine.js';
 import ANIMALS_TEXT from '../../../web/forehead/words/animals.txt';
 import FAMOUS_TEXT from '../../../web/forehead/words/famous.txt';
@@ -43,8 +43,19 @@ interface LogEntry {
   outcome?: Outcome;
   guess?: string;
   gtok?: string;
+  close?: boolean;
   /** A turn spent guessing instead of asking (no question, never counted as one). */
   guessTurn?: boolean;
+}
+
+interface ChatEntry {
+  id: string;
+  pid: string;
+  name: string;
+  at: number;
+  text?: string;
+  tokens?: string;
+  reaction?: string;
 }
 
 interface Room extends BaseRoom<Player> {
@@ -63,6 +74,7 @@ interface Room extends BaseRoom<Player> {
   roundEnd: number;
   answers: Record<string, string>;
   log: LogEntry[];
+  chat: ChatEntry[];
   seq: number;
   first: string | null;
   note: string;
@@ -106,6 +118,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     if (oldId in room.delta) { room.delta[newId] = room.delta[oldId]; delete room.delta[oldId]; }
     if (room.first === oldId) room.first = newId;
     for (const e of room.log) if (e.pid === oldId) e.pid = newId;
+    for (const e of room.chat) if (e.pid === oldId) e.pid = newId;
   }
 
   // Someone left, went quiet or came back: the round never waits for them
@@ -131,6 +144,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       case 'ask': return this.ask(p, msg.q);
       case 'answer': return this.answer(p, msg.a);
       case 'guess': return this.guess(p, msg.text);
+      case 'chat': return this.chat(p, msg);
       case 'giveup': return this.giveUp(p);
       default:
     }
@@ -339,7 +353,9 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       p.score += pts;
       p.done = 'guessed';
     } else {
-      Object.assign(entry, { outcome: 'wrong', guess: text, gtok: E.tokens(text) });
+      Object.assign(entry, {
+        outcome: 'wrong', guess: text, gtok: E.tokens(text), close: E.isCloseGuess(text, deck, room.cards[p.id]),
+      });
     }
     this.endTurn();
   }
@@ -409,11 +425,54 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     this.broadcast();
   }
 
+  /* ---------- Room chat ---------- */
+
+  private chat(p: Player, msg: Msg): void {
+    const room = this.room;
+    const now = this.ctx.now();
+    const last = room.chat.findLast((entry) => entry.pid === p.id);
+    const reject = (reason: string) => this.tell(p.id, { t: 'chat-error', reason });
+    if (last && now - last.at < 1000) return reject('Wait a moment before sending again.');
+
+    const entry: ChatEntry = { id: crypto.randomUUID(), pid: p.id, name: p.name, at: now };
+    if (msg.reaction !== undefined) {
+      if (room.status !== 'play' || typeof msg.reaction !== 'string' || !Object.hasOwn(E.REACTIONS, msg.reaction)) {
+        return reject('Choose a quick reaction during the round.');
+      }
+      entry.reaction = msg.reaction;
+    } else {
+      const text = E.cleanChat(msg.text);
+      if (!text) return reject('Type a message first.');
+      entry.text = text;
+      entry.tokens = E.tokens(text);
+    }
+    room.chat.push(entry);
+    if (room.chat.length > E.CHAT_HISTORY) room.chat.shift();
+    this.ctx.dirty();
+    const deck = deckOf(room.settings.deck);
+    for (const viewer of room.players) {
+      if (!viewer.connected) continue;
+      const visible = this.chatFor(entry, viewer.id, this.spoilerCard(viewer, deck));
+      if (visible) this.tell(viewer.id, { t: 'chat', entry: visible });
+    }
+  }
+
   /* ---------- What each player may see ---------- */
+
+  private spoilerCard(viewer: Player | undefined, deck: Deck): Deck['entries'][number] | null {
+    if (this.room.status !== 'play' || !viewer?.inGame || viewer.done) return null;
+    return deck.entries[this.room.cards[viewer.id]] ?? null;
+  }
+
+  private chatFor(entry: ChatEntry, viewerId: string | null, card: Deck['entries'][number] | null) {
+    if (entry.pid !== viewerId && card && entry.tokens && E.mentionsCard(entry.tokens, card)) return null;
+    const { tokens, ...visible } = entry;
+    return visible;
+  }
 
   /**
    * One player's view. Everyone's card is shown except the viewer's own, until it is revealed. Text that names
-   * the viewer's own card (someone typing it into a question or a guess) is hidden from that viewer only.
+   * the viewer's own card is hidden from that viewer in questions, other players' wrong guesses, and room chat.
    */
   protected view(forId: string | null): Msg {
     const room = this.room;
@@ -423,7 +482,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
     const deck = deckOf(room.settings.deck);
     const reveal = room.status === 'result';
     // The card whose name must not reach this viewer through other people's text
-    const spoil = live && !reveal && me && me.inGame && !me.done && room.cards[me.id] !== undefined ? deck.entries[room.cards[me.id]] : null;
+    const spoil = this.spoilerCard(me, deck);
     const spoils = (toks: string | undefined) => Boolean(spoil && toks && E.mentionsCard(toks, spoil));
     const cardOf = (p: Player): string | null => {
       const idx = room.cards[p.id];
@@ -452,7 +511,8 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
       log: live ? room.log.map((e) => ({
         n: e.n, pid: e.pid, q: spoils(e.nq) ? null : e.q, tally: e.tally ?? null, top: e.top ?? [], outcome: e.outcome ?? null,
         guessTurn: Boolean(e.guessTurn),
-        guess: e.guess === undefined ? null : e.outcome === 'wrong' && spoils(e.gtok) ? null : e.guess,
+        guess: e.guess === undefined ? null : e.outcome === 'wrong' && e.pid !== forId && spoils(e.gtok) ? null : e.guess,
+        ...(e.pid === forId && e.close ? { close: true } : {}),
       })) : [],
       players: room.players.map((p) => ({
         id: p.id, name: p.name, color: p.color, isHost: p.isHost, photo: p.photo,
@@ -460,6 +520,7 @@ class ForeheadRoom extends SeatRoom<Player, Room> {
         done: live ? p.done : null, asked: live ? p.asked : 0, pts: live ? room.delta[p.id] || 0 : 0,
         hasCard: live && room.cards[p.id] !== undefined, card: cardOf(p),
       })),
+      chat: room.chat.map((entry) => this.chatFor(entry, forId, spoil)).filter((entry) => entry !== null),
       crewName: room.crew ? room.crew.name : '',
       crewStatus: room.crewStatus,
     };
@@ -475,12 +536,13 @@ export const forehead: GameModule = {
     return new ForeheadRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
       settings: cleanSettings({}), used: [], usedDeck: '', cards: {}, order: [], turn: -1, phase: 'wait', deadline: 0, roundEnd: 0,
-      answers: {}, log: [], seq: 0, first: null, note: '', delta: {}, replayId: null,
+      answers: {}, log: [], chat: [], seq: 0, first: null, note: '', delta: {}, replayId: null,
     });
   },
   restore(ctx, snap) {
     const room = snap as Room;
     restoreSeats(ctx, room);
+    room.chat ??= [];
     // Saved before turns became "ask OR guess": the old guess-or-pass step shows its tally until its saved
     // 'turn' timer fires, then the next turn starts
     if ((room.phase as string) === 'decide') room.phase = 'tally';

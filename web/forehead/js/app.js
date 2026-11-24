@@ -139,6 +139,7 @@ function closeRoom() {
     view: null, isHost: false, code: '', reconnecting: false, creating: false, turnKey: '', phaseKey: '', myAns: null, ansKey: '', filter: null,
     giveUpArmed: 0, endArmed: 0,
   });
+  resetChat();
 }
 
 function sendSettings() {
@@ -175,6 +176,12 @@ function onMessage(msg) {
     case 'nope':
       showFormError(String(msg.reason || '').slice(0, 80));
       break;
+    case 'chat':
+      receiveChat(msg.entry);
+      break;
+    case 'chat-error':
+      chatError(String(msg.reason || ''));
+      break;
     case 'toast':
       toast(String(msg.text || ''));
       break;
@@ -194,6 +201,7 @@ function applyState(v) {
   if (!mine) return;
   S.isHost = Boolean(mine.isHost);
   S.code = v.code;
+  showChat(v);
   if (S.creating && S.isHost) {
     // A room we just opened: bring this browser's saved settings and crew
     S.creating = false;
@@ -288,6 +296,7 @@ function renderGame(v) {
   renderSeats(v);
   renderStage(v, { mine, play, myTurn, asker, newTurn });
   renderLog(v);
+  renderGuessFeedback(v);
   renderScores(v);
 
   // Foot buttons: give up (anyone still guessing) and end the round (host)
@@ -379,22 +388,18 @@ function renderStage(v, { mine, play, myTurn, asker, newTurn }) {
 
   if (play && v.phase === 'ask') {
     if (myTurn) {
-      const input = $('ask-input');
-      $('ask-input').placeholder = numbers ? 'Is it more than 50?' : 'Am I an animal?';
-      $('ask-hint').textContent = numbers
-        ? 'Everyone else can read your number. They’ll answer Yes, No, Higher or Lower.'
-        : 'Everyone else can read your card. They’ll answer Yes, No, Sort of or Don’t know.';
       if (newTurn) {
+        const input = $('ask-input');
         input.value = '';
-        $('guess-input').value = '';
         S.guessing = false;
-        paintCount();
-        if (mine.inGame) { chime(); setTimeout(() => { if (!$('st-ask-me').hidden) input.focus({ preventScroll: true }); }, 60); }
+        chime();
+        if (document.activeElement === document.body && matchMedia('(pointer: fine)').matches) {
+          input.focus({ preventScroll: true });
+        }
       }
-      paintGuessMode();
-      $('ask-send').disabled = false;
+      paintGuessMode(numbers);
     } else {
-      $('ask-other-title').textContent = `${asker ? asker.name : 'Someone'} is thinking of a question…`;
+      $('ask-other-title').textContent = `${asker ? asker.name : 'Someone'} is deciding what to ask or guess…`;
       $('ask-other-sub').textContent = v.note || (mine.done ? 'You can still answer their questions.' : 'Their card is on their forehead: have a look and get ready to answer.');
     }
   }
@@ -464,45 +469,148 @@ function renderTally(v) {
 }
 
 /* ---------- Asking or guessing (one per turn) ---------- */
-/** On your turn the box asks a question, or (after "Guess my card") takes your guess instead. */
-function paintGuessMode() {
-  const g = Boolean(S.guessing);
-  $('ask-form').hidden = g;
-  $('ask-hint').hidden = g;
-  $('guess-line').hidden = g;
-  $('guess-form').hidden = !g;
-  $('ask-title').textContent = g ? 'Your turn: what’s on your forehead?' : 'Your turn: ask a yes-or-no question, or guess';
+function paintGuessMode(numbers) {
+  const guessing = Boolean(S.guessing);
+  const input = $('ask-input');
+  input.maxLength = guessing ? E.GUESS_MAX : E.QUESTION_MAX;
+  input.placeholder = guessing ? (numbers ? 'Type your number' : 'Type your guess')
+    : numbers ? 'Is it more than 50?' : 'Am I an animal?';
+  input.autocapitalize = guessing ? 'off' : 'sentences';
+  input.setAttribute('autocorrect', guessing ? 'off' : 'on');
+  input.spellcheck = !guessing;
+  $('ask-label').textContent = guessing ? 'Your guess' : 'Your question';
+  $('ask-send').textContent = guessing ? 'Submit guess' : 'Ask question';
+  $('ask-hint').textContent = guessing ? 'A guess uses your turn.'
+    : numbers ? 'The others answer Yes, No, Higher or Lower.'
+      : 'The others answer Yes, No, Sort of or Don’t know.';
+  for (const button of $('turn-modes').querySelectorAll('[data-mode]')) {
+    button.setAttribute('aria-pressed', String(button.dataset.mode === (guessing ? 'guess' : 'ask')));
+  }
+  paintCount();
 }
-function setGuessing(on) {
-  S.guessing = on;
+
+$('turn-modes').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-mode]');
+  if (!button) return;
+  S.guessing = button.dataset.mode === 'guess';
   showFormError('');
-  paintGuessMode();
-  const el = on ? $('guess-input') : $('ask-input');
-  setTimeout(() => el.focus({ preventScroll: true }), 30);
-}
-$('guess-instead').addEventListener('click', () => setGuessing(true));
-$('ask-instead').addEventListener('click', () => setGuessing(false));
+  paintGuessMode(S.view?.settings.deck === 'numbers');
+  $('ask-input').focus({ preventScroll: true });
+});
+
 function paintCount() {
-  const n = $('ask-input').value.length;
-  $('ask-count').textContent = `${n}/${E.QUESTION_MAX}`;
-  $('ask-count').classList.toggle('near', n >= E.QUESTION_MAX - 10);
+  const input = $('ask-input');
+  $('ask-count').textContent = `${input.value.length}/${input.maxLength}`;
+  $('ask-count').classList.toggle('near', input.value.length >= input.maxLength - 10);
 }
 $('ask-input').addEventListener('input', () => { paintCount(); showFormError(''); });
 $('ask-form').addEventListener('submit', (e) => {
   e.preventDefault();
   if (!S.view || S.view.phase !== 'ask' || S.view.asker !== S.myId) return;
-  const q = $('ask-input').value.replace(/\s+/g, ' ').trim();
-  if (!q) { showFormError('Type a question first.'); return; }
-  toHost({ t: 'ask', q });
+  const input = $('ask-input');
+  const text = input.value.replace(/\s+/g, ' ').trim();
+  if (!text) return showFormError(S.guessing ? 'Type your guess first.' : 'Type a question first.');
+  if (text.length > input.maxLength) return showFormError(`Use ${input.maxLength} characters or fewer.`);
+  toHost(S.guessing ? { t: 'guess', text } : { t: 'ask', q: text });
 });
-$('guess-form').addEventListener('submit', (e) => {
+
+/* ---------- Room chat ---------- */
+const chatPanel = $('room-chat');
+let chatEntries = [];
+const chatUnread = new Set();
+let chatDraft = null;
+let chatTimer = 0;
+
+function chatError(text) {
+  $('chat-error').textContent = text;
+  clearTimeout(chatTimer);
+  chatDraft = null;
+}
+
+function resetChat() {
+  chatEntries = [];
+  chatUnread.clear();
+  chatPanel.hidden = true;
+  $('chat-input').value = '';
+  chatError('');
+}
+
+function paintUnread() {
+  $('chat-unread').hidden = chatUnread.size === 0;
+  $('chat-unread').textContent = `${chatUnread.size} new`;
+}
+
+function paintChat() {
+  const list = $('chat-messages');
+  const atBottom = list.scrollHeight - list.clientHeight - list.scrollTop < 16;
+  list.innerHTML = chatEntries.map((entry) => {
+    const reaction = Object.hasOwn(E.REACTIONS, entry.reaction) ? E.REACTIONS[entry.reaction] : null;
+    const content = reaction ? `<span role="img" aria-label="${esc(reaction[1])}">${reaction[0]}</span>` : esc(entry.text ?? '');
+    return `<li><b>${esc(entry.name)}</b> <span>${content}</span></li>`;
+  }).join('');
+  if (atBottom) list.scrollTop = list.scrollHeight;
+  show('chat-messages', chatEntries.length > 0);
+  show('chat-empty', chatEntries.length === 0);
+  paintUnread();
+}
+
+function showChat(v) {
+  const target = v.status === 'lobby' ? $('lobby-setup') : $('stage-foot').parentElement;
+  if (chatPanel.parentElement !== target) target.append(chatPanel);
+  const opening = chatPanel.hidden;
+  if (opening) chatPanel.open = matchMedia('(min-width: 901px) and (min-height: 721px)').matches;
+  chatPanel.hidden = false;
+  show('chat-live', v.status === 'play');
+  const history = v.chat || [];
+  if (opening || chatEntries.length !== history.length || chatEntries.some((entry, i) => entry.id !== history[i].id)) {
+    chatEntries = [...history];
+    for (const id of chatUnread) if (!history.some((entry) => entry.id === id)) chatUnread.delete(id);
+    paintChat();
+  }
+}
+
+function receiveChat(entry) {
+  if (chatEntries.some((previous) => previous.id === entry.id)) return;
+  chatEntries.push(entry);
+  if (chatEntries.length > E.CHAT_HISTORY) chatUnread.delete(chatEntries.shift().id);
+  if (entry.pid === S.myId && entry.text === chatDraft) {
+    const input = $('chat-input');
+    if (E.cleanChat(input.value) === chatDraft) input.value = '';
+    chatError('');
+  }
+  if (!chatPanel.open && entry.pid !== S.myId) chatUnread.add(entry.id);
+  paintChat();
+}
+
+chatPanel.addEventListener('toggle', () => {
+  if (!chatPanel.open) return;
+  chatUnread.clear();
+  paintUnread();
+  const list = $('chat-messages');
+  list.scrollTop = list.scrollHeight;
+});
+
+$('chat-form').addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!S.view || S.view.phase !== 'ask' || S.view.asker !== S.myId) return;
-  const text = $('guess-input').value.replace(/\s+/g, ' ').trim();
-  if (!text) { showFormError('Type your guess first.'); return; }
-  toHost({ t: 'guess', text });
+  if (!S.view || chatDraft !== null) return;
+  const text = E.cleanChat($('chat-input').value);
+  if (!text) return chatError('Type a message first.');
+  if (S.reconnecting) return chatError('Reconnecting. Try again in a moment.');
+  chatError('');
+  chatDraft = text;
+  chatTimer = setTimeout(() => chatError('Message not sent. Try again.'), 3000);
+  toHost({ t: 'chat', text });
 });
-$('guess-input').addEventListener('input', () => showFormError(''));
+
+$('chat-reactions').innerHTML = Object.entries(E.REACTIONS).map(([key, [emoji, label]]) =>
+  `<button class="btn ghost" type="button" data-reaction="${key}" aria-label="${esc(label)}" title="${esc(label)}">${emoji}</button>`).join('');
+$('chat-reactions').addEventListener('click', (e) => {
+  const button = e.target.closest('[data-reaction]');
+  if (!button || S.view?.status !== 'play' || chatDraft !== null) return;
+  if (S.reconnecting) return chatError('Reconnecting. Try again in a moment.');
+  chatError('');
+  toHost({ t: 'chat', reaction: button.dataset.reaction });
+});
 
 // Two taps to give up or end the round: the first one arms the button for a few seconds
 function disarm(id) {
@@ -531,10 +639,21 @@ twoTap('giveup-btn', 'Tap again to give up (0 points)', () => toHost({ t: 'giveu
 twoTap('endround-btn', 'Tap again to end the round', () => { if (S.isHost) toHost({ t: 'endround' }); });
 
 /* ---------- The question log ---------- */
+const closeBadge = '<span class="close-badge">Very close</span>';
+
+function renderGuessFeedback(v) {
+  const entry = v.log.findLast((e) => e.pid === S.myId);
+  const feedback = $('guess-feedback');
+  const visible = v.status === 'play' && entry?.outcome === 'wrong';
+  show('guess-feedback', visible);
+  const html = visible ? `<strong>Not it</strong> <span>${esc(entry.guess ?? '')}</span>${entry.close ? closeBadge : ''}` : '';
+  if (feedback.innerHTML !== html) feedback.innerHTML = html;
+}
+
 const outcomeHTML = (e, isCurrent, v) => {
   switch (e.outcome) {
     case 'right': return `<span class="out right">Got it: ${esc(e.guess ?? '')}</span>`;
-    case 'wrong': return `<span class="out wrong">Not it${e.guess === null ? ' (hidden)' : `: ${esc(e.guess)}`}</span>`;
+    case 'wrong': return `<span class="out wrong">Not it${e.guess === null ? ' (hidden)' : `: ${esc(e.guess)}`}</span>${e.close ? closeBadge : ''}`;
     case 'pass': return '<span class="out">Passed</span>';
     case 'skip': return '<span class="out">Skipped</span>';
     case 'ended': return '<span class="out">Round ended</span>';

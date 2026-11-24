@@ -5,6 +5,9 @@ export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 8;
 export const QUESTION_MAX = 100;
 export const GUESS_MAX = 40;
+export const CHAT_MAX = 180;
+export const CHAT_HISTORY = 30;
+export const REACTIONS = { nice: ['👏', 'Nice!'], laugh: ['😂', 'Funny'], think: ['🤔', 'Thinking'], cheer: ['🎉', 'Celebrate'] };
 // How long each step of a turn may take
 // tallyMs: how long everyone sees a question's answers before the next turn starts by itself
 export const TIMES = { askMs: 45000, answerMs: 20000, tallyMs: 3500 };
@@ -103,6 +106,12 @@ export function cleanGuess(raw) {
   if (typeof raw !== 'string') return '';
   const g = raw.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, GUESS_MAX).trim();
   return squash(g) ? g : '';
+}
+
+export function cleanChat(raw) {
+  if (typeof raw !== 'string') return '';
+  const text = raw.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX).trim();
+  return text.replace(/[\uD800-\uDBFF]$/, '');
 }
 
 // ---------- Decks ----------
@@ -217,6 +226,19 @@ export function guessMatches(raw, deck, cardIndex) {
   return card.keys.some((k) => {
     const tol = tolerance(k.length);
     return tol > 0 && editDistance(g, k, tol) <= tol;
+  });
+}
+
+/** A wrong word guess qualifies when it adds just one short word to a full answer or alias. */
+export function isCloseGuess(raw, deck, cardIndex) {
+  const card = deck.entries[cardIndex];
+  if (!card || deck.id === 'numbers') return false;
+  const guess = tokens(raw);
+  return card.toks.some((answer) => {
+    if (answer.length < 3) return false;
+    const added = guess.startsWith(answer + ' ') ? guess.slice(answer.length + 1)
+      : guess.endsWith(' ' + answer) ? guess.slice(0, -answer.length - 1) : '';
+    return /^[a-z]{1,8}$/.test(added);
   });
 }
 
