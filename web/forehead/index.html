@@ -91,7 +91,7 @@
       <ul class="roster" id="lobby-players"></ul>
       <button class="btn link" id="leave-lobby" type="button">Leave room</button>
     </div>
-    <div class="lobby-setup">
+    <div class="lobby-setup" id="lobby-setup">
       <div id="host-settings" class="host-settings" hidden>
         <div class="setting">
           <span class="setting-label">Deck</span>
@@ -152,22 +152,18 @@
       <div class="stage" id="stage">
         <!-- Someone's turn to ask -->
         <div class="st" id="st-ask-me" hidden>
-          <p class="st-k" id="ask-title">Your turn: ask a yes-or-no question, or guess</p>
-          <form class="ask-form" id="ask-form" autocomplete="off">
-            <label class="sr-only" for="ask-input">Your question</label>
-            <input class="text-input" id="ask-input" maxlength="100" autocomplete="off" autocapitalize="sentences" enterkeyhint="send" placeholder="Am I an animal?">
-            <button class="btn primary" id="ask-send" type="submit">Ask</button>
+          <p class="st-k">Your turn</p>
+          <div class="seg turn-modes" id="turn-modes" role="group" aria-label="Choose how to use your turn">
+            <button type="button" data-mode="ask" aria-pressed="true">Ask a question</button>
+            <button type="button" data-mode="guess" aria-pressed="false">Guess my card</button>
+          </div>
+          <form class="ask-form" id="ask-form" autocomplete="off" novalidate>
+            <label class="sr-only" id="ask-label" for="ask-input">Your question</label>
+            <input class="text-input" id="ask-input" maxlength="100" autocomplete="off" enterkeyhint="send" placeholder="Am I an animal?" aria-describedby="ask-hint">
+            <button class="btn primary" id="ask-send" type="submit">Ask question</button>
             <span class="count" id="ask-count" aria-hidden="true">0/100</span>
           </form>
-          <!-- Guessing is a turn of its own, instead of asking -->
-          <form class="guess-form" id="guess-form" autocomplete="off" hidden>
-            <label class="sr-only" for="guess-input">Your guess</label>
-            <input class="text-input" id="guess-input" maxlength="40" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" placeholder="Type your guess">
-            <button class="btn primary" id="guess-send" type="submit">Guess</button>
-            <button class="btn ghost" id="ask-instead" type="button">Ask instead</button>
-          </form>
-          <p class="st-hint" id="ask-hint">Everyone else can read your card. They’ll answer Yes, No, Sort of or Don’t know.</p>
-          <p class="guess-line" id="guess-line">Think you know it? <button class="link-btn" id="guess-instead" type="button">Guess my card</button> <span class="muted">(uses your turn; a wrong guess just ends it)</span></p>
+          <p class="st-hint" id="ask-hint"></p>
           <p class="error" id="ask-error" role="alert"></p>
         </div>
         <div class="st" id="st-ask-other" hidden>
@@ -200,6 +196,7 @@
           <p class="st-k">Waiting for someone to come back…</p>
           <p class="st-hint">The round carries on as soon as a player who is still guessing is here.</p>
         </div>
+        <div id="guess-feedback" class="guess-feedback" role="status" hidden></div>
         <!-- Your own card, once it's out -->
         <div class="mine-done" id="mine-done" hidden></div>
         <!-- The round is over -->
@@ -214,7 +211,7 @@
           <p class="muted small-note" id="crew-line"></p>
         </div>
       </div>
-      <div class="stage-foot">
+      <div class="stage-foot" id="stage-foot">
         <button class="btn link small" id="giveup-btn" type="button" hidden>Give up and show my card</button>
         <button class="btn link small" id="endround-btn" type="button" hidden>End the round now</button>
       </div>
@@ -233,6 +230,24 @@
     </aside>
   </div>
 </main>
+
+<details class="room-chat" id="room-chat" hidden>
+  <summary>Room chat <span class="chat-unread" id="chat-unread" hidden></span></summary>
+  <div class="chat-body">
+    <ol class="chat-messages" id="chat-messages" aria-label="Room messages" tabindex="0"></ol>
+    <p class="muted small-note" id="chat-empty">No messages yet.</p>
+    <form class="chat-form" id="chat-form" autocomplete="off">
+      <label class="sr-only" for="chat-input">Message to the room</label>
+      <input class="text-input" id="chat-input" maxlength="180" enterkeyhint="send" placeholder="Message the room">
+      <button class="btn ghost" type="submit">Send</button>
+    </form>
+    <div class="chat-live" id="chat-live" hidden>
+      <p class="muted small-note">Quick reactions during the round. Text chat returns after the round.</p>
+      <div class="chat-reactions" id="chat-reactions" role="group" aria-label="Send a reaction"></div>
+    </div>
+    <p class="error" id="chat-error" role="status"></p>
+  </div>
+</details>
 
 <!-- ============ Sheets ============ -->
 <div class="scrim" id="scrim" hidden></div>
