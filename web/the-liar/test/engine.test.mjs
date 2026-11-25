@@ -202,4 +202,20 @@ let liarFirst = 0;
 for (let s = 0; s < 400; s++) if (E.turnOrder(['a', 'b', 'c', 'd'], 'a', E.mulberry32(s), false)[0] === 'a') liarFirst++;
 assert.ok(liarFirst > 50, 'a liar who doesn\'t know can go first');
 
+// Room chat: tidy text and the "your own word" check
+assert.equal(E.cleanChat('  hi\n\tthere  '), 'hi there');
+assert.equal(E.cleanChat(42), '');
+assert.equal(E.cleanChat('x'.repeat(500)).length, E.CHAT_MAX);
+assert.ok(E.chatGivesAway('I love tea', 'tea'));
+assert.ok(E.chatGivesAway('teas please', 'tea'));
+assert.ok(!E.chatGivesAway('team work', 'tea'), 'words that only start the same are fine');
+assert.ok(!E.chatGivesAway('steam', 'tea'));
+assert.ok(E.chatGivesAway('karak chai is great', 'karak chai'));
+assert.ok(E.chatGivesAway('chai time', 'karak chai'), 'a main part of a two-word word');
+assert.ok(E.chatGivesAway('a babyelephant', 'elephant'), 'a longer word written anywhere');
+assert.ok(!E.chatGivesAway('category?', 'cat'));
+assert.ok(!E.chatGivesAway('Bob is sus', 'cricket bat'));
+assert.ok(!E.chatGivesAway('anything', ''), 'a liar who knows has no word to give away');
+assert.deepEqual(E.CHAT_PHASES, ['lobby', 'draw', 'discuss', 'vote', 'result']);
+
 console.log(`engine: all checks passed (${total} words in ${CATEGORY_NAMES.length} categories)`);

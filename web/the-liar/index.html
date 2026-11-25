@@ -358,6 +358,22 @@
   <div id="delete-data"></div>
 </section>
 
+<!-- Room chat: one panel, moved into the lobby or the game's side column by js/app.js -->
+<details class="room-chat" id="room-chat" hidden>
+  <summary>Room chat <span class="chat-unread" id="chat-unread" hidden></span></summary>
+  <div class="chat-body">
+    <ol class="chat-messages" id="chat-messages" aria-label="Room messages" aria-live="polite" tabindex="0"></ol>
+    <p class="muted small-note chat-empty" id="chat-empty">No messages yet. Say hi, or accuse someone.</p>
+    <form class="chat-form" id="chat-form" autocomplete="off">
+      <label class="sr-only" for="chat-input">Message to the room</label>
+      <input class="text-input" id="chat-input" maxlength="180" enterkeyhint="send" placeholder="Message the room">
+      <button class="btn" id="chat-send" type="submit">Send</button>
+    </form>
+    <p class="muted small-note" id="chat-closed" hidden></p>
+    <p class="error chat-error" id="chat-error" role="status"></p>
+  </div>
+</details>
+
 <section class="sheet-panel wide" id="rules" role="dialog" aria-modal="true" aria-labelledby="rules-title" hidden>
   <header><h2 id="rules-title">How to play</h2><button class="icon-btn" type="button" data-close aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button></header>
   <p>3 to 8 players. Everyone gets the same secret word, except one player: <b>the liar</b>, who only sees the category.</p>
@@ -372,6 +388,8 @@
   <p>Instead of a word, everyone gets a secret time, like <b>6.71 s</b>. The liar only gets a range it’s somewhere in, like <b>3 to 9 s</b>. Everyone presses <b>Start</b>, counts in their head (no clock is shown) and presses <b>Stop</b> at their time.</p>
   <p>The host picks <b>All at once</b> (everyone counts together) or <b>Turn by turn</b>: one player at a time in a random order while everyone watches, and each stop goes up on the timeline as soon as it’s made. The liar never goes first.</p>
   <p>When everyone has stopped, all the times go up and you get 60, 120 or 180 seconds (host setting) to talk it over. Press <b>Ready to vote</b> to cut it short (everyone but one is enough). The liar’s stop is a guess, so look for the odd one out, but people who know the time miss too. There’s no last chance in Time: a caught liar is caught.</p>
+  <h3>Room chat</h3>
+  <p>Talk in the lobby, during the turns, in the discussion, during the vote and after the game. It’s closed while you read your card, while the clock runs in Time and during the liar’s last guess. You can’t type your own word in chat while a game is on.</p>
   <h3>The liar doesn’t know</h3>
   <p>A host setting for every game. The liar doesn’t see “You are the liar”: they get a <b>close word</b> instead (<i>coffee</i> when everyone else has <i>tea</i>), or in Time a time 1.5 to 3 s away from everyone else’s, and play it as if it were theirs. Nobody knows who the liar is, not even the liar, so anyone may go first. If they’re caught, the guess is where they find out. Points are the same.</p>
   <h3>Voting</h3>

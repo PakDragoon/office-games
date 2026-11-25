@@ -26,6 +26,7 @@ interface Player extends Seat {
 }
 
 interface Stroke { sid: string; pid: string; color: number; pts: number[] }
+interface ChatEntry { id: string; pid: string; name: string; color: number; text: string; at: number }
 interface Clue { pid: string; color: number; round: number; turn: number; text: string; passed?: boolean }
 
 interface Room extends BaseRoom<Player> {
@@ -55,6 +56,7 @@ interface Room extends BaseRoom<Player> {
   guess: string | null;
   result: string | null;
   delta: Record<string, number>;
+  chat: ChatEntry[];
 }
 
 function cleanSettings(raw: unknown): Settings {
@@ -115,9 +117,12 @@ class LiarRoom extends SeatRoom<Player, Room> {
     for (const [v, t] of Object.entries(room.votes)) if (t === oldId) room.votes[v] = newId;
     if (room.accused === oldId) room.accused = newId;
     if (oldId in room.delta) { room.delta[newId] = room.delta[oldId]; delete room.delta[oldId]; }
+    for (const e of room.chat ?? []) if (e.pid === oldId) e.pid = newId;
   }
 
   protected seated(p: Player): void {
+    // The room's recent chat (live messages come one by one as 'chat')
+    this.tell(p.id, { t: 'chat-history', entries: this.room.chat ?? [] });
     if (this.room.status === 'lobby') return;
     this.tell(p.id, this.secretFor(p));
     this.sendDrawing(p.id);
@@ -151,6 +156,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
       case 'vote': return this.vote(p, msg.target);
       case 'guess': return this.guess(p.id, msg.word);
       case 'sync': return this.sendDrawing(p.id);
+      case 'chat': return this.chat(p, msg.text);
       default:
     }
   }
@@ -463,6 +469,36 @@ class LiarRoom extends SeatRoom<Player, Room> {
     this.broadcast();
   }
 
+  /* ---------- Room chat ---------- */
+
+  // The word a player is holding: theirs, the decoy for a liar who doesn't know, nothing for a liar who knows
+  private ownWord(pid: string): string {
+    const room = this.room;
+    if (pid !== room.liar) return room.word;
+    return liarKnows(room.settings) ? '' : room.decoy;
+  }
+
+  private chat(p: Player, raw: unknown): void {
+    const room = this.room;
+    room.chat ??= [];
+    const reject = (reason: string) => this.tell(p.id, { t: 'chat-error', reason });
+    if (!(E.CHAT_PHASES as string[]).includes(room.status)) return reject('Chat opens again in a moment.');
+    const now = this.ctx.now();
+    const last = room.chat.findLast((e) => e.pid === p.id);
+    if (last && now - last.at < 1000) return reject('Wait a moment before sending again.');
+    const text = E.cleanChat(raw);
+    if (!text) return reject('Type a message first.');
+    // Mid-game, nobody may say their own word (a refusal is based on your own word only, so it tells nobody anything)
+    if (p.inGame && room.status !== 'lobby' && room.status !== 'result' && E.chatGivesAway(text, this.ownWord(p.id))) {
+      return reject('That gives your word away.');
+    }
+    const entry: ChatEntry = { id: crypto.randomUUID(), pid: p.id, name: p.name, color: p.color, text, at: now };
+    room.chat.push(entry);
+    if (room.chat.length > E.CHAT_HISTORY) room.chat.shift();
+    this.ctx.dirty();
+    for (const viewer of room.players) if (viewer.connected) this.tell(viewer.id, { t: 'chat', entry });
+  }
+
   /* ---------- Voting ---------- */
 
   private voteNow(p: Player, on: boolean): void {
@@ -650,12 +686,13 @@ export const liar: GameModule = {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
       settings: cleanSettings({}), used: [], liar: null, lastLiar: null, word: '', decoy: '', category: '', order: [], round: 0, turn: 0,
       turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {}, started: {},
-      votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null,
+      votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null, chat: [],
     });
   },
   restore(ctx, snap) {
     const room = snap as Room;
     restoreSeats(ctx, room);
+    room.chat ??= [];
     return new LiarRoom(ctx, room);
   },
 };

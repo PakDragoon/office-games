@@ -187,6 +187,37 @@ function givesAway(clue, word) {
     .some((t) => t === w || (w.length >= 3 && t.startsWith(w)) || parts.includes(t) || (parts.length > 1 && parts.some((x) => t.startsWith(x))));
 }
 
+// ---------- Room chat ----------
+
+export const CHAT_MAX = 180;
+export const CHAT_HISTORY = 30;
+// Chat is closed while you read your card, while the clock is running in Time (a "stopped at 6.7" would
+// help the liar) and during the liar's last guess (nobody may hint the word)
+export const CHAT_PHASES = ['lobby', 'draw', 'discuss', 'vote', 'result'];
+
+/** A chat message tidied: no control characters, single spaces, at most CHAT_MAX characters ('' if empty). */
+export function cleanChat(raw) {
+  if (typeof raw !== 'string') return '';
+  return raw.normalize('NFKC').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, CHAT_MAX).trim();
+}
+
+/**
+ * Does a chat message say your own word? Gentler than the clue check, because a sentence has many words:
+ * the word itself or its plural (tea, teas), a main part of a two-word answer (chai in "karak chai"), or a
+ * longer word written anywhere (elephant in "babyelephant"). Words that merely start the same (team, steam) are fine.
+ */
+export function chatGivesAway(text, word) {
+  const w = clueKey(word);
+  if (!w) return false;
+  const tokens = String(text).split(/[^\p{L}\p{N}']+/u).map(clueKey).filter(Boolean);
+  const plural = (t, x) => t === x || t === `${x}s` || t === `${x}es`;
+  if (tokens.some((t) => plural(t, w))) return true;
+  if (w.length >= 5 && tokens.join('').includes(w)) return true;
+  const all = String(word).split(/[\s-]+/).map(clueKey).filter(Boolean);
+  const parts = all.filter((x) => x.length >= 4);
+  return all.length > 1 && tokens.some((t) => parts.some((x) => plural(t, x)));
+}
+
 // ---------- Time game: stop a hidden clock ----------
 
 // Targets in hundredths of a second, never a whole second (so it always sits inside the

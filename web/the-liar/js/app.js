@@ -165,6 +165,7 @@ function closeRoom() {
   stopPen();
   stopClock();
   Object.assign(S, { view: null, isHost: false, code: '', secret: null, reconnecting: false, gameShown: -1, turnKey: '', phaseKey: '', creating: false });
+  resetChat();
 }
 
 // The host's buttons. The server only acts on these from whoever is host right now.
@@ -229,6 +230,16 @@ function onMessage(msg) {
     case 'toast':
       toast(String(msg.text || ''));
       break;
+    case 'chat-history':
+      CHAT.entries = Array.isArray(msg.entries) ? msg.entries.slice(-E.CHAT_HISTORY) : [];
+      paintChat(true);
+      break;
+    case 'chat':
+      if (msg.entry) addChat(msg.entry);
+      break;
+    case 'chat-error':
+      chatError(String(msg.reason || ''));
+      break;
     case 'state':
       applyState(msg);
       break;
@@ -246,6 +257,7 @@ function applyState(v) {
   if (!mine) return;
   S.isHost = Boolean(mine.isHost);
   S.code = v.code;
+  placeChat(v);
   if (S.creating && S.isHost) {
     // A room we just opened: bring this browser's saved settings and crew
     S.creating = false;
@@ -388,6 +400,94 @@ function renderGame(v) {
   renderScores(v);
   renderCard();
 }
+
+/* ---------- Room chat ---------- */
+// One panel: under the players in the lobby, at the bottom of the side column in a game. The server
+// keeps the last 30 messages and refuses your own word mid-game.
+const chatPanel = $('room-chat');
+const CHAT = { entries: [], unread: 0, draft: null, timer: 0, placed: '' };
+const CHAT_CLOSED = {
+  role: 'Chat opens once everyone has seen their card.',
+  time: 'Chat is closed while the clock runs.',
+  guess: 'Chat is closed during the liar’s last guess.',
+};
+
+function chatError(text) {
+  $('chat-error').textContent = text;
+  clearTimeout(CHAT.timer);
+  CHAT.draft = null;
+}
+
+function paintUnread() {
+  $('chat-unread').hidden = CHAT.unread === 0;
+  $('chat-unread').textContent = `${CHAT.unread} new`;
+}
+
+function paintChat(toBottom = false) {
+  const list = $('chat-messages');
+  const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 48;
+  list.innerHTML = CHAT.entries.map((e) => `<li class="pc${Number(e.color) || 0}${e.pid === S.myId ? ' mine' : ''}"><b>${esc(e.name)}</b>${esc(e.text)}</li>`).join('');
+  $('chat-empty').hidden = CHAT.entries.length > 0;
+  if (toBottom || nearBottom) list.scrollTop = list.scrollHeight;
+  paintUnread();
+}
+
+function resetChat() {
+  Object.assign(CHAT, { entries: [], unread: 0, placed: '' });
+  chatPanel.hidden = true;
+  $('chat-input').value = '';
+  chatError('');
+  paintChat();
+}
+
+function addChat(entry) {
+  if (CHAT.entries.some((e) => e.id === entry.id)) return;
+  CHAT.entries.push(entry);
+  if (CHAT.entries.length > E.CHAT_HISTORY) CHAT.entries.shift();
+  if (entry.pid === S.myId && entry.text === CHAT.draft) {
+    if (E.cleanChat($('chat-input').value) === CHAT.draft) $('chat-input').value = '';
+    chatError('');
+  }
+  if (!chatPanel.open && entry.pid !== S.myId) CHAT.unread++;
+  paintChat(entry.pid === S.myId);
+}
+
+function placeChat(v) {
+  const where = v.status === 'lobby' ? 'lobby' : 'game';
+  if (CHAT.placed !== where) {
+    if (where === 'lobby') $('lobby-players').after(chatPanel);
+    else document.querySelector('#game .side').append(chatPanel);
+    // Open on a laptop and in the lobby; folded on a phone during a game (tap to open)
+    if (chatPanel.hidden) chatPanel.open = where === 'lobby' || matchMedia('(min-width: 901px)').matches;
+    CHAT.placed = where;
+    chatPanel.hidden = false;
+    paintChat(true);
+  }
+  const open = E.CHAT_PHASES.includes(v.status);
+  $('chat-input').disabled = !open;
+  $('chat-send').disabled = !open;
+  $('chat-form').classList.toggle('off', !open);
+  $('chat-closed').hidden = open;
+  $('chat-closed').textContent = open ? '' : CHAT_CLOSED[v.status] || 'Chat opens again in a moment.';
+}
+
+chatPanel.addEventListener('toggle', () => {
+  if (!chatPanel.open) return;
+  CHAT.unread = 0;
+  paintChat(true);
+});
+
+$('chat-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if (!S.view || CHAT.draft !== null) return;
+  const text = E.cleanChat($('chat-input').value);
+  if (!text) return chatError('Type a message first.');
+  if (S.reconnecting) return chatError('Reconnecting. Try again in a moment.');
+  chatError('');
+  CHAT.draft = text;
+  CHAT.timer = setTimeout(() => chatError('Message not sent. Try again.'), 3000);
+  toHost({ t: 'chat', text });
+});
 
 /* ---------- Your secret card (hold to peek) ---------- */
 function cardHTML(secret) {
