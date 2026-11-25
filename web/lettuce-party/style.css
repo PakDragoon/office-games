@@ -721,7 +721,7 @@ button.tile:not(:disabled)::before { content: ''; position: absolute; inset: -3p
 .t-warm { --tc: #d39b22; }
 .t-cool { --tc: #4f9fd8; }
 .t-cold, .t-none { --tc: #8a90ad; }
-.board.hotcold { display: flex; flex-direction: column; gap: 0.6rem; width: min(520px, 100%); margin: 0 auto; }
+.board.hotcold { display: flex; flex-direction: column; gap: 0.6rem; width: min(100%, 560px); margin: 0 auto; }
 .hot-form { display: flex; gap: 0.5rem; }
 .hot-form.shake { animation: shake 0.4s; }
 .hot-input {
@@ -768,20 +768,20 @@ button.tile:not(:disabled)::before { content: ''; position: absolute; inset: -3p
   .arena.hotcold .me { justify-content: flex-start; }
 }
 
-/* The daily has room for a wider history and a separate rank guide. */
-.game:has(.arena.daily.hotcold) { height: auto; }
-.hot-play { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
-.arena.daily.hotcold { grid-template-columns: minmax(0, 880px); }
-.arena.daily.hotcold .board { width: min(100%, 560px); }
-.arena.daily.hotcold .hot-last:empty { display: none; }
+/* Hot & Cold has a wider word board and a separate rank guide. */
+.game:has(.arena.hotcold) { height: auto; }
+.arena.hotcold .me { min-width: 0; }
+.arena.daily.hotcold { grid-template-columns: minmax(0, 560px); }
+.hot-last:empty { display: none; }
 .hot-history-title { font-size: 1rem; margin-top: 0.35rem; }
 .hot-history:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 10px; }
-.arena.daily.hotcold .hot-history {
+.arena.hotcold .hot-history {
   max-height: max(12rem, calc(100dvh - 19rem));
   scrollbar-color: var(--muted) var(--surface);
 }
-.arena.daily.hotcold .hot-row :is(.hr, .ht) { color: color-mix(in srgb, var(--tc) 62%, var(--ink)); }
-.hot-sidebar { display: grid; gap: 0.75rem; align-content: start; }
+.arena.hotcold .hot-row :is(.hr, .ht) { color: color-mix(in srgb, var(--tc) 62%, var(--ink)); }
+.hot-sidebar { grid-area: help; display: grid; gap: 0.75rem; width: 100%; max-width: 560px; margin-inline: auto; }
+.arena:not(.hotcold) .hot-sidebar { display: none; }
 .hot-panel {
   display: grid; gap: 0.65rem; padding: 1rem;
   border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
@@ -797,16 +797,47 @@ button.tile:not(:disabled)::before { content: ''; position: absolute; inset: -3p
 .hot-guide dt::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--tc); }
 .hot-guide dd { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
 
+/* A room keeps the rivals next to the board, with scores in the left rail or the Scores sheet. */
+.arena.hotcold:not(.daily) .rivals { grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+.arena.hotcold .rival {
+  grid-template-columns: 4.2rem minmax(0, 1fr); grid-template-rows: auto auto;
+  justify-items: start; align-items: center; gap: 0.12rem 0.6rem;
+  padding: 0.5rem 0.6rem; border-width: 2px; min-width: 0;
+}
+.arena.hotcold .rival .mini { grid-row: 1 / 3; }
+.arena.hotcold .rival-name { max-width: 100%; }
+.arena.hotcold .mini.hot .hbar i { border: 0; }
+
+@media (min-width: 761px) {
+  .arena.hotcold { gap: 1rem 1.25rem; }
+  .arena.hotcold:not(.daily) {
+    grid-template-columns: minmax(0, 560px) minmax(220px, 260px);
+    grid-template-areas: "me rivals" "me help";
+    grid-template-rows: auto 1fr;
+    justify-content: center;
+  }
+}
 @media (min-width: 860px) {
-  .arena.daily.hotcold .board {
-    display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
-    gap: 1.25rem; width: 100%; align-items: start;
+  .arena.daily.hotcold {
+    grid-template-columns: minmax(0, 560px) minmax(260px, 300px);
+    grid-template-areas: "me help";
   }
   .arena.daily.hotcold .hot-count-best { display: none; }
 }
-@media (max-width: 760px) {
-  .game:has(.arena.daily.hotcold) .game-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+@media (min-width: 1100px) {
+  .arena.hotcold:not(.daily) {
+    grid-template-columns: minmax(240px, 260px) minmax(0, 560px) minmax(220px, 260px);
+    grid-template-areas: "scores me rivals" "help me rivals";
+  }
+  .arena.hotcold .hot-count-best { display: none; }
 }
-@media (max-width: 560px) {
-  .arena.daily.hotcold .hot-history { max-height: 46dvh; }
+@media (max-width: 859px) {
+  .arena.daily.hotcold { grid-template-areas: "me" "help"; }
+}
+@media (max-width: 760px) {
+  .arena.hotcold { padding-bottom: 0.75rem; }
+  .arena.hotcold:not(.daily) .rivals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .arena.hotcold .rival { grid-template-columns: 3.5rem minmax(0, 1fr); }
+  .arena.hotcold .hot-history { max-height: 46dvh; }
+  .game:has(.arena.hotcold) .game-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); }
 }

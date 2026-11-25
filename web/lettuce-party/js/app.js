@@ -341,7 +341,7 @@ function countBox(kind, n) {
 function paintBoardNote() {
   const note = $('board-note');
   note.innerHTML = '';
-  note.hidden = S.mode === 'classic' || (S.daily && S.mode === 'hotcold');
+  note.hidden = S.mode === 'classic' || S.mode === 'hotcold';
   if (S.mode === 'counts') {
     note.className = 'board-note legend';
     for (const k of COUNT_KINDS) {
@@ -564,36 +564,36 @@ function drawHot() {
   const playing = v?.status === 'playing' && m && !m.done;
   let form = board.querySelector('.hot-form');
   if (!form) {
-    board.innerHTML = `<div class="hot-play">
-        <form class="hot-form" autocomplete="off">
-          <label class="sr-only" for="hot-input">Your word</label>
-          <input id="hot-input" class="hot-input" type="text" maxlength="14" placeholder="Type any word" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send">
-          <button class="btn primary" type="submit">Guess</button>
-        </form>
-        <div class="hot-tools"><span class="hot-count"></span><button type="button" class="btn ghost small hot-hint">Hint</button></div>
-        <div class="hot-last" aria-live="polite"></div>
-        ${S.daily ? '<h2 class="hot-history-title" hidden>Guess history</h2>' : ''}
-        <ol class="hot-list hot-history" aria-label="Your words, closest first"${S.daily ? ' tabindex="0" hidden' : ''}></ol>
-      </div>
-      ${S.daily ? `<aside class="hot-sidebar" aria-label="Hot &amp; Cold progress and help">
-        <section class="hot-panel" aria-labelledby="hot-best-title">
-          <h2 id="hot-best-title">Closest guess</h2>
-          <p class="hot-best-empty">Your best guess will appear here.</p>
-          <ol class="hot-list small hot-best" hidden></ol>
-        </section>
-        <section class="hot-panel" aria-labelledby="hot-guide-title">
-          <h2 id="hot-guide-title">Rank guide</h2>
-          <p>Words with similar meanings rank closer to #1.</p>
-          <dl class="hot-guide">
-            <div class="t-found"><dt>Secret word</dt><dd>#1</dd></div>
-            <div class="t-burning"><dt>Burning</dt><dd>2–10</dd></div>
-            <div class="t-hot"><dt>Hot</dt><dd>11–100</dd></div>
-            <div class="t-warm"><dt>Warm</dt><dd>101–500</dd></div>
-            <div class="t-cool"><dt>Cool</dt><dd>501–2,000</dd></div>
-            <div class="t-cold"><dt>Cold</dt><dd>2,001+</dd></div>
-          </dl>
-        </section>
-      </aside>` : ''}`;
+    board.innerHTML = `<form class="hot-form" autocomplete="off">
+        <label class="sr-only" for="hot-input">Your word</label>
+        <input id="hot-input" class="hot-input" type="text" maxlength="14" placeholder="Type any word" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send">
+        <button class="btn primary" type="submit">Guess</button>
+      </form>
+      <div class="hot-tools"><span class="hot-count"></span><button type="button" class="btn ghost small hot-hint">Hint</button></div>
+      <div class="hot-last" aria-live="polite"></div>
+      <h2 class="hot-history-title" hidden>Guess history</h2>
+      <ol class="hot-list hot-history" aria-label="Your words, closest first" tabindex="0" hidden></ol>`;
+    if (!$('hot-sidebar')) {
+      board.closest('.arena').insertAdjacentHTML('beforeend', `<aside id="hot-sidebar" class="hot-sidebar" aria-label="Hot &amp; Cold progress and help">
+          <section class="hot-panel" aria-labelledby="hot-best-title">
+            <h2 id="hot-best-title">Closest guess</h2>
+            <p class="hot-best-empty">Your best guess will appear here.</p>
+            <ol class="hot-list small hot-best" hidden></ol>
+          </section>
+          <section class="hot-panel" aria-labelledby="hot-guide-title">
+            <h2 id="hot-guide-title">Rank guide</h2>
+            <p>Words with similar meanings rank closer to #1.</p>
+            <dl class="hot-guide">
+              <div class="t-found"><dt>Secret word</dt><dd>#1</dd></div>
+              <div class="t-burning"><dt>Burning</dt><dd>2–10</dd></div>
+              <div class="t-hot"><dt>Hot</dt><dd>11–100</dd></div>
+              <div class="t-warm"><dt>Warm</dt><dd>101–500</dd></div>
+              <div class="t-cool"><dt>Cool</dt><dd>501–2,000</dd></div>
+              <div class="t-cold"><dt>Cold</dt><dd>2,001+</dd></div>
+            </dl>
+          </section>
+        </aside>`);
+    }
     form = board.querySelector('.hot-form');
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -646,14 +646,16 @@ function drawHot() {
   }
   const list = board.querySelector('.hot-history');
   list.replaceChildren(...sorted.map((g) => hotRow(g, g === latest ? ' now' : '')));
-  if (S.daily) {
-    list.hidden = board.querySelector('.hot-history-title').hidden = sorted.length === 0;
-    const bestList = board.querySelector('.hot-best');
-    bestList.hidden = !best;
-    board.querySelector('.hot-best-empty').hidden = Boolean(best);
-    bestList.replaceChildren(...(best ? [hotRow(best)] : []));
+  list.hidden = board.querySelector('.hot-history-title').hidden = sorted.length === 0;
+  const sidebar = $('hot-sidebar');
+  const bestList = sidebar.querySelector('.hot-best');
+  bestList.hidden = !best;
+  sidebar.querySelector('.hot-best-empty').hidden = Boolean(best);
+  bestList.replaceChildren(...(best ? [hotRow(best)] : []));
+  const focused = document.activeElement;
+  if (playing && focused !== input && focused !== list && !matchMedia('(pointer: coarse)').matches) {
+    input.focus({ preventScroll: true });
   }
-  if (playing && document.activeElement !== input && !matchMedia('(pointer: coarse)').matches) input.focus();
 }
 
 /* ---------- typing ---------- */
