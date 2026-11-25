@@ -38,6 +38,7 @@
       <label class="field">Your name
         <input id="name-input" maxlength="16" autocomplete="nickname" placeholder="e.g. Sara">
       </label>
+      <button class="news-note" type="button" data-open="rules"><span class="new-chip">NEW</span> <b>The liar doesn’t know:</b> a host setting where the liar gets a close word and has no idea they’re the liar.</button>
       <p class="error" id="home-error" role="alert"></p>
       <button class="btn link" type="button" data-open="rules">How to play</button>
     </div>
@@ -102,7 +103,7 @@
           <span class="setting-label">The liar</span>
           <div class="seg two" id="set-knows" role="group" aria-label="The liar">
             <button type="button" data-value="yes"><b>Knows</b><small>Sees “You are the liar”</small></button>
-            <button type="button" data-value="no"><b>Doesn’t know</b><small>Gets a close word, thinks it’s theirs</small></button>
+            <button type="button" data-value="no"><b>Doesn’t know <span class="new-chip">NEW</span></b><small>Gets a close word, thinks it’s theirs</small></button>
           </div>
         </div>
         <div class="setting" id="turns-setting">

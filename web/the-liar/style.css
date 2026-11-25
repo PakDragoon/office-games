@@ -595,3 +595,12 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .delete-data .delete-data-btn { border-color: var(--danger); color: var(--danger); }
 .delete-data .delete-data-btn.sure { background: var(--danger); border-color: var(--danger); color: #fff; }
 .delete-data .delete-data-note { margin: 0; text-align: left; }
+
+/* New mode: a small chip, and a note on the home screen that opens How to play */
+.new-chip { display: inline-block; vertical-align: 0.12em; font-size: 0.62rem; font-weight: 800; letter-spacing: 0.06em; line-height: 1.3;
+  padding: 0.08rem 0.4rem; border-radius: 999px; background: var(--liar); color: var(--paper); }
+.news-note { display: block; width: 100%; text-align: left; font: inherit; font-size: 0.92rem; line-height: 1.4; color: var(--ink); cursor: pointer;
+  background: color-mix(in srgb, var(--liar) 8%, var(--surface)); border: 1px solid color-mix(in srgb, var(--liar) 35%, var(--line));
+  border-radius: 12px; padding: 0.6rem 0.8rem; margin: 0.25rem 0 0.4rem; }
+.news-note:hover { border-color: var(--liar); }
+.news-note b { font-weight: 800; }
