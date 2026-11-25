@@ -767,3 +767,46 @@ button.tile:not(:disabled)::before { content: ''; position: absolute; inset: -3p
   /* No on-screen keyboard here: the word box sits at the top, under the other players */
   .arena.hotcold .me { justify-content: flex-start; }
 }
+
+/* The daily has room for a wider history and a separate rank guide. */
+.game:has(.arena.daily.hotcold) { height: auto; }
+.hot-play { display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; }
+.arena.daily.hotcold { grid-template-columns: minmax(0, 880px); }
+.arena.daily.hotcold .board { width: min(100%, 560px); }
+.arena.daily.hotcold .hot-last:empty { display: none; }
+.hot-history-title { font-size: 1rem; margin-top: 0.35rem; }
+.hot-history:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; border-radius: 10px; }
+.arena.daily.hotcold .hot-history {
+  max-height: max(12rem, calc(100dvh - 19rem));
+  scrollbar-color: var(--muted) var(--surface);
+}
+.arena.daily.hotcold .hot-row :is(.hr, .ht) { color: color-mix(in srgb, var(--tc) 62%, var(--ink)); }
+.hot-sidebar { display: grid; gap: 0.75rem; align-content: start; }
+.hot-panel {
+  display: grid; gap: 0.65rem; padding: 1rem;
+  border: 1px solid var(--line); border-radius: 12px; background: var(--surface);
+}
+.hot-panel h2 { font-size: 1.05rem; }
+.hot-panel p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.hot-guide { margin: 0; font-size: 0.9rem; }
+.hot-guide div {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.65rem;
+  padding: 0.32rem 0; border-top: 1px solid var(--line);
+}
+.hot-guide dt { display: flex; align-items: center; gap: 0.45rem; font-weight: 700; }
+.hot-guide dt::before { content: ""; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--tc); }
+.hot-guide dd { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+@media (min-width: 860px) {
+  .arena.daily.hotcold .board {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
+    gap: 1.25rem; width: 100%; align-items: start;
+  }
+  .arena.daily.hotcold .hot-count-best { display: none; }
+}
+@media (max-width: 760px) {
+  .game:has(.arena.daily.hotcold) .game-bar { position: sticky; top: 0; z-index: 2; background: var(--bg); }
+}
+@media (max-width: 560px) {
+  .arena.daily.hotcold .hot-history { max-height: 46dvh; }
+}

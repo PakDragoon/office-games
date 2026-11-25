@@ -341,7 +341,7 @@ function countBox(kind, n) {
 function paintBoardNote() {
   const note = $('board-note');
   note.innerHTML = '';
-  note.hidden = S.mode === 'classic';
+  note.hidden = S.mode === 'classic' || (S.daily && S.mode === 'hotcold');
   if (S.mode === 'counts') {
     note.className = 'board-note legend';
     for (const k of COUNT_KINDS) {
@@ -372,7 +372,7 @@ function drawCurrent() {
 
 /** Draw one of my guesses on its row. Classic: coloured tiles. Counts: plain tiles plus the three boxes. */
 function paintGuess(r, g, animate) {
-  if (S.mode === 'ladder') return;
+  if (S.mode === 'ladder' || S.mode === 'hotcold') return;
   if (S.mode === 'counts') return paintCounts(r, g.word, g.counts, animate);
   paintRow(r, g.word, g.pattern, animate);
 }
@@ -564,14 +564,36 @@ function drawHot() {
   const playing = v?.status === 'playing' && m && !m.done;
   let form = board.querySelector('.hot-form');
   if (!form) {
-    board.innerHTML = `<form class="hot-form" autocomplete="off">
-        <label class="sr-only" for="hot-input">Your word</label>
-        <input id="hot-input" class="hot-input" type="text" maxlength="14" placeholder="Type any word" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send">
-        <button class="btn primary" type="submit">Guess</button>
-      </form>
-      <div class="hot-tools"><span class="hot-count"></span><button type="button" class="btn ghost small hot-hint">Hint</button></div>
-      <div class="hot-last" aria-live="polite"></div>
-      <ol class="hot-list" aria-label="Your words, closest first"></ol>`;
+    board.innerHTML = `<div class="hot-play">
+        <form class="hot-form" autocomplete="off">
+          <label class="sr-only" for="hot-input">Your word</label>
+          <input id="hot-input" class="hot-input" type="text" maxlength="14" placeholder="Type any word" autocapitalize="none" autocorrect="off" spellcheck="false" enterkeyhint="send">
+          <button class="btn primary" type="submit">Guess</button>
+        </form>
+        <div class="hot-tools"><span class="hot-count"></span><button type="button" class="btn ghost small hot-hint">Hint</button></div>
+        <div class="hot-last" aria-live="polite"></div>
+        ${S.daily ? '<h2 class="hot-history-title" hidden>Guess history</h2>' : ''}
+        <ol class="hot-list hot-history" aria-label="Your words, closest first"${S.daily ? ' tabindex="0" hidden' : ''}></ol>
+      </div>
+      ${S.daily ? `<aside class="hot-sidebar" aria-label="Hot &amp; Cold progress and help">
+        <section class="hot-panel" aria-labelledby="hot-best-title">
+          <h2 id="hot-best-title">Closest guess</h2>
+          <p class="hot-best-empty">Your best guess will appear here.</p>
+          <ol class="hot-list small hot-best" hidden></ol>
+        </section>
+        <section class="hot-panel" aria-labelledby="hot-guide-title">
+          <h2 id="hot-guide-title">Rank guide</h2>
+          <p>Words with similar meanings rank closer to #1.</p>
+          <dl class="hot-guide">
+            <div class="t-found"><dt>Secret word</dt><dd>#1</dd></div>
+            <div class="t-burning"><dt>Burning</dt><dd>2–10</dd></div>
+            <div class="t-hot"><dt>Hot</dt><dd>11–100</dd></div>
+            <div class="t-warm"><dt>Warm</dt><dd>101–500</dd></div>
+            <div class="t-cool"><dt>Cool</dt><dd>501–2,000</dd></div>
+            <div class="t-cold"><dt>Cold</dt><dd>2,001+</dd></div>
+          </dl>
+        </section>
+      </aside>` : ''}`;
     form = board.querySelector('.hot-form');
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -601,11 +623,17 @@ function drawHot() {
   hintBtn.hidden = !v?.hotHints;
   hintBtn.disabled = !playing || hints >= E.HOT.maxHints;
   hintBtn.textContent = `Hint (${E.HOT.maxHints - hints} left)`;
-  const typed = S.guesses.filter((g) => !g.hint).length;
-  const best = E.bestRank(S.guesses);
-  board.querySelector('.hot-count').textContent = typed
-    ? `${typed} word${typed === 1 ? '' : 's'}, your best #${fmtRank(best)}`
-    : 'Your first guess can be anything';
+  const typed = S.guesses.length - hints;
+  const sorted = [...S.guesses].sort((a, b) => a.rank - b.rank);
+  const best = sorted.find((g) => !g.hint);
+  const count = board.querySelector('.hot-count');
+  count.textContent = typed ? `${typed} word${typed === 1 ? '' : 's'}` : 'Your first guess can be anything';
+  if (best) {
+    const bestRank = document.createElement('span');
+    bestRank.className = 'hot-count-best';
+    bestRank.textContent = `, your best #${fmtRank(best.rank)}`;
+    count.appendChild(bestRank);
+  }
   // The word you just tried, big, then all your words closest first
   const last = board.querySelector('.hot-last');
   last.innerHTML = '';
@@ -616,9 +644,15 @@ function drawHot() {
     box.appendChild(hotRow(latest, ' latest'));
     last.appendChild(box);
   }
-  const list = board.querySelector('.hot-list:not(.single)');
-  list.innerHTML = '';
-  [...S.guesses].sort((a, b) => a.rank - b.rank).forEach((g) => list.appendChild(hotRow(g, g === latest ? ' now' : '')));
+  const list = board.querySelector('.hot-history');
+  list.replaceChildren(...sorted.map((g) => hotRow(g, g === latest ? ' now' : '')));
+  if (S.daily) {
+    list.hidden = board.querySelector('.hot-history-title').hidden = sorted.length === 0;
+    const bestList = board.querySelector('.hot-best');
+    bestList.hidden = !best;
+    board.querySelector('.hot-best-empty').hidden = Boolean(best);
+    bestList.replaceChildren(...(best ? [hotRow(best)] : []));
+  }
   if (playing && document.activeElement !== input && !matchMedia('(pointer: coarse)').matches) input.focus();
 }
 
@@ -1494,6 +1528,7 @@ async function startDaily(mode) {
     DAILY.day = d.day;
     DAILY.board = '';
     dailyShow(d, true);
+    if (mode === 'hotcold') window.scrollTo(0, 0);
   } catch (err) {
     homeError(`Couldn’t open today’s ${MODE_NAMES[mode]}: ${cloud.errorText(err)}`);
   } finally {
