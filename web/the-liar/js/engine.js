@@ -1,5 +1,6 @@
 // The Liar: game rules. Pure functions, no network or page code, so they can be tested.
 import { CATEGORIES, CATEGORY_NAMES } from './words.js';
+import { closeWords } from './pairs.js';
 
 export const MIN_PLAYERS = 3;
 export const MAX_PLAYERS = 8;
@@ -60,9 +61,18 @@ export function pickWord(categories, used, rnd) {
 }
 
 // The words the liar chooses from at the end: the real word plus others from its category.
-export function liarOptions(category, word, rnd, n = OPTION_COUNT) {
-  const others = shuffle(CATEGORIES[category].filter((w) => w !== word), rnd).slice(0, n - 1);
+// skip: a word to leave out (the decoy a liar who didn't know was given, or they'd just pick it).
+export function liarOptions(category, word, rnd, n = OPTION_COUNT, skip = '') {
+  const others = shuffle(CATEGORIES[category].filter((w) => w !== word && w !== skip), rnd).slice(0, n - 1);
   return shuffle([word, ...others], rnd);
+}
+
+// "The liar doesn't know": the liar's word instead of the real one. A close word from the same
+// group (tea → coffee) when there is one, otherwise any other word from the category.
+export function pickDecoy(category, word, rnd) {
+  const close = closeWords(category, word);
+  const pool = close.length ? close : (CATEGORIES[category] || []).filter((w) => w !== word);
+  return pool.length ? pool[Math.floor(rnd() * pool.length)] : word;
 }
 
 // ---------- Turns ----------
@@ -74,10 +84,11 @@ export function pickLiar(ids, previous, rnd) {
 }
 
 // Random order for round 1 (kept for rounds 2 and 3). The liar never goes first,
-// so there is always something on the paper before they draw.
-export function turnOrder(ids, liar, rnd) {
+// so there is always something on the paper before they draw. A liar who doesn't know
+// needs no help, and "never first" would clear whoever is, so then anyone may start.
+export function turnOrder(ids, liar, rnd, liarKnows = true) {
   const order = shuffle(ids, rnd);
-  if (order.length > 1 && order[0] === liar) {
+  if (liarKnows && order.length > 1 && order[0] === liar) {
     const j = 1 + Math.floor(rnd() * (order.length - 1));
     [order[0], order[j]] = [order[j], order[0]];
   }
@@ -191,6 +202,24 @@ export function pickTime(rnd) {
   const first = Math.max(1, whole - TIME_GAME.span + 1);
   const lo = first + Math.floor(rnd() * (whole - first + 1));
   return { target, lo, hi: lo + TIME_GAME.span };
+}
+
+// "The liar doesn't know": the liar's own secret time, 1.5 to 3 s away from the real one (either
+// way, whichever fits), inside the usual targets and never a whole second.
+export const DECOY_TIME = { min: 150, max: 300 };
+export function pickDecoyTime(target, rnd) {
+  const t = Math.round(target * 100);
+  for (let tries = 0; tries < 50; tries++) {
+    const off = DECOY_TIME.min + Math.floor(rnd() * (DECOY_TIME.max - DECOY_TIME.min + 1));
+    const sides = rnd() < 0.5 ? [-1, 1] : [1, -1];
+    for (const side of sides) {
+      const c = t + side * off;
+      if (c >= TIME_GAME.lo && c <= TIME_GAME.hi && c % 100 !== 0) return c / 100;
+    }
+  }
+  // Can't happen with the usual targets; a safe fallback all the same
+  const c = t + (t + DECOY_TIME.min <= TIME_GAME.hi ? DECOY_TIME.min : -DECOY_TIME.min);
+  return (c % 100 === 0 ? c + 1 : c) / 100;
 }
 
 // How long everyone gets to stop the clock: room to read, press Start and count past the

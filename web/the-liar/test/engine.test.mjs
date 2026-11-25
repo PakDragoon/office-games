@@ -1,5 +1,6 @@
 import * as E from '../js/engine.js';
 import { CATEGORIES, CATEGORY_NAMES } from '../js/words.js';
+import { DECOY_GROUPS, closeWords } from '../js/pairs.js';
 import assert from 'node:assert/strict';
 
 // 1. The word list: big, no duplicates, every category big enough for the liar's options
@@ -157,5 +158,48 @@ assert.deepEqual(E.TIME_TURNS, ['all', 'turns']);
 assert.equal(E.fmtSecs(6.7), '6.70 s');
 assert.deepEqual(E.DISCUSS_SECONDS, [60, 120, 180]);
 assert.equal(E.outcome({ liar: 'x', accused: 'x', guess: null, word: '' }), 'caught', 'time game: no steal');
+
+// "The liar doesn't know": decoy groups, the decoy word and time, options and turn order
+for (const [cat, groups] of Object.entries(DECOY_GROUPS)) {
+  assert.ok(CATEGORIES[cat], `decoy groups for unknown category ${cat}`);
+  const seen = new Set();
+  for (const g of groups) {
+    const ws = g.split(',').map((w) => w.trim()).filter(Boolean);
+    assert.ok(ws.length >= 2, `${cat}: a group needs at least 2 words (${g})`);
+    for (const w of ws) {
+      assert.ok(CATEGORIES[cat].includes(w), `${cat}: decoy word "${w}" isn't in the category`);
+      assert.ok(!seen.has(w), `${cat}: "${w}" is in two decoy groups`);
+      seen.add(w);
+    }
+  }
+}
+for (const [cat, words] of Object.entries(CATEGORIES)) {
+  for (const w of words) {
+    for (let s = 0; s < 3; s++) {
+      const d = E.pickDecoy(cat, w, E.mulberry32(s * 7919 + w.length));
+      assert.notEqual(d, w, `decoy for ${w} is the word itself`);
+      assert.ok(words.includes(d), `decoy ${d} for ${w} is in the same category`);
+      if (closeWords(cat, w).length) assert.ok(closeWords(cat, w).includes(d), `decoy for ${w} comes from its group`);
+    }
+  }
+}
+assert.ok(closeWords('Drinks', 'chai').includes('karak chai'));
+assert.deepEqual(closeWords('Nope', 'chai'), []);
+for (let s = 0; s < 300; s++) {
+  const opts = E.liarOptions('Drinks', 'chai', E.mulberry32(s), E.OPTION_COUNT, 'karak chai');
+  assert.equal(opts.length, E.OPTION_COUNT);
+  assert.ok(opts.includes('chai') && !opts.includes('karak chai'), 'the decoy is never an option');
+}
+for (let s = 0; s < 5000; s++) {
+  const t = E.pickTime(E.mulberry32(s));
+  const d = E.pickDecoyTime(t.target, E.mulberry32(s + 1));
+  const gap = Math.round(Math.abs(d - t.target) * 100);
+  assert.ok(gap >= E.DECOY_TIME.min && gap <= E.DECOY_TIME.max, `decoy ${d} is 1.5 to 3 s from ${t.target}`);
+  assert.ok(d * 100 >= E.TIME_GAME.lo && d * 100 <= E.TIME_GAME.hi + 0.001, `decoy ${d} is a usual target`);
+  assert.notEqual(Math.round(d * 100) % 100, 0, 'never a whole second');
+}
+let liarFirst = 0;
+for (let s = 0; s < 400; s++) if (E.turnOrder(['a', 'b', 'c', 'd'], 'a', E.mulberry32(s), false)[0] === 'a') liarFirst++;
+assert.ok(liarFirst > 50, 'a liar who doesn\'t know can go first');
 
 console.log(`engine: all checks passed (${total} words in ${CATEGORY_NAMES.length} categories)`);

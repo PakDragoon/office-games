@@ -2,7 +2,7 @@
 // Nothing in here knows about Cloudflare: a game module only talks to RoomCtx.
 
 /** Bump when the browser and server message formats stop matching; old tabs are asked to reload. */
-export const PROTOCOL = 4;
+export const PROTOCOL = 5;
 
 export type Msg = Record<string, unknown> & { t?: unknown };
 

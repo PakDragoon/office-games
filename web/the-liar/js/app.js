@@ -36,15 +36,18 @@ const store = {
   },
 };
 const PREFS = { sound: true, analytics: true, ...store.get('prefs', {}) };
-const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, discussSeconds: 60, timeTurns: 'all', categories: [], ...store.get('room', {}) };
+const ROOM_PREFS = { play: 'draw', mode: 'stroke', seconds: 8, wordSeconds: 30, discussSeconds: 60, timeTurns: 'all', liarKnows: true, categories: [], ...store.get('room', {}) };
 if (!E.FREE_SECONDS.includes(ROOM_PREFS.seconds)) ROOM_PREFS.seconds = 8;
 if (!E.WORD_SECONDS.includes(ROOM_PREFS.wordSeconds)) ROOM_PREFS.wordSeconds = 30;
 if (!E.DISCUSS_SECONDS.includes(ROOM_PREFS.discussSeconds)) ROOM_PREFS.discussSeconds = 60;
 if (!['draw', 'words', 'time'].includes(ROOM_PREFS.play)) ROOM_PREFS.play = 'draw';
 if (!E.TIME_TURNS.includes(ROOM_PREFS.timeTurns)) ROOM_PREFS.timeTurns = 'all';
+ROOM_PREFS.liarKnows = ROOM_PREFS.liarKnows !== false;
 const wordsGame = (st) => st && st.play === 'words';
 const timeGame = (st) => st && st.play === 'time';
 const timeTurns = (st) => timeGame(st) && st.timeTurns === 'turns';
+// "The liar doesn't know": rooms without the setting are "knows"
+const liarKnows = (st) => !st || st.liarKnows !== false;
 const savePrefs = () => store.set('prefs', PREFS);
 const saveRoomPrefs = () => store.set('room', ROOM_PREFS);
 
@@ -403,6 +406,13 @@ function renderCard() {
   $('time-secret').innerHTML = html;
   const liarTip = S.secret && S.secret.liar;
   const words = S.view && wordsGame(S.view.settings);
+  if (S.view && !liarKnows(S.view.settings)) {
+    // Everyone sees the same tip: nobody, the liar included, knows who it is
+    $('role-tip').textContent = timeGame(S.view.settings)
+      ? 'One player has a different time and doesn’t know it. It could be you. Count carefully and watch who doesn’t fit.'
+      : `One player has a slightly different word and doesn’t know it. It could be you. ${words ? 'Give a word that fits yours' : 'Draw what fits your word'}, and watch who doesn’t fit.`;
+    return;
+  }
   if (S.view && timeGame(S.view.settings)) {
     $('role-tip').textContent = liarTip
       ? 'Nobody knows but you. You only know the range: stop somewhere believable and blend in when the times go up.'
@@ -729,7 +739,7 @@ function renderTimeResults(v, { soFar = false } = {}) {
   const has = (p) => typeof stops[p.id] === 'number';
   const pinned = players.filter(has).sort((a, b) => stops[a.id] - stops[b.id]);
   const missing = players.filter((p) => !has(p));
-  const top = Math.max(2, ...pinned.map((p) => stops[p.id]), ...(t ? [t.target, t.hi] : []));
+  const top = Math.max(2, ...pinned.map((p) => stops[p.id]), ...(t ? [t.target, t.hi, t.decoy || 0] : []));
   const step = top > 14 ? 2 : 1;
   const max = Math.ceil((top * 1.05) / step) * step;
   const x = (n) => Math.max(0, Math.min(100, (n / max) * 100));
@@ -758,7 +768,10 @@ function renderTimeResults(v, { soFar = false } = {}) {
   const ticks = [];
   const every = max / step > 12 ? 2 : 1;
   for (let i = 0; i * step <= max; i++) ticks.push(`<i class="tl-tick${i % every ? ' minor' : ''}" style="left:${x(i * step)}%">${i % every ? '' : `<span>${i * step}</span>`}</i>`);
-  const marks = t ? `<i class="tl-range" style="left:${x(t.lo)}%;width:${x(t.hi) - x(t.lo)}%"><span>Liar’s range ${t.lo}–${t.hi} s</span></i>
+  const decoyT = t && typeof t.decoy === 'number' ? t.decoy : null;
+  const marks = t ? `${decoyT !== null
+      ? `<i class="tl-target tl-decoy" style="left:${x(decoyT)}%"><span style="transform:translateX(-${x(decoyT)}%)">Liar’s time ${esc(E.fmtSecs(decoyT))}</span></i>`
+      : `<i class="tl-range" style="left:${x(t.lo)}%;width:${x(t.hi) - x(t.lo)}%"><span>Liar’s range ${t.lo}–${t.hi} s</span></i>`}
       <i class="tl-target" style="left:${x(t.target)}%"><span style="transform:translateX(-${x(t.target)}%)">Target ${esc(E.fmtSecs(t.target))}</span></i>` : '';
   const timeline = `<div class="tl${t ? ' with-target' : ''}">
       <div class="tl-lanes" style="height:${n * LANE}px">${marks}${pins}</div>
@@ -773,7 +786,7 @@ function renderTimeResults(v, { soFar = false } = {}) {
       const miss = Math.abs(d);
       return `<li class="pc${p.color}${liar ? ' liar' : ''}" data-pid="${esc(p.id)}">
         <span class="rk">${i + 1}</span><i class="pen-dot"></i>
-        <span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${liar ? ` <em>liar · knew ${t.lo}–${t.hi} s</em>` : ''}</span>
+        <span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}${liar ? ` <em>liar · ${typeof t.decoy === 'number' ? `had ${esc(E.fmtSecs(t.decoy))}` : `knew ${t.lo}–${t.hi} s`}</em>` : ''}</span>
         <span class="tm">${esc(E.fmtSecs(stops[p.id]))}</span>
         <span class="off">${miss < 0.005 ? 'exact!' : `${miss.toFixed(2)} s ${d > 0 ? 'late' : 'early'}`}</span>
         <span class="vd v${VERDICTS.findIndex(([m]) => miss <= m)}">${verdict(miss)}</span></li>`;
@@ -875,8 +888,13 @@ $('vote-list').addEventListener('click', (e) => {
 /* ---------- The liar's last guess ---------- */
 function renderGuess(v) {
   const isLiar = v.liar === S.myId;
-  $('guess-title').textContent = isLiar ? 'Caught! Name the word to steal the win' : `${nameOf(v, v.liar)} was the liar!`;
-  $('guess-sub').textContent = isLiar ? 'Pick the word everyone was drawing.' : `${nameOf(v, v.liar)} gets one chance to name the word and steal the win.`;
+  const unknowing = !liarKnows(v.settings);
+  const verb = wordsGame(v.settings) ? 'describing' : 'drawing';
+  $('guess-title').textContent = isLiar
+    ? (unknowing ? 'Surprise: you were the liar! Name the real word to steal the win' : 'Caught! Name the word to steal the win')
+    : `${nameOf(v, v.liar)} was the liar!`;
+  $('guess-sub').textContent = isLiar
+    ? (unknowing && S.secret && S.secret.word ? `Your word was ${cap(S.secret.word)}. Pick the word everyone else was ${verb}.` : `Pick the word everyone was ${verb}.`) : `${nameOf(v, v.liar)} gets one chance to name the word and steal the win.`;
   $('guess-list').innerHTML = v.options.map((w) => `<button type="button" class="option" data-word="${esc(w)}" ${isLiar ? '' : 'disabled'}>${esc(cap(w))}</button>`).join('');
 }
 
@@ -906,6 +924,11 @@ function renderResult(v) {
   $('result-word-label').textContent = timed ? 'The time' : 'The word';
   $('result-word').textContent = timed ? (v.time ? E.fmtSecs(v.time.target) : '') : cap(v.word);
   $('result-liar').innerHTML = `<span class="pen-dot pc${colorOf(v, v.liar)}"></span>${esc(liarName)}${isLiar ? ' (you)' : ''}`;
+  // The liar didn't know: show what they were given instead
+  const decoy = timed ? (v.time && typeof v.time.decoy === 'number' ? E.fmtSecs(v.time.decoy) : '') : v.decoy ? cap(v.decoy) : '';
+  $('result-decoy-box').hidden = !decoy;
+  $('result-decoy-label').textContent = timed ? 'The liar’s time' : 'The liar’s word';
+  $('result-decoy').textContent = decoy;
   const rows = v.players.filter((p) => p.inGame).map((p) => {
     const target = v.votes[p.id];
     const right = target && target === v.liar;
@@ -986,6 +1009,7 @@ function segment(container, get, set) {
 const paintPlay = segment($('set-play'), () => ROOM_PREFS.play, (v) => { ROOM_PREFS.play = v; roomSettingsChanged(); });
 const paintMode = segment($('set-mode'), () => ROOM_PREFS.mode, (v) => { ROOM_PREFS.mode = v; roomSettingsChanged(); });
 const paintTurns = segment($('set-turns'), () => ROOM_PREFS.timeTurns, (v) => { ROOM_PREFS.timeTurns = v; roomSettingsChanged(); });
+const paintKnows = segment($('set-knows'), () => (ROOM_PREFS.liarKnows ? 'yes' : 'no'), (v) => { ROOM_PREFS.liarKnows = v !== 'no'; roomSettingsChanged(); });
 $('set-word-seconds').addEventListener('change', (e) => { ROOM_PREFS.wordSeconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-seconds').addEventListener('change', (e) => { ROOM_PREFS.seconds = Number(e.target.value); roomSettingsChanged(); });
 $('set-discuss').addEventListener('change', (e) => { ROOM_PREFS.discussSeconds = Number(e.target.value); roomSettingsChanged(); });
@@ -1016,6 +1040,7 @@ function paintRoomSettings() {
   paintPlay();
   paintMode();
   paintTurns();
+  paintKnows();
   paintAllCats();
   const words = ROOM_PREFS.play === 'words';
   const timed = ROOM_PREFS.play === 'time';
@@ -1040,6 +1065,7 @@ function settingsLines(st) {
       '<li><b>Time: stop a hidden clock at your secret time</b></li>',
       `<li>${timeTurns(st) ? 'Turn by turn, in a random order' : 'Everyone at once'}</li>`,
       `<li>${st.discussSeconds} seconds to talk, then the vote</li>`,
+      liarKnows(st) ? '' : '<li>The liar doesn’t know: they get a different time</li>',
     ].join('');
   }
   const cats = st.categories.length ? `${plural(st.categories.length, 'category')}: ${st.categories.join(', ')}` : 'All categories';
@@ -1047,6 +1073,7 @@ function settingsLines(st) {
     `<li><b>${wordsGame(st) ? `Words: say a word each turn, ${st.wordSeconds} seconds` : st.mode === 'stroke' ? 'Draw: one line per turn' : `Draw: free draw, ${st.seconds} seconds a turn`}</b></li>`,
     `<li>${esc(cats)}</li>`,
     `<li>${E.ROUNDS} rounds, then the vote</li>`,
+    liarKnows(st) ? '' : '<li>The liar doesn’t know: they get a close word</li>',
   ].join('');
 }
 
@@ -1259,6 +1286,8 @@ function renderReplay(r, createdAt) {
   $('rp-title').textContent = head[0];
   $('rp-sub').textContent = head[1];
   $('rp-word').textContent = cap(String(r.word));
+  $('rp-decoy-box').hidden = !r.decoy;
+  $('rp-decoy').textContent = r.decoy ? cap(String(r.decoy)) : '';
   $('rp-liar').innerHTML = `<span class="pen-dot pc${liar ? liar.color : 0}"></span>${esc(liarName)}`;
   $('rp-votes').innerHTML = players.map((p, i) => {
     const target = p.vote === null || p.vote === undefined ? null : players[p.vote];

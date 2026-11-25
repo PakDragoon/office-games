@@ -370,6 +370,9 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
   position: absolute; top: 0; left: 0; white-space: nowrap; font-size: 0.78rem; font-weight: 800;
   background: var(--ink); color: var(--paper); border-radius: 999px; padding: 0.05rem 0.55rem;
 }
+/* The liar didn't know: their own time, a dashed line with its label at the bottom (the target's is at the top) */
+.tl-target.tl-decoy { top: 0; bottom: -3.5rem; border-left: 2px dashed var(--liar); z-index: 1; }
+.tl-target.tl-decoy span { top: auto; bottom: 0.15rem; font-size: 0.7rem; background: var(--paper); color: var(--liar); padding: 0 0.3rem; border-radius: 4px; z-index: 4; }
 .tl-missing { margin: 0; font-size: 0.88rem; color: var(--muted); }
 .tl-missing span { color: var(--pc); font-weight: 800; }
 
@@ -509,6 +512,8 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .reveal-row > div { display: grid; gap: 0.1rem; border: 1px solid var(--line); border-radius: 12px; padding: 0.55rem 0.75rem; background: var(--surface); }
 .reveal-row .muted { font-size: 0.8rem; }
 .reveal-word { font-size: 1.3rem; font-weight: 800; }
+.reveal-row > .reveal-decoy { grid-column: 1 / -1; }
+.reveal-decoy .reveal-word { color: var(--liar); }
 .reveal-liar { display: flex; align-items: center; gap: 0.5rem; font-size: 1.1rem; font-weight: 800; color: var(--liar); }
 .vote-results li { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 0.55rem; padding: 0.35rem 0.4rem; border-bottom: 1px solid var(--line); }
 .vote-results li:last-child { border-bottom: 0; }

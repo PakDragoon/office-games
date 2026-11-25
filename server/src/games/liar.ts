@@ -14,6 +14,8 @@ interface Settings {
   wordSeconds: number;
   discussSeconds: number;
   timeTurns: 'all' | 'turns';
+  // false: "The liar doesn't know". The liar gets a close word (or time) and a normal-looking card
+  liarKnows: boolean;
   categories: string[];
 }
 
@@ -42,7 +44,9 @@ interface Room extends BaseRoom<Player> {
   turnStrokes: number;
   strokes: Stroke[];
   clues: Clue[];
-  time: { target: number; lo: number; hi: number } | null;
+  time: { target: number; lo: number; hi: number; decoy?: number } | null;
+  // "The liar doesn't know": the word the liar was given instead ('' otherwise, and in Time)
+  decoy: string;
   stops: Record<string, number>;
   started: Record<string, boolean>;
   votes: Record<string, string>;
@@ -63,6 +67,8 @@ function cleanSettings(raw: unknown): Settings {
     wordSeconds: pick(r.wordSeconds, E.WORD_SECONDS, 30),
     discussSeconds: pick(r.discussSeconds, E.DISCUSS_SECONDS, 60),
     timeTurns: pick(r.timeTurns, E.TIME_TURNS as readonly ('all' | 'turns')[], 'all'),
+    // Rooms saved before the setting existed: the liar knows
+    liarKnows: r.liarKnows !== false,
     categories: Array.isArray(r.categories) ? r.categories.filter((c): c is string => typeof c === 'string').slice(0, 40) : [],
   };
 }
@@ -71,6 +77,7 @@ const wordsGame = (st: Settings) => st.play === 'words';
 const timeGame = (st: Settings) => st.play === 'time';
 // Rooms saved before the setting existed have no timeTurns: they are 'all'
 const timeTurns = (st: Settings) => st.play === 'time' && st.timeTurns === 'turns';
+const liarKnows = (st: Settings) => st.liarKnows !== false;
 
 /** A drawing that is too big to keep is thinned (every other point, ends kept) until it fits. */
 function thinStrokes(strokes: Array<{ p: number | null; pts: number[] }>) {
@@ -186,10 +193,14 @@ class LiarRoom extends SeatRoom<Player, Room> {
   private secretFor(p: Player): Msg {
     const room = this.room;
     if (!p.inGame) return { t: 'secret', game: room.game, spectator: true, category: room.category };
+    // The liar doesn't know: their card is shaped exactly like everyone else's, with the decoy in it
+    const hidden = !liarKnows(room.settings) && p.id === room.liar;
     if (room.time) {
+      if (hidden) return { t: 'secret', game: room.game, liar: false, time: room.time.decoy ?? room.time.target, category: room.category };
       if (p.id === room.liar) return { t: 'secret', game: room.game, liar: true, category: room.category, range: [room.time.lo, room.time.hi] };
       return { t: 'secret', game: room.game, liar: false, time: room.time.target, category: room.category };
     }
+    if (hidden) return { t: 'secret', game: room.game, liar: false, word: room.decoy, category: room.category };
     if (p.id === room.liar) return { t: 'secret', game: room.game, liar: true, category: room.category };
     return { t: 'secret', game: room.game, liar: false, word: room.word, category: room.category };
   }
@@ -227,15 +238,18 @@ class LiarRoom extends SeatRoom<Player, Room> {
     room.liar = E.pickLiar(ids, room.lastLiar, this.rnd);
     room.lastLiar = room.liar;
     if (timeGame(room.settings)) {
-      Object.assign(room, { word: '', category: 'Time', time: E.pickTime(this.rnd) });
+      const time: NonNullable<Room['time']> = E.pickTime(this.rnd);
+      if (!liarKnows(room.settings)) time.decoy = E.pickDecoyTime(time.target, this.rnd);
+      Object.assign(room, { word: '', decoy: '', category: 'Time', time });
     } else {
       const used = new Set(room.used);
       const pick = E.pickWord(room.settings.categories, used, this.rnd);
-      Object.assign(room, { word: pick.word, category: pick.category, time: null });
+      const decoy = liarKnows(room.settings) ? '' : E.pickDecoy(pick.category, pick.word, this.rnd);
+      Object.assign(room, { word: pick.word, decoy, category: pick.category, time: null });
       used.add(E.wordKey(pick.category, pick.word));
       room.used = [...used].slice(-700);
     }
-    room.order = E.turnOrder(ids, room.liar, this.rnd);
+    room.order = E.turnOrder(ids, room.liar, this.rnd, liarKnows(room.settings));
     Object.assign(room, {
       game: room.game + 1, status: 'role', round: 0, turn: 0, strokes: [], clues: [], stops: {}, started: {}, strokeSid: null, turnStrokes: 0,
       votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null,
@@ -329,8 +343,10 @@ class LiarRoom extends SeatRoom<Player, Room> {
     const room = this.room;
     if (room.status !== 'draw' || !wordsGame(room.settings) || room.order[room.turn] !== pid) return;
     if (this.ctx.now() < room.turnStart - 300 || this.turnClue()) return;
-    // Only players who know the word are checked against it, so a refusal tells the liar nothing
-    const problem = E.clueProblem(raw, { word: pid === room.liar ? '' : room.word, said: room.clues.filter((c) => !c.passed).map((c) => c.text) });
+    // Only players who know the word are checked against it, so a refusal tells the liar nothing.
+    // A liar who doesn't know is checked against their own (decoy) word, like everyone else.
+    const own = pid !== room.liar ? room.word : liarKnows(room.settings) ? '' : room.decoy;
+    const problem = E.clueProblem(raw, { word: own, said: room.clues.filter((c) => !c.passed).map((c) => c.text) });
     if (problem) {
       this.tell(pid, { t: 'nope', reason: problem });
       return;
@@ -507,7 +523,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
     // Time game: the times already show roughly where the target is, so no last chance
     if (room.accused && room.accused === room.liar && !room.time) {
       room.status = 'guess';
-      room.options = E.liarOptions(room.category, room.word, this.rnd);
+      room.options = E.liarOptions(room.category, room.word, this.rnd, E.OPTION_COUNT, room.decoy);
       room.deadline = this.ctx.now() + E.TIMES.guessMs;
       this.phaseIn(E.TIMES.guessMs);
       this.broadcast();
@@ -544,6 +560,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
         liarWins: isLiar && liarWon ? 1 : 0,
         correctVotes: !isLiar && room.votes[p.id] === room.liar ? 1 : 0,
         catches: !isLiar && room.result === 'caught' && room.votes[p.id] === room.liar ? 1 : 0,
+        unknowingLiarGames: isLiar && !liarKnows(room.settings) ? 1 : 0,
       });
     }), this.byId(room.liar)?.name ?? null);
     if (!room.time) this.saveReplay(this.replayPayload(), this.inGame());
@@ -560,7 +577,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
     return {
       v: 1,
       mode: words ? 'words' : 'draw',
-      word: room.word, category: room.category,
+      word: room.word, decoy: room.decoy || undefined, category: room.category,
       liar: idx(room.liar), accused: idx(room.accused), guess: room.guess, result: room.result,
       rounds: E.ROUNDS,
       players: players.map((p) => ({ name: p.name, color: p.color, vote: idx(room.votes[p.id] ?? null), points: room.delta[p.id] || 0 })),
@@ -612,6 +629,7 @@ class LiarRoom extends SeatRoom<Player, Room> {
       liar: reveal ? room.liar : room.status === 'guess' ? room.accused : null,
       replayId: reveal ? room.replayId ?? null : null,
       word: reveal ? room.word : '',
+      decoy: reveal ? room.decoy || '' : '',
       votes: reveal ? room.votes : {},
       guess: reveal ? room.guess : null,
       result: reveal ? room.result : null,
@@ -630,7 +648,7 @@ export const liar: GameModule = {
   create(ctx: RoomCtx, opts) {
     return new LiarRoom(ctx, {
       code: ctx.code, public: opts.public, status: 'lobby', game: 0, players: [], crew: null, crewStatus: '',
-      settings: cleanSettings({}), used: [], liar: null, lastLiar: null, word: '', category: '', order: [], round: 0, turn: 0,
+      settings: cleanSettings({}), used: [], liar: null, lastLiar: null, word: '', decoy: '', category: '', order: [], round: 0, turn: 0,
       turnStart: 0, deadline: 0, strokeSid: null, turnStrokes: 0, strokes: [], clues: [], time: null, stops: {}, started: {},
       votes: {}, options: [], accused: null, guess: null, result: null, delta: {}, replayId: null,
     });
