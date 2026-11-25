@@ -458,7 +458,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 
 .order-list, .suspects, .vote-results, .score-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.3rem; }
 .order-list li {
-  display: grid; grid-template-columns: auto 1fr auto auto; align-items: center; gap: 0.6rem;
+  display: grid; grid-template-columns: auto 1fr auto auto 1.6rem; align-items: center; gap: 0.6rem;
   padding: 0.4rem 0.6rem; border-radius: 10px; border: 1px solid transparent;
 }
 .order-list li.now { border-color: var(--pc); background: color-mix(in srgb, var(--pc) 7%, transparent); }
@@ -466,6 +466,7 @@ h1, h2, h3 { line-height: 1.15; margin: 0; }
 .order-list .nm { font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .order-list .tag { font-size: 0.78rem; color: var(--muted); font-weight: 600; }
 .order-list li.now .tag { color: var(--pc); }
+.order-list .pts { text-align: right; font-variant-numeric: tabular-nums; font-size: 0.95rem; }
 .rounds { display: flex; gap: 3px; }
 .rounds i { width: 7px; height: 7px; border-radius: 50%; border: 1px solid var(--line); }
 .rounds i.done { background: var(--pc); border-color: var(--pc); }
@@ -622,25 +623,14 @@ a.btn { display: inline-block; text-align: center; text-decoration: none; }
 .chat-form .btn { padding: 0.55rem 0.9rem; }
 .chat-form.off { opacity: 0.55; }
 .chat-error { font-size: 0.85rem; }
-/* Laptop: the side column is as tall as the window. Scores sit in a narrow column beside the phase panel
-   (whose turn it is, the vote, the result), and an open chat takes all the height left under them
-   (at least 12rem; the column scrolls if a long vote list needs more). */
+/* Laptop: the side column is as tall as the window, and an open chat takes all the height left under
+   the panels (at least 12rem; the column scrolls if a long vote list needs more) */
 @media (min-width: 901px) {
-  .arena { grid-template-columns: minmax(0, var(--desk)) 370px; }
-  #game .side {
-    display: grid; grid-template-columns: minmax(0, 1fr) 7.5rem; grid-template-rows: auto auto minmax(12rem, 1fr);
-    column-gap: 0.9rem; row-gap: 0.8rem; align-content: stretch; max-height: calc(100dvh - 7.25rem); overflow-y: auto;
-  }
-  #game .side > * { grid-column: 1 / -1; min-width: 0; }
-  #game .side > .my-card { grid-row: 1; }
-  #game .side > .panel { grid-column: 1; grid-row: 2; }
-  #game .side > .scores { grid-column: 2; grid-row: 2; align-self: start; padding: 0 0 0 0.9rem; border-left: 1px solid var(--line); }
-  #game .side > .room-chat { grid-row: 3; align-self: stretch; }
-  #game .side > .room-chat:not([open]) { align-self: end; }
-  .side .score-list li { gap: 0.4rem; font-size: 0.86rem; }
-  .side .chat-messages { height: clamp(14rem, 40dvh, 26rem); }
+  #game .side { display: flex; flex-direction: column; max-height: calc(100dvh - 7.25rem); overflow-y: auto; }
+  #game .side > * { flex: none; }
+  .side .chat-messages { height: clamp(12rem, 40dvh, 26rem); }
   @supports selector(details::details-content) {
-    #game .side .room-chat[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
+    #game .side .room-chat[open] { display: grid; grid-template-rows: auto minmax(0, 1fr); flex: 1 1 auto; min-height: 12rem; }
     #game .side .room-chat[open]::details-content { min-height: 0; }
     #game .side .room-chat[open] .chat-body { display: flex; flex-direction: column; box-sizing: border-box; height: 100%; }
     #game .side .room-chat[open] .chat-body > * { flex: none; }

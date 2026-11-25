@@ -650,7 +650,7 @@ function renderOrder(v) {
     const tag = !p.connected ? 'Offline' : p.away ? 'Away' : now ? (wordsGame(v.settings) ? 'Thinking' : 'Drawing') : next ? 'Next' : '';
     return `<li class="pc${p.color}${now ? ' now' : ''}${active(p) ? '' : ' off'}">
       <span class="pen-dot"></span><span class="nm">${esc(p.name)}${id === S.myId ? ' (you)' : ''}</span>
-      <span class="tag">${tag}</span><span class="rounds">${dots}</span></li>`;
+      <span class="tag">${tag}</span><span class="rounds">${dots}</span><b class="pts" title="Score">${p.score}</b></li>`;
   }).join('');
 }
 
@@ -1084,6 +1084,8 @@ $('next-game').addEventListener('click', () => { if (S.isHost) hostStartGame(); 
 $('to-lobby').addEventListener('click', () => { if (S.isHost) hostBackToLobby(); });
 
 function renderScores(v) {
+  // During the turns each player's score is a column in the turn list, so the Scores box steps aside for the chat
+  document.querySelector('#game .scores').hidden = v.status === 'draw' && v.order.length > 0;
   const list = [...v.players].sort((a, b) => b.score - a.score);
   $('score-list').innerHTML = list.map((p) => `<li class="pc${p.color}${active(p) ? '' : ' off'}">
     <span class="pen-dot"></span><span class="nm">${esc(p.name)}${p.id === S.myId ? ' (you)' : ''}</span><b>${p.score}</b></li>`).join('');
